@@ -47,7 +47,7 @@ export default function DayAgenda() {
         subtitle={formatLong(date)}
         actions={
           <div className="flex items-center gap-1">
-            <button onClick={() => go(-1)} className="btn-secondary p-2">
+            <button onClick={() => go(-1)} className="btn-secondary p-2" aria-label="Dia anterior">
               <ChevronLeft size={16} />
             </button>
             <button
@@ -56,10 +56,10 @@ export default function DayAgenda() {
             >
               Hoje
             </button>
-            <button onClick={() => go(1)} className="btn-secondary p-2">
+            <button onClick={() => go(1)} className="btn-secondary p-2" aria-label="Proximo dia">
               <ChevronRight size={16} />
             </button>
-            <button onClick={() => openNew(null)} className="btn-primary ml-1">
+            <button onClick={() => openNew(null)} className="btn-primary ml-1 hidden sm:inline-flex">
               <Plus size={16} /> Nova
             </button>
           </div>
@@ -92,22 +92,34 @@ export default function DayAgenda() {
       <div className="card divide-y divide-slate-100 dark:divide-slate-800">
         {hours.map((h) => {
           const items = tasksAtHour(h)
+          const isNow =
+            isToday(fromISODate(date)) && new Date().getHours() === h
           return (
-            <div key={h} className="group flex gap-3 px-3 py-2">
+            <div key={h} className="group flex gap-2 px-2 py-1.5 sm:gap-3 sm:px-3 sm:py-2">
               <button
                 onClick={() => openNew(h)}
-                className="w-14 shrink-0 pt-1 text-right text-xs font-semibold text-slate-400 hover:text-brand-600"
+                className={
+                  'w-11 shrink-0 pt-1 text-right text-xs font-bold sm:w-14 ' +
+                  (isNow ? 'text-brand-600' : 'text-slate-400 hover:text-brand-600')
+                }
                 title="Criar atividade neste horario"
               >
                 {String(h).padStart(2, '0')}:00
               </button>
-              <div className="flex-1 space-y-2 border-l border-slate-100 pl-3 dark:border-slate-800">
+              <div
+                className={
+                  'min-w-0 flex-1 space-y-2 border-l pl-2 sm:pl-3 ' +
+                  (isNow
+                    ? 'border-brand-300 dark:border-brand-700'
+                    : 'border-slate-100 dark:border-slate-800')
+                }
+              >
                 {items.length === 0 ? (
                   <button
                     onClick={() => openNew(h)}
-                    className="flex h-8 w-full items-center rounded-lg px-2 text-xs text-transparent transition-colors hover:bg-slate-50 group-hover:text-slate-400 dark:hover:bg-slate-800/60"
+                    className="flex h-7 w-full items-center gap-1 rounded-lg px-2 text-xs text-slate-300 transition-colors hover:bg-slate-50 hover:text-brand-500 dark:text-slate-600 dark:hover:bg-slate-800/60"
                   >
-                    + adicionar
+                    <Plus size={13} />
                   </button>
                 ) : (
                   items.map((t) => (

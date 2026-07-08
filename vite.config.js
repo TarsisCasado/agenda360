@@ -18,8 +18,13 @@ export default defineConfig({
         theme_color: '#4f46e5',
         background_color: '#0f172a',
         display: 'standalone',
+        display_override: ['standalone', 'fullscreen', 'minimal-ui'],
         orientation: 'portrait',
+        scope: '/',
         start_url: '/',
+        lang: 'pt-BR',
+        dir: 'ltr',
+        categories: ['productivity', 'business', 'lifestyle'],
         icons: [
           {
             src: 'favicon.svg',
@@ -37,5 +42,17 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        // Separa dependencias grandes em chunks proprios (melhor cache no mobile).
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          supabase: ['@supabase/supabase-js'],
+          datefns: ['date-fns'],
+        },
+      },
+    },
   },
 })

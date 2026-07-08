@@ -1,0 +1,63 @@
+import { useEffect, useState, useCallback } from 'react'
+import { taskService } from '../services/taskService'
+import { useAuth } from '../context/AuthContext'
+import { useData } from '../context/DataContext'
+import { toISODate, addDays, isTaskOverdue } from '../lib/date'
+import { STATUS } from '../lib/constants'
+
+// Calcula os alertas in-app do usuario:
+//  - atividades atrasadas (pendentes com horario vencido)
+//  - lembretes de hoje (atividades com alerta ativo)
+// Recarrega junto com o reloadKey global.
+export function useAlerts() {
+  const { user } = useAuth()
+  const { reloadKey } = useData()
+  const [alerts, setAlerts] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    if (!user) return
+    const today = toISODate(new Date())
+    const start = toISODate(addDays(new Date(), -30))
+    const tasks = await taskService.list(user.id, { start, end: today })
+
+    const overdue = tasks
+      .filter((t) => isTaskOverdue(t))
+      .map((t) => ({ id: 'ov-' + t.id, type: 'overdue', task: t }))
+
+    const reminders = tasks
+      .filter(
+        (t) =>
+          t.date === today &&
+          t.alert_enabled &&
+          [STATUS.TODO, STATUS.IN_PROGRESS].includes(t.status),
+      )
+      .map((t) => ({ id: 'rm-' + t.id, type: 'reminder', task: t }))
+
+    setAlerts([...overdue, ...reminders])
+    setLoading(false)
+  }, [user])
+
+  useEffect(() => {
+    load()
+  }, [load, reloadKey])
+
+  return { alerts, count: alerts.length, loading, reload: load }
+}
+
+// Solicita permissao de notificacao do dispositivo (estrutura base para push).
+export async function requestNotificationPermission() {
+  if (!('Notification' in window)) return 'unsupported'
+  if (Notification.permission === 'granted') return 'granted'
+  const result = await Notification.requestPermission()
+  return result
+}
+
+export function showLocalNotification(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  try {
+    new Notification(title, { body, icon: '/favicon.svg' })
+  } catch {
+    // silencioso: alguns navegadores exigem service worker
+  }
+}

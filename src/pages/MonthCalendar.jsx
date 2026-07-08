@@ -78,7 +78,7 @@ export default function MonthCalendar() {
                 key={iso}
                 onClick={() => setDayModal({ open: true, iso })}
                 className={cx(
-                  'group relative flex min-h-[92px] flex-col gap-1 border-b border-r border-slate-100 p-1.5 text-left transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50',
+                  'group relative flex min-h-[58px] flex-col gap-1 border-b border-r border-slate-100 p-1 text-left transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50 sm:min-h-[92px] sm:p-1.5',
                   !inMonth && 'bg-slate-50/50 dark:bg-slate-900/30',
                 )}
               >
@@ -107,7 +107,20 @@ export default function MonthCalendar() {
                     <Plus size={14} />
                   </span>
                 </div>
-                <div className="space-y-1 overflow-hidden">
+                {/* Mobile: pontos coloridos. Desktop: barras com titulo. */}
+                <div className="flex flex-wrap gap-0.5 sm:hidden">
+                  {dayTasks.slice(0, 4).map((t) => {
+                    const cat = categoryById(t.category_id)
+                    return (
+                      <span
+                        key={t.id}
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: cat?.color || '#94a3b8' }}
+                      />
+                    )
+                  })}
+                </div>
+                <div className="hidden space-y-1 overflow-hidden sm:block">
                   {dayTasks.slice(0, 3).map((t) => {
                     const cat = categoryById(t.category_id)
                     return (

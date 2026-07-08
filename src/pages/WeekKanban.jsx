@@ -77,10 +77,15 @@ export default function WeekKanban() {
       />
 
       <p className="mb-3 text-xs text-slate-400">
-        Arraste os cards entre os dias para reagendar automaticamente.
+        <span className="hidden lg:inline">
+          Arraste os cards entre os dias para reagendar.{' '}
+        </span>
+        No celular, use <strong>Reagendar</strong> no menu do card (•••) para mover
+        entre os dias.
       </p>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      {/* Mobile/tablet: rolagem horizontal com colunas. Desktop (xl): grade de 7. */}
+      <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 no-scrollbar sm:mx-0 sm:px-0 xl:grid xl:grid-cols-7 xl:overflow-visible">
         {days.map((day) => {
           const iso = toISODate(day)
           const dayTasks = tasksByDay(iso)
@@ -95,9 +100,9 @@ export default function WeekKanban() {
               onDragLeave={() => setDragOver((d) => (d === iso ? null : d))}
               onDrop={(e) => handleDrop(e, iso)}
               className={cx(
-                'flex min-h-[220px] flex-col rounded-xl border bg-slate-50 p-2 transition-colors dark:bg-slate-900/50',
+                'flex min-h-[220px] w-[75vw] shrink-0 snap-start flex-col rounded-xl border bg-slate-50 p-2 transition-colors dark:bg-slate-900/50 sm:w-64 xl:w-auto',
                 todayCol
-                  ? 'border-brand-300 dark:border-brand-700'
+                  ? 'border-brand-300 ring-1 ring-brand-200 dark:border-brand-700 dark:ring-brand-900'
                   : 'border-slate-200 dark:border-slate-800',
                 dragOver === iso && 'drag-over',
               )}
@@ -106,13 +111,18 @@ export default function WeekKanban() {
                 <div>
                   <p
                     className={cx(
-                      'text-sm font-bold capitalize',
+                      'flex items-center gap-1.5 text-sm font-bold capitalize',
                       todayCol
                         ? 'text-brand-600 dark:text-brand-400'
                         : 'text-slate-700 dark:text-slate-200',
                     )}
                   >
                     {format(day, 'EEEE', { locale: ptBR })}
+                    {todayCol && (
+                      <span className="rounded-full bg-brand-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
+                        Hoje
+                      </span>
+                    )}
                   </p>
                   <p className="text-[11px] text-slate-400">
                     {format(day, 'dd/MM', { locale: ptBR })}

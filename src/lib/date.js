@@ -74,4 +74,23 @@ export function nowTimeString() {
   return format(new Date(), 'HH:mm')
 }
 
+// Uma atividade esta "atrasada" quando ainda esta pendente (a fazer / em
+// andamento) e o horario ja passou.
+export function isTaskOverdue(task, now = new Date()) {
+  if (!task) return false
+  if (!['todo', 'in_progress'].includes(task.status)) return false
+  const today = toISODate(now)
+  if (task.date < today) return true
+  if (task.date > today) return false
+  // mesmo dia: compara horario final (ou inicial) com agora
+  const ref = task.end_time || task.start_time
+  if (!ref) return false
+  return ref < format(now, 'HH:mm')
+}
+
+// Ordena por horario (sem horario vai para o fim).
+export function byTime(a, b) {
+  return (a.start_time || '99:99').localeCompare(b.start_time || '99:99')
+}
+
 export { isSameDay, isToday, addDays, endOfMonth, startOfMonth, parseISO }

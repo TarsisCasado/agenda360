@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Menu, Moon, Sun, LogOut, Plus, User } from 'lucide-react'
+import { Menu, Moon, Sun, LogOut, Plus, User, CalendarDays } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import { ROLE_LABELS } from '../../lib/constants'
+import AlertCenter from '../notifications/AlertCenter'
 
 export default function Topbar({ onMenu, onNewTask }) {
   const { theme, toggleTheme } = useTheme()
@@ -10,15 +11,23 @@ export default function Topbar({ onMenu, onNewTask }) {
   const [userMenu, setUserMenu] = useState(false)
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/80 px-3 py-2.5 pt-safe backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 sm:px-4 sm:py-3">
       <button
         onClick={onMenu}
         className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden dark:hover:bg-slate-800"
+        aria-label="Menu"
       >
         <Menu size={20} />
       </button>
 
-      <div className="flex-1">
+      {/* Marca no mobile / aviso demo no desktop */}
+      <div className="flex flex-1 items-center gap-2 lg:hidden">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
+          <CalendarDays size={17} />
+        </div>
+        <span className="font-extrabold text-slate-800 dark:text-slate-100">Agenda 360</span>
+      </div>
+      <div className="hidden flex-1 lg:block">
         {isDemo && (
           <span className="chip bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
             Modo demo (dados locais) — configure o Supabase para persistir
@@ -26,17 +35,12 @@ export default function Topbar({ onMenu, onNewTask }) {
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2">
         <button onClick={onNewTask} className="btn-primary hidden sm:inline-flex">
           <Plus size={16} /> Nova atividade
         </button>
-        <button
-          onClick={onNewTask}
-          className="btn-primary p-2 sm:hidden"
-          aria-label="Nova atividade"
-        >
-          <Plus size={18} />
-        </button>
+
+        <AlertCenter />
 
         <button
           onClick={toggleTheme}
@@ -49,7 +53,8 @@ export default function Topbar({ onMenu, onNewTask }) {
         <div className="relative">
           <button
             onClick={() => setUserMenu((v) => !v)}
-            className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="flex items-center gap-2 rounded-lg p-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="Conta"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
               <User size={16} />

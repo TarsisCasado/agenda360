@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard,
+  Sun,
   CalendarDays,
   KanbanSquare,
   Calendar,
@@ -13,7 +13,7 @@ import {
 import { cx } from '../../lib/utils'
 
 const NAV = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/', label: 'Hoje', icon: Sun, end: true },
   { to: '/dia', label: 'Agenda do dia', icon: CalendarDays },
   { to: '/semana', label: 'Kanban semanal', icon: KanbanSquare },
   { to: '/mes', label: 'Calendario', icon: Calendar },

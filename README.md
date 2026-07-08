@@ -32,6 +32,31 @@ barata: roda de graça na Vercel/Netlify e usa o plano gratuito do Supabase.
 
 ---
 
+## 📱 Experiência mobile & PWA
+
+A V1 foi desenhada **mobile-first**, com sensação de app nativo:
+
+- **Tela "Hoje"** (home): saudação, resumo do dia, próxima atividade, atividades
+  atrasadas em destaque e a lista do dia em cards.
+- **Menu inferior fixo** no celular (Hoje · Semana · Calendário · Links · IA); o
+  menu lateral aparece só no desktop.
+- **Botão flutuante (+)** para **criação rápida** de atividade (formulário
+  enxuto, com campos opcionais recolhidos). O formulário completo continua
+  disponível na edição.
+- **Ações rápidas** em cada card: Feito, Furei, Reagendar, Delegar, Não
+  necessário.
+- **Atividades atrasadas** ganham destaque visual (contorno vermelho + selo).
+- **Kanban** com rolagem horizontal entre os dias no celular; no celular, mover
+  entre dias é feito por "Reagendar" (o arrastar segue no desktop).
+- **Central de alertas** (sino no topo) com notificações in-app e base pronta
+  para push do dispositivo.
+- **PWA instalável**: manifest revisado, ícone, `theme-color` adaptável ao tema,
+  áreas seguras (notch) e modo tela cheia.
+- **Performance**: rotas com _code-splitting_ (lazy) e _chunks_ de vendor —
+  bundle inicial ~22 kB gzip. Testado em 390px, 430px, 768px e desktop.
+
+---
+
 ## 🧱 Estrutura de pastas
 
 ```
@@ -213,7 +238,8 @@ navegador oferece "Instalar app".
 
 ## 🧭 Roadmap sugerido
 
-- [x] Versão funcional simples (foco atual)
+- [x] Versão funcional simples
+- [x] Experiência mobile-first (foco atual)
 - [ ] Convite e gestão de múltiplos usuários da equipe
 - [ ] Edge Function para disparo de alertas (push/e-mail)
 - [ ] Integração real com ChatGPT/Claude via proxy

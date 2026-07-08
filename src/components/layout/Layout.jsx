@@ -1,32 +1,47 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
+import BottomNav from './BottomNav'
 import TaskModal from '../tasks/TaskModal'
+import QuickTaskModal from '../tasks/QuickTaskModal'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [newTaskOpen, setNewTaskOpen] = useState(false)
+  const [fullTaskOpen, setFullTaskOpen] = useState(false)
+  const [quickTaskOpen, setQuickTaskOpen] = useState(false)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-[100dvh] overflow-hidden bg-slate-50 dark:bg-slate-950">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
           onMenu={() => setSidebarOpen(true)}
-          onNewTask={() => setNewTaskOpen(true)}
+          onNewTask={() => setFullTaskOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
+        <main className="flex-1 overflow-y-auto px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-8">
           <Outlet />
         </main>
       </div>
 
-      <TaskModal
-        open={newTaskOpen}
-        onClose={() => setNewTaskOpen(false)}
-        task={null}
-      />
+      {/* Botao flutuante de criacao rapida (mobile) */}
+      <button
+        onClick={() => setQuickTaskOpen(true)}
+        className="fab lg:hidden"
+        aria-label="Nova atividade"
+      >
+        <Plus size={26} />
+      </button>
+
+      {/* Menu inferior fixo (mobile) */}
+      <BottomNav />
+
+      {/* Formulario completo (desktop / topbar) */}
+      <TaskModal open={fullTaskOpen} onClose={() => setFullTaskOpen(false)} task={null} />
+      {/* Formulario rapido (FAB mobile) */}
+      <QuickTaskModal open={quickTaskOpen} onClose={() => setQuickTaskOpen(false)} />
     </div>
   )
 }

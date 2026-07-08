@@ -15,6 +15,27 @@ body,
 body {
   @apply bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-100;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  /* Evita realce azul ao tocar em elementos no celular */
+  -webkit-tap-highlight-color: transparent;
+  /* Trava o "puxa para atualizar" e overscroll no mobile */
+  overscroll-behavior-y: none;
+}
+
+/* Areas seguras (notch / barra inferior do iOS) */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Esconde a scrollbar mantendo o scroll (usado no Kanban mobile) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Scrollbar discreta */
@@ -51,7 +72,12 @@ body {
   }
 
   .input {
-    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500;
+    /* text-base (16px) evita zoom automatico do iOS ao focar campos */
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-800 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 sm:text-sm;
+  }
+  /* Botao flutuante (mobile) */
+  .fab {
+    @apply fixed bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition-transform active:scale-95 lg:bottom-6;
   }
   .label {
     @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400;
