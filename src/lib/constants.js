@@ -2,7 +2,7 @@
 // Constantes e regras de negocio da Agenda Inteligente 360
 // ---------------------------------------------------------------------------
 
-// Perfis de usuario
+// Perfis de PLATAFORMA (profiles.role)
 export const ROLES = {
   ADMIN: 'admin',
   MANAGER: 'manager',
@@ -13,6 +13,23 @@ export const ROLE_LABELS = {
   [ROLES.ADMIN]: 'Administrador',
   [ROLES.MANAGER]: 'Gestor',
   [ROLES.COLLABORATOR]: 'Colaborador',
+}
+
+// Papeis DENTRO de um workspace (workspace_members.role)
+export const WORKSPACE_ROLES = {
+  OWNER: 'owner',
+  ADMIN: 'admin',
+  MANAGER: 'manager',
+  COLLABORATOR: 'collaborator',
+  VIEWER: 'viewer',
+}
+
+export const WORKSPACE_ROLE_LABELS = {
+  [WORKSPACE_ROLES.OWNER]: 'Dono',
+  [WORKSPACE_ROLES.ADMIN]: 'Administrador',
+  [WORKSPACE_ROLES.MANAGER]: 'Gestor',
+  [WORKSPACE_ROLES.COLLABORATOR]: 'Colaborador',
+  [WORKSPACE_ROLES.VIEWER]: 'Visualizador',
 }
 
 // Status das atividades

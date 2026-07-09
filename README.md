@@ -160,14 +160,27 @@ dados ficam no navegador).
 5. Em **Authentication → Providers**, mantenha **Email** habilitado. Para testes
    rápidos, desative a confirmação de e-mail em **Authentication → Sign In / Providers**.
 
-O **primeiro usuário** que se cadastrar recebe o perfil **Administrador**
-automaticamente; os demais entram como **Colaborador** (ajustável na tabela
-`profiles`).
+O **primeiro usuário** que se cadastrar recebe o perfil **Administrador** de
+plataforma e, automaticamente, um workspace **"Pessoal"** (do qual é **Owner**).
+Os demais entram como **Colaborador** e também ganham seu próprio "Pessoal".
+
+### Arquitetura multi-tenant (workspaces)
+
+O banco é **multi-tenant por workspace**: todos os dados pertencem a um
+`workspace_id`, e a segurança (RLS) é feita por **pertencimento ao workspace**.
+Isso permite criar novos espaços (Pessoal, Família, Igreja, Projetos...) e
+convidar membros com papéis distintos **sem remodelar o banco**. Veja os
+detalhes em [`supabase/ARQUITETURA.md`](supabase/ARQUITETURA.md).
 
 ### Tabelas criadas
 
-`profiles` · `categories` · `tasks` · `links` · `reminders` · `activity_logs` ·
-`delegations`
+- **Tenancy**: `workspaces` · `workspace_members` · `profiles`
+- **Dados**: `categories` · `tasks` · `links` · `reminders` · `activity_logs` ·
+  `delegations`
+- **Preparadas para IA** (sem uso ainda): `ai_conversations` · `ai_messages` ·
+  `ai_actions`
+- **Preparadas para automações** (sem uso ainda): `integrations` ·
+  `notifications`
 
 Toda alteração relevante (criação, edição, mudança de status, reagendamento,
 delegação, cancelamento, conclusão, exclusão) gera um registro em

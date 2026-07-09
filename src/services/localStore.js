@@ -1,28 +1,44 @@
 // ---------------------------------------------------------------------------
 // Armazenamento local (MODO DEMO) - usado quando o Supabase nao esta configurado.
-// Simula as tabelas do banco no localStorage do navegador, permitindo testar
-// toda a aplicacao sem backend. A API dos services e a mesma nos dois modos.
+// Simula as tabelas do banco (multi-tenant por workspace) no localStorage.
+// A API dos services e a mesma nos dois modos.
 // ---------------------------------------------------------------------------
-import { DEFAULT_CATEGORIES, ROLES, STATUS } from '../lib/constants'
+import { DEFAULT_CATEGORIES, ROLES, WORKSPACE_ROLES, STATUS } from '../lib/constants'
 import { uid } from '../lib/utils'
 import { toISODate, addDays } from '../lib/date'
 
-const KEY = 'agenda360.db.v1'
+// v2: novo modelo com workspaces. Chave nova evita conflito com o seed antigo.
+const KEY = 'agenda360.db.v2'
+
+const DEMO_WORKSPACE_ID = '00000000-0000-4000-8000-0000000000b1'
 
 const DEMO_USER = {
   id: '00000000-0000-4000-8000-000000000001',
   email: 'demo@agenda360.app',
   full_name: 'Usuario Demo',
   role: ROLES.ADMIN,
+  default_workspace_id: DEMO_WORKSPACE_ID,
+}
+
+const DEMO_WORKSPACE = {
+  id: DEMO_WORKSPACE_ID,
+  name: 'Pessoal',
+  slug: 'pessoal-demo',
+  owner_id: DEMO_USER.id,
+  is_personal: true,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
 }
 
 function seed() {
   const today = new Date()
   const iso = (offset) => toISODate(addDays(today, offset))
+  const ws = DEMO_WORKSPACE.id
 
   const categories = DEFAULT_CATEGORIES.map((c) => ({
     id: uid(),
-    user_id: DEMO_USER.id,
+    workspace_id: ws,
+    created_by: DEMO_USER.id,
     name: c.name,
     color: c.color,
     is_default: true,
@@ -32,61 +48,18 @@ function seed() {
   const catId = (name) => categories.find((c) => c.name === name)?.id ?? null
 
   const tasks = [
-    {
-      title: 'Planejar a semana',
-      description: 'Revisar pendencias e montar prioridades.',
-      date: iso(0),
-      start_time: '08:00',
-      end_time: '08:30',
-      category_id: catId('Trabalho'),
-      priority: 'high',
-      status: STATUS.TODO,
-    },
-    {
-      title: 'Reuniao de alinhamento da equipe',
-      description: 'Sprint review semanal.',
-      date: iso(0),
-      start_time: '10:00',
-      end_time: '11:00',
-      category_id: catId('Reuniao'),
-      priority: 'medium',
-      status: STATUS.IN_PROGRESS,
-    },
-    {
-      title: 'Treino na academia',
-      description: '',
-      date: iso(1),
-      start_time: '07:00',
-      end_time: '08:00',
-      category_id: catId('Saude'),
-      priority: 'medium',
-      status: STATUS.TODO,
-    },
-    {
-      title: 'Estudar React avancado',
-      description: 'Hooks e performance.',
-      date: iso(2),
-      start_time: '20:00',
-      end_time: '21:30',
-      category_id: catId('Estudo'),
-      priority: 'low',
-      status: STATUS.TODO,
-    },
-    {
-      title: 'Pagar contas do mes',
-      description: '',
-      date: iso(-1),
-      start_time: '09:00',
-      end_time: '09:20',
-      category_id: catId('Financeiro'),
-      priority: 'urgent',
-      status: STATUS.MISSED,
-    },
+    { title: 'Planejar a semana', description: 'Revisar pendencias e montar prioridades.', date: iso(0), start_time: '08:00', end_time: '08:30', category_id: catId('Trabalho'), priority: 'high', status: STATUS.TODO },
+    { title: 'Reuniao de alinhamento da equipe', description: 'Sprint review semanal.', date: iso(0), start_time: '10:00', end_time: '11:00', category_id: catId('Reuniao'), priority: 'medium', status: STATUS.IN_PROGRESS },
+    { title: 'Treino na academia', description: '', date: iso(1), start_time: '07:00', end_time: '08:00', category_id: catId('Saude'), priority: 'medium', status: STATUS.TODO },
+    { title: 'Estudar React avancado', description: 'Hooks e performance.', date: iso(2), start_time: '20:00', end_time: '21:30', category_id: catId('Estudo'), priority: 'low', status: STATUS.TODO },
+    { title: 'Pagar contas do mes', description: '', date: iso(-1), start_time: '09:00', end_time: '09:20', category_id: catId('Financeiro'), priority: 'urgent', status: STATUS.MISSED },
   ].map((t) => ({
     id: uid(),
-    user_id: DEMO_USER.id,
-    owner_id: DEMO_USER.id,
+    workspace_id: ws,
+    created_by: DEMO_USER.id,
     assignee_id: DEMO_USER.id,
+    delegated_by: null,
+    delegated_at: null,
     link: '',
     notes: '',
     alert_enabled: false,
@@ -100,13 +73,29 @@ function seed() {
   }))
 
   return {
-    profiles: [DEMO_USER],
+    profiles: [{ ...DEMO_USER, default_workspace_id: ws }],
+    workspaces: [DEMO_WORKSPACE],
+    workspace_members: [
+      {
+        id: uid(),
+        workspace_id: ws,
+        user_id: DEMO_USER.id,
+        role: WORKSPACE_ROLES.OWNER,
+        invited_by: DEMO_USER.id,
+        created_at: new Date().toISOString(),
+      },
+    ],
     categories,
     tasks,
     links: [],
     reminders: [],
     activity_logs: [],
     delegations: [],
+    ai_conversations: [],
+    ai_messages: [],
+    ai_actions: [],
+    integrations: [],
+    notifications: [],
   }
 }
 
@@ -131,6 +120,7 @@ function write(db) {
 
 export const localStore = {
   DEMO_USER,
+  DEMO_WORKSPACE,
   getDb: read,
   saveDb: write,
   reset() {

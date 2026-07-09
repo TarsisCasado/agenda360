@@ -3,36 +3,35 @@ import { localStore } from './localStore'
 import { uid } from '../lib/utils'
 
 // ---------------------------------------------------------------------------
-// Central de links. Guarda links "colados" e permite transforma-los em
-// atividades (a criacao da task fica no taskService; aqui so persistimos o link
-// e o vinculo com a atividade gerada).
+// Central de links, escopada por workspace.
 // ---------------------------------------------------------------------------
 
 export const linkService = {
-  async list(userId) {
+  async list(workspaceId) {
     if (!isSupabaseConfigured) {
       return localStore
         .table('links')
-        .filter((l) => l.user_id === userId)
+        .filter((l) => l.workspace_id === workspaceId)
         .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
     }
     const { data, error } = await supabase
       .from('links')
       .select('*')
-      .eq('user_id', userId)
+      .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false })
     if (error) throw error
     return data
   },
 
-  async create(userId, payload) {
+  async create(workspaceId, userId, payload) {
     const row = {
+      workspace_id: workspaceId,
+      created_by: userId,
       url: payload.url,
       title: payload.title,
       note: payload.note ?? '',
       desired_action: payload.desired_action,
       task_id: payload.task_id ?? null,
-      user_id: userId,
     }
     if (!isSupabaseConfigured) {
       const saved = { id: uid(), created_at: new Date().toISOString(), ...row }
@@ -41,11 +40,7 @@ export const linkService = {
       localStore.setTable('links', rows)
       return saved
     }
-    const { data, error } = await supabase
-      .from('links')
-      .insert(row)
-      .select()
-      .single()
+    const { data, error } = await supabase.from('links').insert(row).select().single()
     if (error) throw error
     return data
   },

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Modal from '../ui/Modal'
 import { useAuth } from '../../context/AuthContext'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
 import { useToast } from '../../context/ToastContext'
 import { taskService } from '../../services/taskService'
@@ -33,6 +34,7 @@ const empty = (defaults = {}) => ({
 
 export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
   const { user } = useAuth()
+  const { workspaceId } = useWorkspace()
   const { categories, reload } = useData()
   const { toast } = useToast()
   const [form, setForm] = useState(empty())
@@ -75,9 +77,9 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
       }
       let saved
       if (isEdit) {
-        saved = await taskService.update(user.id, task.id, payload)
+        saved = await taskService.update(user.id, task, payload)
       } else {
-        saved = await taskService.create(user.id, payload)
+        saved = await taskService.create(workspaceId, user.id, payload)
       }
       toast(isEdit ? 'Atividade atualizada' : 'Atividade criada')
       reload()

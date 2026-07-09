@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import Modal from '../ui/Modal'
 import { useAuth } from '../../context/AuthContext'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
 import { useToast } from '../../context/ToastContext'
 import { taskService } from '../../services/taskService'
@@ -30,6 +31,7 @@ const empty = (defaults = {}) => ({
 
 export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
   const { user } = useAuth()
+  const { workspaceId } = useWorkspace()
   const { categories, reload } = useData()
   const { toast } = useToast()
   const [form, setForm] = useState(empty())
@@ -52,7 +54,7 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
     }
     setSaving(true)
     try {
-      const saved = await taskService.create(user.id, {
+      const saved = await taskService.create(workspaceId, user.id, {
         ...form,
         category_id: form.category_id || null,
         start_time: form.start_time || null,

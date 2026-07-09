@@ -2,15 +2,14 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { localStore } from './localStore'
 import { logService } from './logService'
 import { uid } from '../lib/utils'
-import { LOG_ACTIONS, STATUS } from '../lib/constants'
-import { STATUS_META } from '../lib/constants'
+import { LOG_ACTIONS, STATUS, STATUS_META } from '../lib/constants'
 
 // ---------------------------------------------------------------------------
-// Servico de atividades (tasks). Centraliza as regras de negocio:
-//  - cria/edita/exclui
-//  - registra historico em activity_logs
-//  - conta reagendamentos
-//  - delega para outro responsavel
+// Servico de atividades (tasks), escopado por workspace.
+//
+// DELEGACAO (decisao de arquitetura): estado atual denormalizado na propria
+// task (assignee_id, delegated_by, delegated_at) para leitura/filtro rapidos,
+// e a tabela `delegations` guarda o HISTORICO imutavel de cada delegacao.
 // ---------------------------------------------------------------------------
 
 const TASK_DEFAULTS = {
@@ -29,10 +28,10 @@ const TASK_DEFAULTS = {
   reschedule_count: 0,
 }
 
-function localList(userId, { start, end } = {}) {
+function localList(workspaceId, { start, end } = {}) {
   return localStore
     .table('tasks')
-    .filter((t) => t.user_id === userId)
+    .filter((t) => t.workspace_id === workspaceId)
     .filter((t) => (start ? t.date >= start : true))
     .filter((t) => (end ? t.date <= end : true))
     .sort((a, b) => {
@@ -42,13 +41,13 @@ function localList(userId, { start, end } = {}) {
 }
 
 export const taskService = {
-  async list(userId, range = {}) {
-    if (!isSupabaseConfigured) return localList(userId, range)
+  async list(workspaceId, range = {}) {
+    if (!isSupabaseConfigured) return localList(workspaceId, range)
 
     let query = supabase
       .from('tasks')
       .select('*')
-      .eq('user_id', userId)
+      .eq('workspace_id', workspaceId)
       .order('date', { ascending: true })
       .order('start_time', { ascending: true, nullsFirst: true })
     if (range.start) query = query.gte('date', range.start)
@@ -58,13 +57,13 @@ export const taskService = {
     return data
   },
 
-  async create(userId, payload) {
+  async create(workspaceId, userId, payload) {
     const now = new Date().toISOString()
     const task = {
       ...TASK_DEFAULTS,
       ...payload,
-      user_id: userId,
-      owner_id: userId,
+      workspace_id: workspaceId,
+      created_by: userId,
       assignee_id: payload.assignee_id ?? userId,
     }
 
@@ -75,17 +74,14 @@ export const taskService = {
       rows.push(saved)
       localStore.setTable('tasks', rows)
     } else {
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert(task)
-        .select()
-        .single()
+      const { data, error } = await supabase.from('tasks').insert(task).select().single()
       if (error) throw error
       saved = data
     }
 
     await logService.record({
-      userId,
+      workspaceId,
+      actorId: userId,
       taskId: saved.id,
       action: LOG_ACTIONS.CREATE,
       description: `Atividade criada: "${saved.title}"`,
@@ -93,24 +89,26 @@ export const taskService = {
     return saved
   },
 
-  async update(userId, id, patch, { logAction, logDescription } = {}) {
+  // Atualiza uma task existente. O escopo (workspace) vem do proprio registro.
+  async update(userId, task, patch, { logAction, logDescription } = {}) {
     const updated_at = new Date().toISOString()
+    const workspaceId = task.workspace_id
 
     let saved
     if (!isSupabaseConfigured) {
       const rows = localStore.table('tasks')
-      const idx = rows.findIndex((t) => t.id === id)
+      const idx = rows.findIndex((t) => t.id === task.id)
       if (idx === -1) throw new Error('Atividade nao encontrada')
       rows[idx] = { ...rows[idx], ...patch, updated_at }
       localStore.setTable('tasks', rows)
       saved = rows[idx]
     } else {
-      // Remove campos imutaveis/gerados para nao sujar o UPDATE no Postgres.
-      const { id: _id, created_at: _c, user_id: _u, ...clean } = patch
+      // Remove campos imutaveis/gerados do UPDATE.
+      const { id: _id, created_at: _c, workspace_id: _w, created_by: _cb, ...clean } = patch
       const { data, error } = await supabase
         .from('tasks')
         .update({ ...clean, updated_at })
-        .eq('id', id)
+        .eq('id', task.id)
         .select()
         .single()
       if (error) throw error
@@ -118,8 +116,9 @@ export const taskService = {
     }
 
     await logService.record({
-      userId,
-      taskId: id,
+      workspaceId,
+      actorId: userId,
+      taskId: task.id,
       action: logAction ?? LOG_ACTIONS.UPDATE,
       description: logDescription ?? `Atividade editada: "${saved.title}"`,
     })
@@ -127,16 +126,15 @@ export const taskService = {
   },
 
   async changeStatus(userId, task, newStatus) {
-    const isComplete = newStatus === STATUS.DONE
-    const isCancel = newStatus === STATUS.CANCELLED
-    const action = isComplete
-      ? LOG_ACTIONS.COMPLETE
-      : isCancel
-        ? LOG_ACTIONS.CANCEL
-        : LOG_ACTIONS.STATUS_CHANGE
+    const action =
+      newStatus === STATUS.DONE
+        ? LOG_ACTIONS.COMPLETE
+        : newStatus === STATUS.CANCELLED
+          ? LOG_ACTIONS.CANCEL
+          : LOG_ACTIONS.STATUS_CHANGE
     const from = STATUS_META[task.status]?.label ?? task.status
     const to = STATUS_META[newStatus]?.label ?? newStatus
-    return this.update(userId, task.id, { status: newStatus }, {
+    return this.update(userId, task, { status: newStatus }, {
       logAction: action,
       logDescription: `Status: ${from} -> ${to} ("${task.title}")`,
     })
@@ -148,51 +146,52 @@ export const taskService = {
       status: STATUS.RESCHEDULED,
       reschedule_count: (task.reschedule_count ?? 0) + 1,
     }
-    return this.update(userId, task.id, patch, {
+    return this.update(userId, task, patch, {
       logAction: LOG_ACTIONS.RESCHEDULE,
       logDescription: `Reagendada de ${task.date} para ${newDate} ("${task.title}")`,
     })
   },
 
-  // Move de dia (usado pelo Kanban ao arrastar). Nao marca como reagendado
-  // automaticamente para nao poluir metricas, apenas troca a data.
+  // Move de dia (Kanban). Nao marca como reagendado para nao poluir metricas.
   async moveToDate(userId, task, newDate) {
     if (task.date === newDate) return task
-    return this.update(userId, task.id, { date: newDate }, {
+    return this.update(userId, task, { date: newDate }, {
       logAction: LOG_ACTIONS.RESCHEDULE,
       logDescription: `Movida (Kanban) de ${task.date} para ${newDate} ("${task.title}")`,
     })
   },
 
   async delegate(userId, task, assigneeId, assigneeName) {
+    const now = new Date().toISOString()
     const saved = await this.update(
       userId,
-      task.id,
-      { assignee_id: assigneeId, status: STATUS.DELEGATED },
+      task,
+      {
+        assignee_id: assigneeId,
+        delegated_by: userId,
+        delegated_at: now,
+        status: STATUS.DELEGATED,
+      },
       {
         logAction: LOG_ACTIONS.DELEGATE,
         logDescription: `Delegada para ${assigneeName} ("${task.title}")`,
       },
     )
 
+    // Historico imutavel de delegacao
     const delegation = {
-      id: uid(),
+      workspace_id: task.workspace_id,
       task_id: task.id,
       from_user_id: userId,
       to_user_id: assigneeId,
-      note: '',
-      created_at: new Date().toISOString(),
+      note: assigneeName ? `Delegada para ${assigneeName}` : '',
     }
     if (!isSupabaseConfigured) {
       const rows = localStore.table('delegations')
-      rows.push(delegation)
+      rows.push({ id: uid(), created_at: now, ...delegation })
       localStore.setTable('delegations', rows)
     } else {
-      await supabase.from('delegations').insert({
-        task_id: task.id,
-        from_user_id: userId,
-        to_user_id: assigneeId,
-      })
+      await supabase.from('delegations').insert(delegation)
     }
     return saved
   },
@@ -207,11 +206,14 @@ export const taskService = {
       const { error } = await supabase.from('tasks').delete().eq('id', task.id)
       if (error) throw error
     }
+    // task_id fica null: o registro ja foi removido (evita violar a FK).
     await logService.record({
-      userId,
-      taskId: task.id,
+      workspaceId: task.workspace_id,
+      actorId: userId,
+      taskId: null,
       action: LOG_ACTIONS.DELETE,
       description: `Atividade excluida: "${task.title}"`,
+      meta: { deleted_task_id: task.id },
     })
   },
 }

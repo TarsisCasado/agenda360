@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { taskService } from '../services/taskService'
-import { useAuth } from '../context/AuthContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
 import { toISODate, addDays, isTaskOverdue } from '../lib/date'
 import { STATUS } from '../lib/constants'
@@ -10,16 +10,16 @@ import { STATUS } from '../lib/constants'
 //  - lembretes de hoje (atividades com alerta ativo)
 // Recarrega junto com o reloadKey global.
 export function useAlerts() {
-  const { user } = useAuth()
+  const { workspaceId } = useWorkspace()
   const { reloadKey } = useData()
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    if (!user) return
+    if (!workspaceId) return
     const today = toISODate(new Date())
     const start = toISODate(addDays(new Date(), -30))
-    const tasks = await taskService.list(user.id, { start, end: today })
+    const tasks = await taskService.list(workspaceId, { start, end: today })
 
     const overdue = tasks
       .filter((t) => isTaskOverdue(t))
@@ -36,7 +36,7 @@ export function useAlerts() {
 
     setAlerts([...overdue, ...reminders])
     setLoading(false)
-  }, [user])
+  }, [workspaceId])
 
   useEffect(() => {
     load()

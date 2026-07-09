@@ -36,6 +36,7 @@ export const authService = {
       email: data.user.email,
       full_name: profile?.full_name ?? data.user.email,
       role: profile?.role ?? ROLES.COLLABORATOR,
+      default_workspace_id: profile?.default_workspace_id ?? null,
     }
   },
 

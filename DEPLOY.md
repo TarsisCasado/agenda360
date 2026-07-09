@@ -52,8 +52,13 @@ enums, índices, políticas de segurança (RLS), gatilhos e o seed das categoria
 > exists`, `drop policy if exists`, etc.).
 
 **Confirme que deu certo:** menu → **Table Editor**. Você deve ver as tabelas:
-`profiles`, `categories`, `tasks`, `links`, `reminders`, `activity_logs`,
-`delegations`.
+`workspaces`, `workspace_members`, `profiles`, `categories`, `tasks`, `links`,
+`reminders`, `activity_logs`, `delegations` e as preparadas para o futuro
+(`ai_conversations`, `ai_messages`, `ai_actions`, `integrations`,
+`notifications`).
+
+> O banco é **multi-tenant por workspace**. Detalhes da arquitetura em
+> [`supabase/ARQUITETURA.md`](ARQUITETURA.md).
 
 ---
 
@@ -120,14 +125,17 @@ verdade. A detecção é automática (ver `src/lib/supabaseClient.js`).
 
 1. Na tela de login, clique em **Criar agora**.
 2. Informe nome, e-mail e senha e **crie a conta**.
-3. O **primeiro** usuário cadastrado vira **Administrador** automaticamente
-   (regra no gatilho `handle_new_user` do banco). Os próximos entram como
-   **Colaborador**.
-4. Confira em **Table Editor → profiles**: seu usuário deve estar lá com
-   `role = admin` e as 10 categorias padrão já criadas em `categories`.
+3. O gatilho `handle_new_user` cria automaticamente: seu **perfil**, um workspace
+   **"Pessoal"** (você como **Owner**) e as **10 categorias** padrão. O
+   **primeiro** usuário do sistema também recebe `role = admin` de plataforma;
+   os próximos entram como `collaborator` (cada um com seu próprio "Pessoal").
+4. Confira em **Table Editor**: seu usuário em `profiles`, o workspace em
+   `workspaces`, o vínculo em `workspace_members` (role `owner`) e as categorias
+   em `categories` (todas com o mesmo `workspace_id`).
 
-> Para promover alguém a **Gestor/Administrador** manualmente: **Table Editor →
-> profiles →** edite o campo `role` (`admin`, `manager` ou `collaborator`).
+> Papéis de **workspace** ficam em `workspace_members.role`
+> (`owner`/`admin`/`manager`/`collaborator`/`viewer`). O `profiles.role` é o
+> papel de **plataforma**.
 
 ---
 

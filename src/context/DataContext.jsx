@@ -1,23 +1,23 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { categoryService } from '../services/categoryService'
-import { useAuth } from './AuthContext'
+import { useWorkspace } from './WorkspaceContext'
 
 // Compartilha categorias (usadas em varias telas) e um contador de "reload"
 // que as paginas observam para recarregar suas listas apos mudancas.
 const DataContext = createContext(null)
 
 export function DataProvider({ children }) {
-  const { user } = useAuth()
+  const { workspaceId } = useWorkspace()
   const [categories, setCategories] = useState([])
   const [reloadKey, setReloadKey] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const loadCategories = useCallback(async () => {
-    if (!user) return
-    const cats = await categoryService.list(user.id)
+    if (!workspaceId) return
+    const cats = await categoryService.list(workspaceId)
     setCategories(cats)
     setLoading(false)
-  }, [user])
+  }, [workspaceId])
 
   useEffect(() => {
     loadCategories()

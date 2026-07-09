@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
+import { WorkspaceProvider } from './context/WorkspaceContext'
 import { DataProvider } from './context/DataContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
@@ -51,23 +52,25 @@ export default function App() {
   }
 
   return (
-    <DataProvider>
-      <Suspense fallback={<Spinner />}>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Today />} />
-            <Route path="dia" element={<DayAgenda />} />
-            <Route path="semana" element={<WeekKanban />} />
-            <Route path="mes" element={<MonthCalendar />} />
-            <Route path="links" element={<Links />} />
-            <Route path="assistente" element={<Assistant />} />
-            <Route path="relatorios" element={<Reports />} />
-            <Route path="config" element={<Settings />} />
-          </Route>
-          <Route path="/login" element={<Navigate to="/" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-    </DataProvider>
+    <WorkspaceProvider>
+      <DataProvider>
+        <Suspense fallback={<Spinner />}>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Today />} />
+              <Route path="dia" element={<DayAgenda />} />
+              <Route path="semana" element={<WeekKanban />} />
+              <Route path="mes" element={<MonthCalendar />} />
+              <Route path="links" element={<Links />} />
+              <Route path="assistente" element={<Assistant />} />
+              <Route path="relatorios" element={<Reports />} />
+              <Route path="config" element={<Settings />} />
+            </Route>
+            <Route path="/login" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </DataProvider>
+    </WorkspaceProvider>
   )
 }

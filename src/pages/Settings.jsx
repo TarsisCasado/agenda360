@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Trash2, Palette, History, Database, Users } from 'lucide-react'
+import { Plus, Trash2, Palette, History, Database, Users, Building2 } from 'lucide-react'
 import { PageHeader } from '../components/ui/Common'
 import { useAuth } from '../context/AuthContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
 import { useToast } from '../context/ToastContext'
 import { categoryService } from '../services/categoryService'
 import { logService } from '../services/logService'
 import { localStore } from '../services/localStore'
-import { LOG_ACTION_LABELS, ROLE_LABELS } from '../lib/constants'
+import { LOG_ACTION_LABELS, ROLE_LABELS, WORKSPACE_ROLE_LABELS } from '../lib/constants'
 
 const PRESET_COLORS = [
   '#6366f1', '#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981',
@@ -16,15 +17,17 @@ const PRESET_COLORS = [
 
 export default function Settings() {
   const { user, isDemo } = useAuth()
+  const { workspace, workspaceId, workspaces, role } = useWorkspace()
   const { categories, loadCategories } = useData()
   const { toast } = useToast()
   const [newCat, setNewCat] = useState({ name: '', color: PRESET_COLORS[0] })
   const [logs, setLogs] = useState([])
 
   const loadLogs = useCallback(async () => {
-    const data = await logService.list(user.id, { limit: 20 })
+    if (!workspaceId) return
+    const data = await logService.list(workspaceId, { limit: 20 })
     setLogs(data)
-  }, [user.id])
+  }, [workspaceId])
 
   useEffect(() => {
     loadLogs()
@@ -33,7 +36,7 @@ export default function Settings() {
   const addCategory = async (e) => {
     e.preventDefault()
     if (!newCat.name.trim()) return
-    await categoryService.create(user.id, newCat)
+    await categoryService.create(workspaceId, user.id, newCat)
     setNewCat({ name: '', color: PRESET_COLORS[0] })
     await loadCategories()
     toast('Categoria criada')
@@ -57,6 +60,33 @@ export default function Settings() {
       <PageHeader title="Configuracoes" subtitle="Categorias, conta e historico" />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Workspace atual */}
+        <div className="card p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2 text-brand-600">
+            <Building2 size={18} />
+            <h2 className="font-bold">Workspace</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="chip bg-brand-50 text-brand-700 dark:bg-brand-900/30">
+              {workspace?.name || 'Pessoal'}
+            </span>
+            <span className="chip bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {WORKSPACE_ROLE_LABELS[role] || role}
+            </span>
+            {workspace?.is_personal && (
+              <span className="chip bg-slate-100 text-slate-500 dark:bg-slate-800">
+                pessoal
+              </span>
+            )}
+          </div>
+          <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-800/60">
+            Todos os seus dados (atividades, categorias, links, historico) pertencem
+            a este workspace. Voce participa de <strong>{workspaces.length}</strong>{' '}
+            workspace(s). A arquitetura ja permite criar novos espacos (Familia,
+            Igreja, Projetos...) e convidar membros com papeis distintos.
+          </p>
+        </div>
+
         {/* Conta */}
         <div className="card p-5">
           <div className="mb-4 flex items-center gap-2 text-brand-600">

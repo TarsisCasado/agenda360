@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Send, Bot, User, Zap } from 'lucide-react'
 import { PageHeader } from '../components/ui/Common'
 import { useAuth } from '../context/AuthContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
 import { useToast } from '../context/ToastContext'
 import { aiService } from '../services/aiService'
@@ -19,6 +20,7 @@ const SUGGESTIONS = [
 
 export default function Assistant() {
   const { user } = useAuth()
+  const { workspaceId } = useWorkspace()
   const { categoryByName, reload } = useData()
   const { toast } = useToast()
   const [messages, setMessages] = useState([
@@ -42,14 +44,14 @@ export default function Assistant() {
       if (intent.type === 'create_task') {
         const { categoryName, ...payload } = intent.payload
         const category = categoryName ? categoryByName(categoryName) : null
-        await taskService.create(user.id, {
+        await taskService.create(workspaceId, user.id, {
           ...payload,
           category_id: category?.id || null,
         })
         notes.push(`✅ Atividade "${payload.title}" criada em ${payload.date}.`)
       } else if (intent.type === 'reschedule_overdue') {
         const today = toISODate(new Date())
-        const all = await taskService.list(user.id, {})
+        const all = await taskService.list(workspaceId, {})
         const overdue = all.filter(
           (t) =>
             t.date < today &&
@@ -65,7 +67,7 @@ export default function Assistant() {
         )
       } else if (intent.type === 'report' && intent.payload.metric === 'missed_this_week') {
         const { start, end } = weekRange(new Date())
-        const week = await taskService.list(user.id, { start, end })
+        const week = await taskService.list(workspaceId, { start, end })
         const missed = week.filter((t) => t.status === STATUS.MISSED)
         if (!missed.length) {
           notes.push('🎉 Voce nao furou nenhuma atividade nesta semana!')
@@ -76,7 +78,7 @@ export default function Assistant() {
           )
         }
       } else if (intent.type === 'weekly_routine') {
-        const all = await taskService.list(user.id, {})
+        const all = await taskService.list(workspaceId, {})
         const pending = all.filter((t) =>
           [STATUS.TODO, STATUS.IN_PROGRESS].includes(t.status),
         )

@@ -3,33 +3,33 @@ import { localStore } from './localStore'
 import { uid } from '../lib/utils'
 
 // ---------------------------------------------------------------------------
-// Servico de categorias. Categorias padrao ja vem no seed / schema, mas o
-// usuario pode criar novas.
+// Servico de categorias, escopado por workspace.
 // ---------------------------------------------------------------------------
 
 export const categoryService = {
-  async list(userId) {
+  async list(workspaceId) {
     if (!isSupabaseConfigured) {
       return localStore
         .table('categories')
-        .filter((c) => c.user_id === userId)
+        .filter((c) => c.workspace_id === workspaceId)
         .sort((a, b) => a.name.localeCompare(b.name))
     }
     const { data, error } = await supabase
       .from('categories')
       .select('*')
-      .eq('user_id', userId)
+      .eq('workspace_id', workspaceId)
       .order('name')
     if (error) throw error
     return data
   },
 
-  async create(userId, { name, color }) {
+  async create(workspaceId, userId, { name, color }) {
     if (!isSupabaseConfigured) {
       const rows = localStore.table('categories')
       const row = {
         id: uid(),
-        user_id: userId,
+        workspace_id: workspaceId,
+        created_by: userId,
         name,
         color,
         is_default: false,
@@ -41,7 +41,7 @@ export const categoryService = {
     }
     const { data, error } = await supabase
       .from('categories')
-      .insert({ user_id: userId, name, color, is_default: false })
+      .insert({ workspace_id: workspaceId, created_by: userId, name, color, is_default: false })
       .select()
       .single()
     if (error) throw error

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Link2, Plus, Trash2, ExternalLink, Wand2 } from 'lucide-react'
 import { PageHeader, EmptyState } from '../components/ui/Common'
 import { useAuth } from '../context/AuthContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
 import { useToast } from '../context/ToastContext'
 import { linkService } from '../services/linkService'
@@ -26,6 +27,7 @@ const ACTION_TO_CATEGORY = {
 
 export default function Links() {
   const { user } = useAuth()
+  const { workspaceId } = useWorkspace()
   const { categoryByName, reload } = useData()
   const { toast } = useToast()
   const [links, setLinks] = useState([])
@@ -39,11 +41,12 @@ export default function Links() {
   })
 
   const load = useCallback(async () => {
+    if (!workspaceId) return
     setLoading(true)
-    const data = await linkService.list(user.id)
+    const data = await linkService.list(workspaceId)
     setLinks(data)
     setLoading(false)
-  }, [user.id])
+  }, [workspaceId])
 
   useEffect(() => {
     load()
@@ -66,7 +69,7 @@ export default function Links() {
     }
     try {
       const title = form.title.trim() || titleFromUrl(form.url)
-      const link = await linkService.create(user.id, {
+      const link = await linkService.create(workspaceId, user.id, {
         url: form.url,
         title,
         note: form.note,
@@ -76,7 +79,7 @@ export default function Links() {
       if (form.createTask) {
         const catName = ACTION_TO_CATEGORY[form.desired_action]
         const category = categoryByName(catName)
-        const task = await taskService.create(user.id, {
+        const task = await taskService.create(workspaceId, user.id, {
           title: `[${LINK_ACTION_LABELS[form.desired_action]}] ${title}`,
           description: form.note,
           date: toISODate(new Date()),
