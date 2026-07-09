@@ -28,15 +28,22 @@ export const authService = {
       const active = localStorage.getItem(DEMO_SESSION_KEY)
       return active ? localStore.DEMO_USER : null
     }
-    const { data } = await supabase.auth.getUser()
-    if (!data?.user) return null
-    const profile = await fetchProfile(data.user.id)
-    return {
-      id: data.user.id,
-      email: data.user.email,
-      full_name: profile?.full_name ?? data.user.email,
-      role: profile?.role ?? ROLES.COLLABORATOR,
-      default_workspace_id: profile?.default_workspace_id ?? null,
+    try {
+      const { data, error } = await supabase.auth.getUser()
+      if (error || !data?.user) return null
+      const profile = await fetchProfile(data.user.id)
+      return {
+        id: data.user.id,
+        email: data.user.email,
+        full_name: profile?.full_name ?? data.user.email,
+        role: profile?.role ?? ROLES.COLLABORATOR,
+        default_workspace_id: profile?.default_workspace_id ?? null,
+      }
+    } catch (err) {
+      // Rede indisponivel / Supabase inacessivel: nao trava o app, cai na tela
+      // de login em vez de ficar no loader indefinidamente.
+      console.error('[Agenda360] getCurrentUser falhou:', err?.message || err)
+      return null
     }
   },
 
