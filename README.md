@@ -12,6 +12,10 @@ barata: roda de graça na Vercel/Netlify e usa o plano gratuito do Supabase.
 > para testar. Quando quiser persistir na nuvem e usar login real, basta
 > preencher as variáveis de ambiente.
 
+> 🚀 **Pronto para produção?** Siga o **[Guia prático de implantação
+> (DEPLOY.md)](DEPLOY.md)**: Supabase real + deploy na Vercel + checklist de teste
+> no celular, passo a passo.
+
 ---
 
 ## ✨ Funcionalidades

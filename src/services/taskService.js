@@ -105,9 +105,11 @@ export const taskService = {
       localStore.setTable('tasks', rows)
       saved = rows[idx]
     } else {
+      // Remove campos imutaveis/gerados para nao sujar o UPDATE no Postgres.
+      const { id: _id, created_at: _c, user_id: _u, ...clean } = patch
       const { data, error } = await supabase
         .from('tasks')
-        .update({ ...patch, updated_at })
+        .update({ ...clean, updated_at })
         .eq('id', id)
         .select()
         .single()

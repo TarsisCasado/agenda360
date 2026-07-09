@@ -180,8 +180,11 @@ create trigger trg_tasks_updated_at
   for each row execute function public.set_updated_at();
 
 -- Cria o perfil e as categorias padrao quando um usuario se cadastra.
+-- SECURITY DEFINER com search_path fixo (recomendacao de seguranca do Supabase).
 create or replace function public.handle_new_user()
-returns trigger as $$
+returns trigger
+set search_path = public
+as $$
 declare
   default_cats text[][] := array[
     ['Pessoal','#6366f1'], ['Trabalho','#0ea5e9'], ['Reuniao','#8b5cf6'],
