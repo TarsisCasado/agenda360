@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Menu, Moon, Sun, LogOut, Plus, User, CalendarDays } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { ROLE_LABELS } from '../../lib/constants'
 import AlertCenter from '../notifications/AlertCenter'
 
@@ -9,6 +10,7 @@ export default function Topbar({ onMenu, onNewTask }) {
   const { theme, toggleTheme } = useTheme()
   const { user, signOut, isDemo } = useAuth()
   const [userMenu, setUserMenu] = useState(false)
+  useEscapeKey(userMenu, () => setUserMenu(false))
 
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/80 px-3 py-2.5 pt-safe backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 sm:px-4 sm:py-3">

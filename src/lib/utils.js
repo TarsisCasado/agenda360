@@ -52,12 +52,3 @@ export function percent(part, total) {
   if (!total) return 0
   return Math.round((part / total) * 100)
 }
-
-export function groupBy(list, keyFn) {
-  return list.reduce((acc, item) => {
-    const key = keyFn(item)
-    if (!acc[key]) acc[key] = []
-    acc[key].push(item)
-    return acc
-  }, {})
-}

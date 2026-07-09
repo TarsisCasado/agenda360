@@ -1,7 +1,10 @@
+import { memo } from 'react'
 import { STATUS_META, PRIORITY_META } from '../../lib/constants'
 import { cx } from '../../lib/utils'
 
-export function StatusBadge({ status, size = 'sm' }) {
+// Componentes puros (so dependem das props) -> memoizados para evitar
+// re-render desnecessario quando aparecem em listas longas de tarefas.
+export const StatusBadge = memo(function StatusBadge({ status, size = 'sm' }) {
   const meta = STATUS_META[status] || { label: status, dot: '#94a3b8' }
   return (
     <span
@@ -17,9 +20,9 @@ export function StatusBadge({ status, size = 'sm' }) {
       {meta.label}
     </span>
   )
-}
+})
 
-export function PriorityBadge({ priority }) {
+export const PriorityBadge = memo(function PriorityBadge({ priority }) {
   const meta = PRIORITY_META[priority] || PRIORITY_META.medium
   return (
     <span
@@ -32,9 +35,9 @@ export function PriorityBadge({ priority }) {
       {meta.label}
     </span>
   )
-}
+})
 
-export function CategoryBadge({ category }) {
+export const CategoryBadge = memo(function CategoryBadge({ category }) {
   if (!category) return null
   return (
     <span
@@ -48,4 +51,4 @@ export function CategoryBadge({ category }) {
       {category.name}
     </span>
   )
-}
+})

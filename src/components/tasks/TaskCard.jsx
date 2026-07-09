@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import {
   Clock,
   LinkIcon,
@@ -20,6 +20,7 @@ import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { taskService } from '../../services/taskService'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { STATUS_ORDER, STATUS_META, STATUS } from '../../lib/constants'
 import { isTaskOverdue } from '../../lib/date'
 import { cx } from '../../lib/utils'
@@ -51,7 +52,7 @@ function QuickAction({ icon: Icon, label, onClick, tone = 'slate' }) {
   )
 }
 
-export default function TaskCard({
+function TaskCard({
   task,
   onEdit,
   onChanged,
@@ -59,21 +60,29 @@ export default function TaskCard({
   compact = false,
   showActions = false,
 }) {
-  const { categoryById } = useData()
+  const { categoryById, reload } = useData()
   const { user } = useAuth()
   const { toast } = useToast()
   const [menuOpen, setMenuOpen] = useState(false)
   const [reschedOpen, setReschedOpen] = useState(false)
   const [delegOpen, setDelegOpen] = useState(false)
+  useEscapeKey(menuOpen, () => setMenuOpen(false))
   const category = categoryById(task.category_id)
   const overdue = isTaskOverdue(task)
+
+  // reload() (contexto) garante que a UI atualize em qualquer tela; onChanged
+  // continua disponivel para reacoes locais adicionais do pai.
+  const refresh = () => {
+    reload()
+    onChanged?.()
+  }
 
   const handleStatus = async (status) => {
     setMenuOpen(false)
     try {
       await taskService.changeStatus(user.id, task, status)
       toast('Status atualizado')
-      onChanged?.()
+      refresh()
     } catch (err) {
       toast('Erro: ' + err.message, 'error')
     }
@@ -85,7 +94,7 @@ export default function TaskCard({
     try {
       await taskService.remove(user.id, task)
       toast('Atividade excluida')
-      onChanged?.()
+      refresh()
     } catch (err) {
       toast('Erro: ' + err.message, 'error')
     }
@@ -296,3 +305,5 @@ export default function TaskCard({
     </div>
   )
 }
+
+export default memo(TaskCard)

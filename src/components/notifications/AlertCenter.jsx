@@ -6,6 +6,7 @@ import {
   requestNotificationPermission,
   showLocalNotification,
 } from '../../hooks/useAlerts'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useToast } from '../../context/ToastContext'
 import { formatShort } from '../../lib/date'
 import { cx } from '../../lib/utils'
@@ -19,6 +20,7 @@ export default function AlertCenter() {
   const [perm, setPerm] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
   )
+  useEscapeKey(open, () => setOpen(false))
 
   const enablePush = async () => {
     const result = await requestNotificationPermission()
