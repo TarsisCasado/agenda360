@@ -4,6 +4,8 @@ import { useAuth } from './context/AuthContext'
 import { WorkspaceProvider } from './context/WorkspaceContext'
 import { DataProvider } from './context/DataContext'
 import Layout from './components/layout/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
+import Spinner from './components/ui/Spinner'
 import Login from './pages/Login'
 import Today from './pages/Today'
 
@@ -18,10 +20,10 @@ const Assistant = lazy(() => import('./pages/Assistant'))
 const Reports = lazy(() => import('./pages/Reports'))
 const Settings = lazy(() => import('./pages/Settings'))
 
-function Spinner() {
+function RouteFallback() {
   return (
     <div className="flex h-full items-center justify-center py-20">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600" />
+      <Spinner size={32} />
     </div>
   )
 }
@@ -30,7 +32,7 @@ function FullScreenLoader() {
   return (
     <div className="flex h-[100dvh] items-center justify-center bg-slate-50 dark:bg-slate-950">
       <div className="flex flex-col items-center gap-3">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600" />
+        <Spinner size={40} />
         <p className="text-sm text-slate-500">Carregando...</p>
       </div>
     </div>
@@ -54,22 +56,24 @@ export default function App() {
   return (
     <WorkspaceProvider>
       <DataProvider>
-        <Suspense fallback={<Spinner />}>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Today />} />
-              <Route path="dia" element={<DayAgenda />} />
-              <Route path="semana" element={<WeekKanban />} />
-              <Route path="mes" element={<MonthCalendar />} />
-              <Route path="links" element={<Links />} />
-              <Route path="assistente" element={<Assistant />} />
-              <Route path="relatorios" element={<Reports />} />
-              <Route path="config" element={<Settings />} />
-            </Route>
-            <Route path="/login" element={<Navigate to="/" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Today />} />
+                <Route path="dia" element={<DayAgenda />} />
+                <Route path="semana" element={<WeekKanban />} />
+                <Route path="mes" element={<MonthCalendar />} />
+                <Route path="links" element={<Links />} />
+                <Route path="assistente" element={<Assistant />} />
+                <Route path="relatorios" element={<Reports />} />
+                <Route path="config" element={<Settings />} />
+              </Route>
+              <Route path="/login" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </DataProvider>
     </WorkspaceProvider>
   )

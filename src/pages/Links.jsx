@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link2, Plus, Trash2, ExternalLink, Wand2 } from 'lucide-react'
 import { PageHeader, EmptyState } from '../components/ui/Common'
+import { TaskListSkeleton } from '../components/ui/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
@@ -190,7 +191,7 @@ export default function Links() {
         {/* Lista */}
         <div className="lg:col-span-3">
           {loading ? (
-            <p className="text-sm text-slate-400">Carregando...</p>
+            <TaskListSkeleton count={3} />
           ) : links.length === 0 ? (
             <EmptyState
               icon={Link2}

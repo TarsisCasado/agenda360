@@ -25,7 +25,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
       />
       <div
         className={cx(
-          'card relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden animate-in rounded-b-none sm:rounded-b-xl',
+          'card relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden animate-scale-in rounded-b-none sm:rounded-b-xl',
           size === 'sm' && 'sm:max-w-md',
           size === 'md' && 'sm:max-w-lg',
           size === 'lg' && 'sm:max-w-2xl',

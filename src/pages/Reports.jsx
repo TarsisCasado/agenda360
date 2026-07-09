@@ -9,6 +9,7 @@ import {
   TrendingDown,
 } from 'lucide-react'
 import { PageHeader, StatCard, EmptyState } from '../components/ui/Common'
+import { Skeleton } from '../components/ui/Skeleton'
 import { useTasks } from '../hooks/useTasks'
 import { useData } from '../context/DataContext'
 import { STATUS, WEEK_DAYS } from '../lib/constants'
@@ -56,7 +57,7 @@ function BarList({ title, items, colorKey, emptyLabel }) {
 }
 
 export default function Reports() {
-  const { tasks } = useTasks({}) // todas as atividades
+  const { tasks, loading } = useTasks({}) // todas as atividades
   const { categories, categoryById } = useData()
 
   const m = useMemo(() => {
@@ -123,6 +124,34 @@ export default function Reports() {
       rescheduled,
     }
   }, [tasks, categories, categoryById])
+
+  if (loading && tasks.length === 0) {
+    return (
+      <div>
+        <PageHeader title="Relatorios" subtitle="Metricas da sua produtividade" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="card p-4">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="mt-3 h-7 w-12" />
+            </div>
+          ))}
+        </div>
+        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="card p-5">
+              <Skeleton className="h-4 w-40" />
+              <div className="mt-4 space-y-3">
+                {Array.from({ length: 4 }).map((_, j) => (
+                  <Skeleton key={j} className="h-6 w-full" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   if (tasks.length === 0) {
     return (

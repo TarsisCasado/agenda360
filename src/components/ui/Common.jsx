@@ -1,5 +1,40 @@
 import { cx } from '../../lib/utils'
 
+// Anel de progresso circular (SVG). Usado no resumo do dia da tela "Hoje".
+export function ProgressRing({ value = 0, size = 72, stroke = 7, children }) {
+  const radius = (size - stroke) / 2
+  const circ = 2 * Math.PI * radius
+  const offset = circ - (Math.min(100, Math.max(0, value)) / 100) * circ
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          strokeWidth={stroke}
+          className="stroke-slate-200 dark:stroke-slate-700"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          className="stroke-brand-500 transition-[stroke-dashoffset] duration-700 ease-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export function PageHeader({ title, subtitle, actions }) {
   return (
     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

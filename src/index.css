@@ -102,9 +102,77 @@ body {
   animation: fade-in 0.18s ease-out;
 }
 
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-scale-in {
+  animation: scale-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .drag-over {
   @apply border-brand-400 bg-brand-50/60 dark:border-brand-500 dark:bg-brand-900/20;
 }
 .dragging {
   @apply opacity-40;
+}
+
+/* ---------------------------------------------------------------------------
+   Design System — tokens de movimento, elevacao e loaders (premium)
+   --------------------------------------------------------------------------- */
+
+/* Skeleton com shimmer suave */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  @apply relative overflow-hidden rounded-md bg-slate-200/70 dark:bg-slate-700/50;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  animation: shimmer 1.4s infinite;
+}
+.dark .skeleton::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.06),
+    transparent
+  );
+}
+
+/* Elevacao consistente ao passar o mouse / pressionar */
+.interactive {
+  @apply transition-all duration-150 ease-out;
+}
+.press {
+  @apply transition-transform duration-100 active:scale-[0.97];
+}
+
+/* Respeita quem prefere menos movimento (acessibilidade) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

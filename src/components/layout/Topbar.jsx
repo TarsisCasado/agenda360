@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Menu, Moon, Sun, LogOut, Plus, User, CalendarDays } from 'lucide-react'
+import { Menu, Moon, Sun, LogOut, Plus, User, CalendarDays, Search } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { ROLE_LABELS } from '../../lib/constants'
 import AlertCenter from '../notifications/AlertCenter'
 
-export default function Topbar({ onMenu, onNewTask }) {
+export default function Topbar({ onMenu, onNewTask, onOpenPalette }) {
   const { theme, toggleTheme } = useTheme()
   const { user, signOut, isDemo } = useAuth()
   const [userMenu, setUserMenu] = useState(false)
@@ -38,6 +38,26 @@ export default function Topbar({ onMenu, onNewTask }) {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
+        {/* Busca / Command Palette (⌘K) */}
+        <button
+          onClick={onOpenPalette}
+          aria-label="Buscar (Command Palette)"
+          className="interactive hidden items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 hover:bg-slate-100 md:flex dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+        >
+          <Search size={15} />
+          <span>Buscar...</span>
+          <kbd className="rounded border border-slate-300 px-1.5 text-[10px] font-semibold dark:border-slate-600">
+            ⌘K
+          </kbd>
+        </button>
+        <button
+          onClick={onOpenPalette}
+          aria-label="Buscar"
+          className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:hidden dark:hover:bg-slate-800"
+        >
+          <Search size={18} />
+        </button>
+
         <button onClick={onNewTask} className="btn-primary hidden sm:inline-flex">
           <Plus size={16} /> Nova atividade
         </button>

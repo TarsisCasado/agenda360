@@ -30,3 +30,7 @@ dist-ssr
 
 # PWA generated
 dev-dist
+
+# arquivos temporarios de env (nunca versionar)
+.env.local.*
+.env.*.bak
