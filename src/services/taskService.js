@@ -57,6 +57,27 @@ export const taskService = {
     return data
   },
 
+  // Busca uma tarefa por id DENTRO do workspace informado (read-only).
+  // Retorna null se nao existir no workspace (tambem cobre tentativa de
+  // acessar tarefa de outro workspace). Aditivo — nao muda fluxos existentes.
+  async getById(workspaceId, id) {
+    if (!isSupabaseConfigured) {
+      return (
+        localStore
+          .table('tasks')
+          .find((t) => t.id === id && t.workspace_id === workspaceId) || null
+      )
+    }
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('id', id)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle()
+    if (error) throw error
+    return data || null
+  },
+
   async create(workspaceId, userId, payload) {
     const now = new Date().toISOString()
     const task = {
