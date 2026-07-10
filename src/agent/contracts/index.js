@@ -14,6 +14,15 @@ class NotImplemented extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Origem de uma acao (usada pela politica de confirmacao do Tool Registry):
+//   'manual' -> disparada pela UI atual: mantem o comportamento de hoje
+//               (so exclusao/cancelamento confirmam).
+//   'ai'     -> disparada pelo Assistente: TODA acao de escrita exige previa
+//               e confirmacao explicita antes de executar.
+// ---------------------------------------------------------------------------
+/** @typedef {'manual'|'ai'} ActionOrigin */
+
+// ---------------------------------------------------------------------------
 // Provider Manager — abstrai providers de IA (interpretacao) e STT (transcricao)
 // ---------------------------------------------------------------------------
 /**

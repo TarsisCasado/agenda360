@@ -1,13 +1,19 @@
 // ---------------------------------------------------------------------------
 // Definicao das FERRAMENTAS (allowlist). Cada ferramenta declara:
-//   intent, schema (validacao), requiresConfirmation, destructive, flag,
-//   execute(payload, identity) -> usa os services EXISTENTES.
+//   intent, schema (validacao), flag, execute(payload, identity),
+//   e a POLITICA por metadados:
+//     write        -> a acao ALTERA dados? (leitura = false)
+//     alwaysConfirm-> exige confirmacao SEMPRE (exclusao/cancelamento)
+//     destructive  -> remove/inutiliza dados
 //
-// A IA (no futuro) so podera disparar intents presentes aqui. Nao ha caminho
-// para executar codigo/SQL arbitrario.
+// Politica efetiva de confirmacao (aplicada no Tool Registry):
+//   - leitura (write=false): nunca confirma;
+//   - alwaysConfirm=true: SEMPRE confirma (qualquer origem);
+//   - origem 'ai' + write=true: confirma;
+//   - origem 'manual' + write=true (nao destrutivo): NAO confirma (mantem UX atual).
 //
-// `services` e injetado (facilita testes com mocks): { tasks, links }.
-// `identity` vem SEMPRE da sessao autenticada: { workspaceId, userId }.
+// A IA so podera disparar intents presentes aqui. Sem execucao arbitraria.
+// `services` e injetado (testes usam mocks). `identity` vem SEMPRE da sessao.
 // ---------------------------------------------------------------------------
 import { AgentError, ErrorCodes } from './errors'
 import { FLAGS } from './featureFlags'
@@ -32,7 +38,8 @@ export function createTools(services) {
       intent: 'create_task',
       description: 'Cria uma nova tarefa/atividade.',
       flag: FLAGS.ASSISTANT,
-      requiresConfirmation: false,
+      write: true,
+      alwaysConfirm: false,
       destructive: false,
       schema: {
         title: { type: 'string', required: true, max: 300 },
@@ -54,7 +61,8 @@ export function createTools(services) {
       intent: 'update_task',
       description: 'Edita campos de uma tarefa existente.',
       flag: FLAGS.ASSISTANT,
-      requiresConfirmation: false,
+      write: true,
+      alwaysConfirm: false,
       destructive: false,
       schema: {
         task_id: { type: 'id', required: true },
@@ -80,7 +88,8 @@ export function createTools(services) {
       intent: 'reschedule_task',
       description: 'Reagenda uma tarefa para outra data.',
       flag: FLAGS.ASSISTANT,
-      requiresConfirmation: false,
+      write: true,
+      alwaysConfirm: false,
       destructive: false,
       schema: {
         task_id: { type: 'id', required: true },
@@ -96,7 +105,8 @@ export function createTools(services) {
       intent: 'complete_task',
       description: 'Marca uma tarefa como concluida.',
       flag: FLAGS.ASSISTANT,
-      requiresConfirmation: false,
+      write: true,
+      alwaysConfirm: false,
       destructive: false,
       schema: { task_id: { type: 'id', required: true } },
       execute: async (data, identity) => {
@@ -109,7 +119,8 @@ export function createTools(services) {
       intent: 'mark_missed',
       description: 'Marca uma tarefa como furada.',
       flag: FLAGS.ASSISTANT,
-      requiresConfirmation: false,
+      write: true,
+      alwaysConfirm: false,
       destructive: false,
       schema: { task_id: { type: 'id', required: true } },
       execute: async (data, identity) => {
@@ -120,9 +131,10 @@ export function createTools(services) {
 
     {
       intent: 'cancel_task',
-      description: 'Cancela uma tarefa (exige confirmacao).',
+      description: 'Cancela uma tarefa (sempre exige confirmacao).',
       flag: FLAGS.ASSISTANT,
-      requiresConfirmation: true,
+      write: true,
+      alwaysConfirm: true,
       destructive: false,
       schema: { task_id: { type: 'id', required: true } },
       execute: async (data, identity) => {
@@ -133,9 +145,10 @@ export function createTools(services) {
 
     {
       intent: 'delete_task',
-      description: 'Exclui uma tarefa (destrutivo, exige confirmacao).',
+      description: 'Exclui uma tarefa (destrutivo, sempre exige confirmacao).',
       flag: FLAGS.ASSISTANT,
-      requiresConfirmation: true,
+      write: true,
+      alwaysConfirm: true,
       destructive: true,
       schema: { task_id: { type: 'id', required: true } },
       execute: async (data, identity) => {
@@ -146,10 +159,28 @@ export function createTools(services) {
     },
 
     {
-      intent: 'search_tasks',
-      description: 'Pesquisa tarefas por texto e/ou periodo.',
+      intent: 'create_link',
+      description: 'Salva um link na central de links.',
       flag: FLAGS.ASSISTANT,
-      requiresConfirmation: false,
+      write: true,
+      alwaysConfirm: false,
+      destructive: false,
+      schema: {
+        url: { type: 'string', required: true, max: 2000 },
+        title: { type: 'string', max: 300 },
+        note: { type: 'string', max: 2000 },
+        desired_action: { type: 'enum', values: LINK_ACTIONS, default: 'task' },
+      },
+      execute: (data, identity) =>
+        services.links.create(identity.workspaceId, identity.userId, data),
+    },
+
+    {
+      intent: 'search_tasks',
+      description: 'Pesquisa tarefas por texto e/ou periodo (somente leitura).',
+      flag: FLAGS.ASSISTANT,
+      write: false,
+      alwaysConfirm: false,
       destructive: false,
       schema: {
         query: { type: 'string', max: 200 },
@@ -172,26 +203,11 @@ export function createTools(services) {
     },
 
     {
-      intent: 'create_link',
-      description: 'Salva um link na central de links.',
-      flag: FLAGS.ASSISTANT,
-      requiresConfirmation: false,
-      destructive: false,
-      schema: {
-        url: { type: 'string', required: true, max: 2000 },
-        title: { type: 'string', max: 300 },
-        note: { type: 'string', max: 2000 },
-        desired_action: { type: 'enum', values: LINK_ACTIONS, default: 'task' },
-      },
-      execute: (data, identity) =>
-        services.links.create(identity.workspaceId, identity.userId, data),
-    },
-
-    {
       intent: 'list_schedule',
-      description: 'Lista a agenda de um periodo.',
+      description: 'Lista a agenda de um periodo (somente leitura).',
       flag: FLAGS.ASSISTANT,
-      requiresConfirmation: false,
+      write: false,
+      alwaysConfirm: false,
       destructive: false,
       schema: {
         start: { type: 'date', required: true },

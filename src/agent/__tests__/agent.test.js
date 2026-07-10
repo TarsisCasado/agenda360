@@ -68,17 +68,52 @@ describe('Tool Registry — allowlist e segurança', () => {
     })
   })
 
-  it('marca ferramentas destrutivas como requiresConfirmation', () => {
+  it('política de confirmação por origem (leitura/escrita/destrutivo)', () => {
     const { registry } = makeRegistry()
-    expect(registry.get('delete_task').requiresConfirmation).toBe(true)
-    expect(registry.get('cancel_task').requiresConfirmation).toBe(true)
-    expect(registry.get('create_task').requiresConfirmation).toBe(false)
+    // leitura: nunca confirma (qualquer origem)
+    expect(registry.requiresConfirmation('search_tasks', 'ai')).toBe(false)
+    expect(registry.requiresConfirmation('list_schedule', 'ai')).toBe(false)
+    // escrita manual (UI atual): NAO confirma
+    expect(registry.requiresConfirmation('create_task', 'manual')).toBe(false)
+    expect(registry.requiresConfirmation('complete_task', 'manual')).toBe(false)
+    // escrita por IA: SEMPRE confirma
+    expect(registry.requiresConfirmation('create_task', 'ai')).toBe(true)
+    expect(registry.requiresConfirmation('update_task', 'ai')).toBe(true)
+    expect(registry.requiresConfirmation('complete_task', 'ai')).toBe(true)
+    expect(registry.requiresConfirmation('create_link', 'ai')).toBe(true)
+    // exclusao/cancelamento: SEMPRE confirma (qualquer origem)
+    expect(registry.requiresConfirmation('delete_task', 'manual')).toBe(true)
+    expect(registry.requiresConfirmation('cancel_task', 'manual')).toBe(true)
+    expect(registry.requiresConfirmation('delete_task', 'ai')).toBe(true)
   })
 
-  it('bloqueia execução sem confirmação em ferramenta sensível', async () => {
+  it('escrita por IA sem confirmação é bloqueada (create_task, origin ai)', async () => {
     const { registry } = makeRegistry()
     await expect(
-      registry.execute('delete_task', { task_id: 't1' }, IDENTITY),
+      registry.execute('create_task', VALID_TASK, IDENTITY, { origin: 'ai' }),
+    ).rejects.toMatchObject({ code: ErrorCodes.CONFIRMATION_REQUIRED })
+  })
+
+  it('escrita manual NÃO exige confirmação (mantém UX atual)', async () => {
+    const { registry, services } = makeRegistry()
+    const res = await registry.execute('create_task', VALID_TASK, IDENTITY, { origin: 'manual' })
+    expect(res).toMatchObject({ id: 'task-new' })
+    expect(services.tasks.create).toHaveBeenCalledOnce()
+  })
+
+  it('leitura por IA NÃO exige confirmação', async () => {
+    const { registry } = makeRegistry()
+    const res = await registry.execute('search_tasks', { query: 'alpha' }, IDENTITY, { origin: 'ai' })
+    expect(Array.isArray(res)).toBe(true)
+  })
+
+  it('exclusão/cancelamento sempre exigem confirmação (qualquer origem)', async () => {
+    const { registry } = makeRegistry()
+    await expect(
+      registry.execute('delete_task', { task_id: 't1' }, IDENTITY, { origin: 'manual' }),
+    ).rejects.toMatchObject({ code: ErrorCodes.CONFIRMATION_REQUIRED })
+    await expect(
+      registry.execute('cancel_task', { task_id: 't1' }, IDENTITY, { origin: 'ai' }),
     ).rejects.toMatchObject({ code: ErrorCodes.CONFIRMATION_REQUIRED })
   })
 
@@ -173,6 +208,8 @@ describe('Agent Runtime — propose/confirm/cancel e registro em ai_actions', ()
     )
     expect(proposal).toMatchObject({ actionId: 'action-1', intent: 'create_task' })
     expect(proposal.preview).toMatchObject({ priority: 'medium', status: 'todo' })
+    // origem IA -> escrita exige confirmacao na previa
+    expect(proposal.requiresConfirmation).toBe(true)
   })
 
   it('confirm executa e registra resultado applied', async () => {

@@ -22,6 +22,8 @@ export function createAgentRuntime({ registry, aiActions, eventBus } = {}) {
       throw new AgentError(ErrorCodes.INVALID_PAYLOAD, 'Payload invalido', { errors })
     }
     const tool = registry.get(intent)
+    // Origem sempre 'ai' no runtime -> toda acao de ESCRITA exige confirmacao.
+    const requiresConfirmation = registry.requiresConfirmation(intent, 'ai')
 
     let actionId = null
     if (aiActions) {
@@ -40,17 +42,19 @@ export function createAgentRuntime({ registry, aiActions, eventBus } = {}) {
       actionId,
       intent,
       payload: value,
-      requiresConfirmation: !!tool.requiresConfirmation,
+      requiresConfirmation,
       destructive: !!tool.destructive,
+      write: !!tool.write,
       preview: value,
     }
   }
 
-  // 2a) Confirma -> executa via Registry e registra o resultado.
+  // 2a) Confirma -> executa via Registry (origem 'ai') e registra o resultado.
   async function confirm(proposal, identity) {
     try {
       const result = await registry.execute(proposal.intent, proposal.payload, identity, {
         confirmed: true,
+        origin: 'ai',
       })
       const taskId = result && typeof result === 'object' ? result.id : undefined
       await aiActions?.recordResult(proposal.actionId, { status: 'applied', taskId })
