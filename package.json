@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Agenda Inteligente 360 - Calendario, Kanban semanal, gestor de tarefas, central de links e assistente de produtividade com IA.",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
