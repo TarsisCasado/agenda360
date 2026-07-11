@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Trash2, Palette, History, Database, Users, Building2 } from 'lucide-react'
+import { Plus, Trash2, Palette, History, Database, Users, Building2, Smartphone, Sparkles } from 'lucide-react'
 import { PageHeader } from '../components/ui/Common'
+import InstallGuide from '../components/pwa/InstallGuide'
+import { resetPreferences } from '../lib/preferences'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
@@ -22,6 +24,12 @@ export default function Settings() {
   const { toast } = useToast()
   const [newCat, setNewCat] = useState({ name: '', color: PRESET_COLORS[0] })
   const [logs, setLogs] = useState([])
+  const [installOpen, setInstallOpen] = useState(false)
+
+  const redoOnboarding = () => {
+    resetPreferences(workspaceId)
+    window.location.reload()
+  }
 
   const loadLogs = useCallback(async () => {
     if (!workspaceId) return
@@ -84,6 +92,25 @@ export default function Settings() {
             a este workspace. Voce participa de <strong>{workspaces.length}</strong>{' '}
             workspace(s). A arquitetura ja permite criar novos espacos (Familia,
             Igreja, Projetos...) e convidar membros com papeis distintos.
+          </p>
+        </div>
+
+        {/* App & rotina */}
+        <div className="card p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2 text-brand-600">
+            <Smartphone size={18} />
+            <h2 className="font-bold">App & rotina</h2>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button onClick={() => setInstallOpen(true)} className="btn-secondary press flex-1 justify-start">
+              <Smartphone size={16} /> Instalar na tela inicial
+            </button>
+            <button onClick={redoOnboarding} className="btn-secondary press flex-1 justify-start">
+              <Sparkles size={16} /> Refazer configuração da rotina
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-slate-400">
+            A configuração da rotina personaliza as sugestões do assistente. Você pode refazê-la quando quiser.
           </p>
         </div>
 
@@ -223,6 +250,8 @@ export default function Settings() {
           </div>
         )}
       </div>
+
+      <InstallGuide open={installOpen} onClose={() => setInstallOpen(false)} />
     </div>
   )
 }

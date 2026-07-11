@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
-import { PageHeader } from '../components/ui/Common'
+import { ChevronLeft, ChevronRight, Plus, CalendarPlus } from 'lucide-react'
+import { PageHeader, EmptyState } from '../components/ui/Common'
 import TaskCard from '../components/tasks/TaskCard'
 import TaskModal from '../components/tasks/TaskModal'
 import Modal from '../components/ui/Modal'
@@ -80,6 +80,7 @@ export default function MonthCalendar() {
                 className={cx(
                   'group relative flex min-h-[58px] flex-col gap-1 border-b border-r border-slate-100 p-1 text-left transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50 sm:min-h-[92px] sm:p-1.5',
                   !inMonth && 'bg-slate-50/50 dark:bg-slate-900/30',
+                  today && 'bg-brand-50/40 dark:bg-brand-900/10',
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -172,9 +173,21 @@ export default function MonthCalendar() {
         }
       >
         {selectedTasks.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-500">
-            Nenhuma atividade neste dia.
-          </p>
+          <EmptyState
+            icon={CalendarPlus}
+            title="Dia livre"
+            description="Nenhuma atividade por aqui. Que tal planejar algo?"
+            action={
+              <button
+                className="btn-primary press"
+                onClick={() =>
+                  setTaskModal({ open: true, task: null, defaults: { date: dayModal.iso } })
+                }
+              >
+                <Plus size={16} /> Nova atividade
+              </button>
+            }
+          />
         ) : (
           <div className="space-y-2">
             {selectedTasks.map((t) => (

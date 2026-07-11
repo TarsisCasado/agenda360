@@ -6,6 +6,7 @@
 import { taskService } from '../services/taskService'
 import { toISODate, addDays, isTaskOverdue } from '../lib/date'
 import { STATUS } from '../lib/constants'
+import { contextPreferences } from '../lib/preferences'
 
 export function createContextEngine({ tasks = taskService } = {}) {
   async function build(identity, { categories = [] } = {}) {
@@ -40,8 +41,9 @@ export function createContextEngine({ tasks = taskService } = {}) {
       categories: categories.map((c) => ({ id: c.id, name: c.name })),
       recentTasks,
       overdueTasks,
-      // preferencias: tabela user_preferences ainda nao existe (Fase 8/M4).
-      preferences: {},
+      // Preferencias de rotina coletadas no onboarding (armazenadas localmente,
+      // sem tabela nova). Alimentam o grounding: horarios/dias de trabalho etc.
+      preferences: contextPreferences(identity.workspaceId),
     }
   }
 

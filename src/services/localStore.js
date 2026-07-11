@@ -48,11 +48,23 @@ function seed() {
   const catId = (name) => categories.find((c) => c.name === name)?.id ?? null
 
   const tasks = [
-    { title: 'Planejar a semana', description: 'Revisar pendencias e montar prioridades.', date: iso(0), start_time: '08:00', end_time: '08:30', category_id: catId('Trabalho'), priority: 'high', status: STATUS.TODO },
-    { title: 'Reuniao de alinhamento da equipe', description: 'Sprint review semanal.', date: iso(0), start_time: '10:00', end_time: '11:00', category_id: catId('Reuniao'), priority: 'medium', status: STATUS.IN_PROGRESS },
+    // Hoje: mistura de concluidas (progresso + gamificacao) e pendentes.
+    { title: 'Planejar a semana', description: 'Revisar pendencias e montar prioridades.', date: iso(0), start_time: '08:00', end_time: '08:30', category_id: catId('Trabalho'), priority: 'high', status: STATUS.DONE },
+    { title: 'Responder e-mails importantes', description: '', date: iso(0), start_time: '09:00', end_time: '09:30', category_id: catId('Trabalho'), priority: 'medium', status: STATUS.DONE },
+    { title: 'Reuniao de alinhamento da equipe', description: 'Sprint review semanal.', date: iso(0), start_time: '14:00', end_time: '15:00', category_id: catId('Reuniao'), priority: 'high', status: STATUS.TODO },
+    { title: 'Revisar proposta comercial', description: 'Ajustar escopo e valores.', date: iso(0), start_time: '', end_time: '', category_id: catId('Projeto'), priority: 'urgent', status: STATUS.TODO },
+    // Proximos dias
     { title: 'Treino na academia', description: '', date: iso(1), start_time: '07:00', end_time: '08:00', category_id: catId('Saude'), priority: 'medium', status: STATUS.TODO },
     { title: 'Estudar React avancado', description: 'Hooks e performance.', date: iso(2), start_time: '20:00', end_time: '21:30', category_id: catId('Estudo'), priority: 'low', status: STATUS.TODO },
-    { title: 'Pagar contas do mes', description: '', date: iso(-1), start_time: '09:00', end_time: '09:20', category_id: catId('Financeiro'), priority: 'urgent', status: STATUS.MISSED },
+    // Historico concluido: alimenta a sequencia (streak) e a meta da semana.
+    { title: 'Revisao diaria', description: '', date: iso(-1), start_time: '18:00', end_time: '18:15', category_id: catId('Trabalho'), priority: 'low', status: STATUS.DONE },
+    { title: 'Caminhada', description: '', date: iso(-2), start_time: '07:00', end_time: '07:40', category_id: catId('Saude'), priority: 'low', status: STATUS.DONE },
+    { title: 'Ler um capitulo', description: '', date: iso(-3), start_time: '21:00', end_time: '21:30', category_id: catId('Estudo'), priority: 'low', status: STATUS.DONE },
+    // Habito recorrente (mesmo dia da semana): sugere repetir hoje.
+    { title: 'Treino na academia', description: '', date: iso(-7), start_time: '07:00', end_time: '08:00', category_id: catId('Saude'), priority: 'medium', status: STATUS.DONE },
+    { title: 'Treino na academia', description: '', date: iso(-14), start_time: '07:00', end_time: '08:00', category_id: catId('Saude'), priority: 'medium', status: STATUS.DONE },
+    // Atrasada real (pendente com data passada)
+    { title: 'Pagar contas do mes', description: '', date: iso(-1), start_time: '09:00', end_time: '09:20', category_id: catId('Financeiro'), priority: 'urgent', status: STATUS.TODO },
   ].map((t) => ({
     id: uid(),
     workspace_id: ws,

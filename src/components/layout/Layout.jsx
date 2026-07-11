@@ -7,13 +7,23 @@ import BottomNav from './BottomNav'
 import TaskModal from '../tasks/TaskModal'
 import QuickTaskModal from '../tasks/QuickTaskModal'
 import CommandPalette from '../command/CommandPalette'
+import OnboardingFlow from '../onboarding/OnboardingFlow'
+import { useWorkspace } from '../../context/WorkspaceContext'
+import { isOnboarded } from '../../lib/preferences'
 
 export default function Layout() {
+  const { workspaceId } = useWorkspace()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [fullTaskOpen, setFullTaskOpen] = useState(false)
   const [quickTaskOpen, setQuickTaskOpen] = useState(false)
   const [quickDefaults, setQuickDefaults] = useState(undefined)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+
+  // Onboarding conversacional no primeiro acesso (uma vez por workspace).
+  useEffect(() => {
+    if (workspaceId) setShowOnboarding(!isOnboarded(workspaceId))
+  }, [workspaceId])
 
   const openQuickTask = useCallback((defaults) => {
     setQuickDefaults(defaults)
@@ -74,6 +84,9 @@ export default function Layout() {
         defaults={quickDefaults}
         onClose={() => setQuickTaskOpen(false)}
       />
+
+      {/* Onboarding conversacional (primeiro acesso) */}
+      {showOnboarding && <OnboardingFlow onDone={() => setShowOnboarding(false)} />}
     </div>
   )
 }

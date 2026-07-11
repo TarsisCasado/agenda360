@@ -34,3 +34,6 @@ dev-dist
 # arquivos temporarios de env (nunca versionar)
 .env.local.*
 .env.*.bak
+
+# Arquivos temporarios do Vite
+vite.config.js.timestamp-*.mjs
