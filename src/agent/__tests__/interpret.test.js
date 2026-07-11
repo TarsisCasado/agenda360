@@ -22,6 +22,16 @@ describe('mockProvider.interpret', () => {
     expect(r.confidence).toBeGreaterThanOrEqual(0.8)
   })
 
+  it('extrai titulo limpo mesmo com acentos (amanhã/às)', () => {
+    const r = mockInterpret('Agende reunião com Rafael amanhã às 15h, prioridade alta', CTX)
+    expect(r.intent).toBe('create_task')
+    expect(r.data.date).toBe('2026-07-16')
+    expect(r.data.start_time).toBe('15:00')
+    // titulo nao deve conter "amanhã", "às", "15h" nem "prioridade/alta"
+    expect(r.data.title.toLowerCase()).toContain('rafael')
+    expect(r.data.title.toLowerCase()).not.toMatch(/amanh|às|15h|prioridade|alta/)
+  })
+
   it('"sexta" escolhe a proxima sexta futura', () => {
     const r = mockInterpret('Agende tarefa revisar contrato sexta', CTX)
     expect(r.intent).toBe('create_task')
@@ -33,6 +43,15 @@ describe('mockProvider.interpret', () => {
     const r = mockInterpret('Agende tarefa dentista as 8', CTX)
     expect(r.intent).toBe('create_task')
     expect(r.ambiguities).toContain('horario')
+    expect(r.needs_clarification).toBe(true)
+  })
+
+  it('"amanhã as 8" continua ambiguo (nao confunde "amanha" com "manha")', () => {
+    const r = mockInterpret('Agende tarefa dentista amanhã às 8', CTX)
+    expect(r.intent).toBe('create_task')
+    expect(r.data.date).toBe('2026-07-16') // amanha reconhecido, sem ambiguidade de data
+    expect(r.ambiguities).toContain('horario')
+    expect(r.ambiguities).not.toContain('data')
     expect(r.needs_clarification).toBe(true)
   })
 

@@ -54,7 +54,8 @@ function resolveTime(text) {
   let h = Number(explicit[1] ?? explicit[4] ?? (m && m[1]))
   const min = (m && m[2]) || '00'
   if (Number.isNaN(h) || h > 23) return { time: null, ambiguous: false }
-  const hasPeriod = /(manha|tarde|noite|meio[- ]?dia)/.test(t)
+  // \b evita que "amanha" (contem "manha") seja lido como periodo da manha.
+  const hasPeriod = /\b(manha|tarde|noite)\b|meio[- ]?dia/.test(t)
   const usedH = /\d{1,2}\s*(h|hs|hrs)/.test(t)
   // 1..11 sem "h" e sem periodo -> ambiguo (poderia ser AM ou PM)
   const ambiguous = h >= 1 && h <= 11 && !hasPeriod && !usedH
@@ -77,12 +78,15 @@ function resolveCategory(text, categories = []) {
 }
 
 function cleanTitle(text) {
+  // Tolerante a acentos: nao usa \b antes de tokens acentuados (o \b do JS e
+  // ASCII e nao casa antes de "à"/"ã").
   let title = text
     .replace(/https?:\/\/\S+/g, '')
     .replace(/\b(agende|agendar|marque|marcar|crie|criar|adicione|nova|novo|tarefa)\b/gi, ' ')
-    .replace(/\b(amanha|hoje|depois de amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/gi, ' ')
-    .replace(/\b(as|às)\s*\d{1,2}(:\d{2})?\s*(h|hs|hrs|horas?)?\b/gi, ' ')
-    .replace(/\bprioridade (alta|baixa|media|urgente)\b/gi, ' ')
+    .replace(/(depois de\s+)?amanh[aã]|\bhoje\b|\bsegunda\b|\bter[çc]a\b|\bquarta\b|\bquinta\b|\bsexta\b|s[áa]bado|\bdomingo\b/gi, ' ')
+    .replace(/(^|\s)[aà]s\s*\d{1,2}(:\d{2})?\s*(h|hs|hrs|horas?)?/gi, ' ') // "as/às 15h", "às 8"
+    .replace(/\b\d{1,2}(:\d{2})?\s*(h|hs|hrs)\b/gi, ' ') // "15h" solto
+    .replace(/prioridade\s+(alta|baixa|m[eé]dia|urgente)/gi, ' ')
     .replace(/\b(alta|baixa|urgente|importante)\b/gi, ' ')
     .replace(/[,;:.]+/g, ' ') // remove pontuacao residual
     .replace(/\s+/g, ' ')

@@ -102,6 +102,36 @@ body {
   animation: fade-in 0.18s ease-out;
 }
 
+/* Entrada de mensagem (chat premium) — slide + fade, GPU-friendly (60fps) */
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.msg-in {
+  animation: msg-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Indicador "digitando" (tres pontos) */
+@keyframes typing-dot {
+  0%, 60%, 100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.typing-dot {
+  animation: typing-dot 1.2s infinite ease-in-out;
+}
+
 @keyframes scale-in {
   from {
     opacity: 0;
