@@ -1,0 +1,83 @@
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
+import { localStore } from '../services/localStore'
+import { uid } from '../lib/utils'
+
+// ---------------------------------------------------------------------------
+// Conversation Memory — uso real de ai_conversations / ai_messages.
+// Persiste turnos, recupera historico recente (limitado) e mantem vinculo com
+// o workspace. Nao guarda dados sensiveis desnecessarios (apenas role+content).
+// ---------------------------------------------------------------------------
+const MAX_HISTORY = 12 // limite de mensagens recuperadas/enviadas ao provider
+
+export function createConversationMemory() {
+  async function startConversation(workspaceId, userId, title = 'Assistente') {
+    if (!isSupabaseConfigured) {
+      const row = {
+        id: uid(),
+        workspace_id: workspaceId,
+        user_id: userId,
+        title,
+        context: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      localStore.setTable('ai_conversations', [...localStore.table('ai_conversations'), row])
+      return row.id
+    }
+    const { data, error } = await supabase
+      .from('ai_conversations')
+      .insert({ workspace_id: workspaceId, user_id: userId, title })
+      .select('id')
+      .single()
+    if (error) throw error
+    return data.id
+  }
+
+  // role: 'user' | 'assistant' | 'system' | 'tool'
+  async function append(conversationId, role, content, metadata = {}) {
+    if (!conversationId) return null
+    const safeContent = String(content ?? '').slice(0, 4000)
+    if (!isSupabaseConfigured) {
+      const row = {
+        id: uid(),
+        conversation_id: conversationId,
+        role,
+        content: safeContent,
+        tokens: null,
+        metadata,
+        created_at: new Date().toISOString(),
+      }
+      localStore.setTable('ai_messages', [...localStore.table('ai_messages'), row])
+      return row
+    }
+    const { data, error } = await supabase
+      .from('ai_messages')
+      .insert({ conversation_id: conversationId, role, content: safeContent, metadata })
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  }
+
+  async function history(conversationId, limit = MAX_HISTORY) {
+    if (!conversationId) return []
+    if (!isSupabaseConfigured) {
+      return localStore
+        .table('ai_messages')
+        .filter((m) => m.conversation_id === conversationId)
+        .slice(-limit)
+    }
+    const { data, error } = await supabase
+      .from('ai_messages')
+      .select('role, content, created_at')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+      .limit(limit)
+    if (error) throw error
+    return data
+  }
+
+  return { startConversation, append, history, MAX_HISTORY }
+}
+
+export const conversationMemory = createConversationMemory()
