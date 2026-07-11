@@ -220,6 +220,7 @@ export default function Assistant() {
   }
 
   const confirmProposal = async (proposal) => {
+    if (busy) return // guarda anti clique-duplo / reenvio
     setBusy(true)
     try {
       await agentKernel.assistant.confirm({ proposal, identity, conversationId: convRef.current })
@@ -236,14 +237,16 @@ export default function Assistant() {
   }
 
   const cancelProposal = async (proposal) => {
+    if (busy) return
+    setPending(null) // remove a previa imediatamente (evita reconfirmar)
     try {
       await agentKernel.assistant.cancel({ proposal, conversationId: convRef.current })
     } catch { /* noop */ }
     pushMsg('assistant', 'Acao cancelada.')
-    setPending(null)
   }
 
   const pickSelection = async (taskId) => {
+    if (busy) return
     setBusy(true)
     try {
       const res = await agentKernel.assistant.resolveSelection({
@@ -270,7 +273,7 @@ export default function Assistant() {
       />
 
       <div className="card flex flex-1 flex-col overflow-hidden">
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="flex-1 space-y-4 overflow-y-auto p-4" role="log" aria-live="polite">
           {messages.map((m, i) => (
             <div key={i} className={cx('flex gap-3', m.role === 'user' && 'flex-row-reverse')}>
               <div className={cx(
@@ -361,7 +364,7 @@ export default function Assistant() {
           <Sparkles size={18} className="ml-1 text-brand-500" />
           <input className="input border-0 focus:ring-0" value={input}
             onChange={(e) => setInput(e.target.value)} placeholder="Escreva um comando..." disabled={busy} />
-          <button type="submit" className="btn-primary press" disabled={busy || !input.trim()}>
+          <button type="submit" aria-label="Enviar" className="btn-primary press" disabled={busy || !input.trim()}>
             <Send size={16} />
           </button>
         </form>

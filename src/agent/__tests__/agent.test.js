@@ -233,6 +233,15 @@ describe('Agent Runtime — propose/confirm/cancel e registro em ai_actions', ()
     expect(services.tasks.create).not.toHaveBeenCalled()
   })
 
+  it('confirm de exclusão registra applied SEM task_id (a tarefa foi removida -> evita FK)', async () => {
+    const proposal = await runtime.propose({
+      intent: 'delete_task', payload: { task_id: 't1' }, identity: IDENTITY,
+    })
+    await runtime.confirm(proposal, IDENTITY)
+    expect(services.tasks.remove).toHaveBeenCalledOnce()
+    expect(aiActions.recordResult).toHaveBeenCalledWith('action-1', { status: 'applied', taskId: undefined })
+  })
+
   it('propose rejeita intent inexistente e payload inválido', async () => {
     await expect(runtime.propose({ intent: 'nope', payload: {}, identity: IDENTITY })).rejects.toMatchObject({
       code: ErrorCodes.UNKNOWN_INTENT,

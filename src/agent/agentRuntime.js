@@ -56,7 +56,10 @@ export function createAgentRuntime({ registry, aiActions, eventBus } = {}) {
         confirmed: true,
         origin: 'ai',
       })
-      const taskId = result && typeof result === 'object' ? result.id : undefined
+      // Em exclusoes a tarefa deixa de existir: NAO vinculamos task_id
+      // (evita violar a FK ai_actions.task_id -> tasks no Supabase).
+      const taskId =
+        result && typeof result === 'object' && !result.deleted ? result.id : undefined
       await aiActions?.recordResult(proposal.actionId, { status: 'applied', taskId })
       eventBus?.emit(EVENTS.ACTION_CONFIRMED, {
         intent: proposal.intent,
