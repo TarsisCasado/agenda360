@@ -39,11 +39,15 @@ export const inboxService = {
     return data
   },
 
-  async create(workspaceId, userId, { content = '' } = {}) {
+  async create(workspaceId, userId, { title = '', content = '' } = {}) {
     const now = new Date().toISOString()
     const note = {
       workspace_id: workspaceId,
       created_by: userId,
+      // updated_by preparado para workspaces compartilhados (mesmo padrao de
+      // created_by); sem logica de compartilhamento nesta fase.
+      updated_by: userId,
+      title: String(title ?? ''),
       content: String(content ?? ''),
       archived: false,
     }
@@ -59,10 +63,11 @@ export const inboxService = {
     return data
   },
 
-  // Atualiza campos permitidos (A1: apenas content e archived).
+  // Atualiza campos permitidos (A1.5: title, content e archived).
   async update(note, patch = {}) {
     const updated_at = new Date().toISOString()
     const clean = {}
+    if (patch.title !== undefined) clean.title = String(patch.title ?? '')
     if (patch.content !== undefined) clean.content = String(patch.content ?? '')
     if (patch.archived !== undefined) clean.archived = Boolean(patch.archived)
 

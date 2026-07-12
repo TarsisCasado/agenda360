@@ -23,24 +23,40 @@ const WS2 = '00000000-0000-4000-8000-0000000000b2'
 const USER = '00000000-0000-4000-8000-000000000001'
 
 describe('inboxService (A1 — nota de texto)', () => {
-  it('cria e lista nota', async () => {
-    const saved = await inboxService.create(WS, USER, { content: 'Comprar cafe' })
+  it('cria e lista nota (com title e updated_by preparados)', async () => {
+    const saved = await inboxService.create(WS, USER, {
+      title: 'Comprar tablets',
+      content: 'Ver orcamento da Samsung',
+    })
     expect(saved.id).toBeTruthy()
-    expect(saved.content).toBe('Comprar cafe')
+    expect(saved.title).toBe('Comprar tablets')
+    expect(saved.content).toBe('Ver orcamento da Samsung')
     expect(saved.archived).toBe(false)
     expect(saved.workspace_id).toBe(WS)
     expect(saved.created_by).toBe(USER)
+    expect(saved.updated_by).toBe(USER) // campo preparado (sem logica de share)
 
     const list = await inboxService.list(WS)
     expect(list).toHaveLength(1)
-    expect(list[0].content).toBe('Comprar cafe')
+    expect(list[0].title).toBe('Comprar tablets')
   })
 
-  it('edita o conteudo', async () => {
+  it('cria nota sem title (title default vazio)', async () => {
+    const saved = await inboxService.create(WS, USER, { content: 'so conteudo' })
+    expect(saved.title).toBe('')
+    expect(saved.content).toBe('so conteudo')
+  })
+
+  it('edita title e conteudo', async () => {
     const saved = await inboxService.create(WS, USER, { content: 'rascunho' })
-    const updated = await inboxService.update(saved, { content: 'ideia final' })
+    const updated = await inboxService.update(saved, {
+      title: 'Assunto',
+      content: 'ideia final',
+    })
+    expect(updated.title).toBe('Assunto')
     expect(updated.content).toBe('ideia final')
     const list = await inboxService.list(WS)
+    expect(list[0].title).toBe('Assunto')
     expect(list[0].content).toBe('ideia final')
   })
 

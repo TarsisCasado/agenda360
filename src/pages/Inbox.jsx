@@ -1,13 +1,25 @@
-import { useState } from 'react'
-import { Inbox as InboxIcon, Send, Pencil, Trash2, Archive, ArchiveRestore, Check, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Inbox as InboxIcon, Send, Trash2, Archive, ArchiveRestore, ChevronDown } from 'lucide-react'
 import { PageHeader, EmptyState, ErrorState } from '../components/ui/Common'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
 import { useInbox } from '../hooks/useInbox'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useToast } from '../context/ToastContext'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import { inboxService } from '../services/inboxService'
 import { cx } from '../lib/utils'
+
+// Visao primaria (Caixa) + secundarias sob o menu "Mais". A estrutura permite
+// adicionar no futuro (Para pensar, Compartilhadas, Delegadas, Processadas)
+// SEM alterar a navegacao — basta acrescentar itens aqui.
+const SECONDARY_VIEWS = [
+  { key: 'archived', label: 'Arquivadas' },
+  // futuro: { key: 'to_think', label: 'Para pensar' },
+  // futuro: { key: 'shared', label: 'Compartilhadas' },
+  // futuro: { key: 'delegated', label: 'Delegadas' },
+  // futuro: { key: 'processed', label: 'Processadas' },
+]
 
 function timeLabel(iso) {
   try {
@@ -19,77 +31,114 @@ function timeLabel(iso) {
   }
 }
 
-// Cartao de nota com edicao inline (zero atrito).
-function NoteCard({ note, archived, busy, onEdit, onArchive, onDelete }) {
+// Cartao de nota com edicao INLINE (estilo Apple Notes): clica, edita, sai.
+// Salva ao tirar o foco do cartao; Esc cancela. Sem modal, sem botao "Editar".
+function NoteCard({ note, editable, busy, onEdit, onArchive, onDelete }) {
   const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(note.content)
+  const [title, setTitle] = useState(note.title || '')
+  const [content, setContent] = useState(note.content || '')
 
-  const save = () => {
-    const content = value.trim()
-    if (!content) return
-    onEdit(note, content)
+  const start = () => {
+    if (!editable) return
+    setTitle(note.title || '')
+    setContent(note.content || '')
+    setEditing(true)
+  }
+
+  const cancel = () => {
+    setTitle(note.title || '')
+    setContent(note.content || '')
     setEditing(false)
+  }
+
+  const commit = () => {
+    setEditing(false)
+    const t = title.trim()
+    const c = content.trim()
+    if (!t && !c) return // nao salva vazio
+    if (t === (note.title || '') && c === (note.content || '')) return // sem mudanca
+    onEdit(note, { title: t, content: c })
+  }
+
+  // Salva quando o foco sai do cartao (clicou fora).
+  const onBlurContainer = (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) commit()
+  }
+
+  const onContentKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cancel() }
+    // Enter salva; Shift+Enter nova linha.
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit() }
   }
 
   return (
     <div className="card p-4">
       {editing ? (
-        <div>
+        <div onBlur={onBlurContainer} tabIndex={-1}>
+          <input
+            className="input mb-2 border-0 bg-transparent p-0 text-sm font-bold focus:ring-0"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') cancel() }}
+            placeholder="Titulo (opcional)"
+            aria-label="Titulo da nota"
+          />
           <textarea
-            className="input min-h-[70px]"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            aria-label="Editar nota"
+            className="input min-h-[64px] resize-none border-0 bg-transparent p-0 text-sm focus:ring-0"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={onContentKey}
+            placeholder="Conteudo"
+            aria-label="Conteudo da nota"
             autoFocus
           />
-          <div className="mt-2 flex justify-end gap-2">
+        </div>
+      ) : (
+        <div
+          role={editable ? 'button' : undefined}
+          tabIndex={editable ? 0 : undefined}
+          onClick={start}
+          onKeyDown={(e) => { if (editable && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); start() } }}
+          className={cx('min-w-0', editable && 'cursor-text')}
+        >
+          {note.title && (
+            <p className="mb-0.5 break-words text-sm font-bold text-slate-800 dark:text-slate-100">
+              {note.title}
+            </p>
+          )}
+          {note.content && (
+            <p className="whitespace-pre-wrap break-words text-sm text-slate-700 dark:text-slate-200">
+              {note.content}
+            </p>
+          )}
+          {!note.title && !note.content && (
+            <p className="text-sm italic text-slate-400">(vazia)</p>
+          )}
+        </div>
+      )}
+
+      {!editing && (
+        <div className="mt-2.5 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-slate-400">{timeLabel(note.updated_at)}</span>
+          <div className="flex items-center gap-0.5">
             <button
-              onClick={() => { setEditing(false); setValue(note.content) }}
-              className="btn-ghost press"
+              onClick={() => onArchive(note, editable)}
+              aria-label={editable ? 'Arquivar' : 'Restaurar'}
+              disabled={busy}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600 dark:hover:bg-slate-800"
             >
-              <X size={16} /> Cancelar
+              {editable ? <Archive size={16} /> : <ArchiveRestore size={16} />}
             </button>
-            <button onClick={save} disabled={busy || !value.trim()} className="btn-primary press">
-              <Check size={16} /> Salvar
+            <button
+              onClick={() => onDelete(note)}
+              aria-label="Excluir"
+              disabled={busy}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+            >
+              <Trash2 size={16} />
             </button>
           </div>
         </div>
-      ) : (
-        <>
-          <p className="whitespace-pre-wrap break-words text-sm text-slate-800 dark:text-slate-100">
-            {note.content}
-          </p>
-          <div className="mt-2.5 flex items-center justify-between gap-2">
-            <span className="text-[11px] text-slate-400">{timeLabel(note.updated_at)}</span>
-            <div className="flex items-center gap-0.5">
-              {!archived && (
-                <button
-                  onClick={() => setEditing(true)}
-                  aria-label="Editar"
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
-                >
-                  <Pencil size={16} />
-                </button>
-              )}
-              <button
-                onClick={() => onArchive(note, !archived)}
-                aria-label={archived ? 'Restaurar' : 'Arquivar'}
-                disabled={busy}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600 dark:hover:bg-slate-800"
-              >
-                {archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
-              </button>
-              <button
-                onClick={() => onDelete(note)}
-                aria-label="Excluir"
-                disabled={busy}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        </>
       )}
     </div>
   )
@@ -99,20 +148,30 @@ export default function Inbox() {
   const { user } = useAuth()
   const { workspaceId } = useWorkspace()
   const { toast } = useToast()
-  const [tab, setTab] = useState('active') // 'active' | 'archived'
-  const archived = tab === 'archived'
+  const [view, setView] = useState('active') // 'active' | 'archived' | (futuro)
+  const [menuOpen, setMenuOpen] = useState(false)
+  useEscapeKey(menuOpen, () => setMenuOpen(false))
+  const archived = view === 'archived'
   const { notes, loading, error, reload } = useInbox({ archived })
+  const [title, setTitle] = useState('')
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  const contentRef = useRef(null)
+
+  const activeSecondary = SECONDARY_VIEWS.find((v) => v.key === view)
 
   const create = async () => {
     const content = draft.trim()
-    if (!content || busy) return
+    const t = title.trim()
+    if ((!content && !t) || busy) return
     setBusy(true)
     try {
-      await inboxService.create(workspaceId, user.id, { content })
+      await inboxService.create(workspaceId, user.id, { title: t, content })
+      setTitle('')
       setDraft('')
-      reload()
+      contentRef.current?.focus()
+      if (view !== 'active') setView('active')
+      else reload()
     } catch (err) {
       toast('Erro ao salvar: ' + (err?.message || 'erro'), 'error')
     } finally {
@@ -128,10 +187,10 @@ export default function Inbox() {
     }
   }
 
-  const editNote = async (note, content) => {
+  const editNote = async (note, patch) => {
     setBusy(true)
     try {
-      await inboxService.update(note, { content })
+      await inboxService.update(note, patch)
       reload()
     } catch (err) {
       toast('Erro ao editar: ' + (err?.message || 'erro'), 'error')
@@ -169,48 +228,94 @@ export default function Inbox() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader
-        title="Caixa de Entrada"
-        subtitle="Capture agora, organize depois."
-      />
+      <PageHeader title="Caixa de Entrada" subtitle="Capture agora, organize depois." />
 
-      {/* Composer — captura rapida (abrir, digitar, salvar) */}
-      <div className="card mb-4 p-3">
-        <textarea
-          className="input min-h-[56px] resize-none border-0 bg-transparent p-2 focus:ring-0"
-          placeholder="Capture algo... (Enter para salvar, Shift+Enter para nova linha)"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onComposerKey}
-          aria-label="Nova nota"
-          autoFocus
-        />
-        <div className="flex justify-end">
-          <button onClick={create} disabled={busy || !draft.trim()} className="btn-primary press">
-            <Send size={16} /> Salvar
-          </button>
+      {/* Composer PROTAGONISTA — fixo no topo mesmo com scroll. */}
+      <div className="sticky top-0 z-10 -mt-1 bg-slate-50 pb-3 pt-1 dark:bg-slate-950">
+        <div className="card p-3 shadow-sm">
+          <input
+            className="input mb-1 border-0 bg-transparent p-2 pb-0 text-sm font-semibold focus:ring-0"
+            placeholder="Titulo (opcional)"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={onComposerKey}
+            aria-label="Titulo da nova nota"
+          />
+          <textarea
+            ref={contentRef}
+            className="input min-h-[52px] resize-none border-0 bg-transparent p-2 pt-0 focus:ring-0"
+            placeholder="Capture algo... (Enter para salvar, Shift+Enter para nova linha)"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onComposerKey}
+            aria-label="Conteudo da nova nota"
+            autoFocus
+          />
+          <div className="flex justify-end">
+            <button
+              onClick={create}
+              disabled={busy || (!draft.trim() && !title.trim())}
+              className="btn-primary press"
+            >
+              <Send size={16} /> Salvar
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Alternar ativas / arquivadas */}
-      <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-        {[
-          { key: 'active', label: 'Caixa' },
-          { key: 'archived', label: 'Arquivadas' },
-        ].map((t) => (
+      {/* Navegacao: Caixa (primaria) + "Mais" (secundarias, extensivel). */}
+      <div className="mb-4 flex items-center justify-between">
+        <button
+          onClick={() => setView('active')}
+          className={cx(
+            'press rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors',
+            view === 'active'
+              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
+              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800',
+          )}
+        >
+          Caixa
+        </button>
+
+        <div className="relative">
           <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
             className={cx(
-              'press flex-1 rounded-lg py-1.5 text-sm font-semibold transition-colors',
-              tab === t.key
-                ? 'bg-white text-brand-600 shadow-sm dark:bg-slate-900 dark:text-brand-300'
-                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300',
+              'press flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors',
+              activeSecondary
+                ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
+                : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800',
             )}
           >
-            {t.label}
+            {activeSecondary ? activeSecondary.label : 'Mais'}
+            <ChevronDown size={14} />
           </button>
-        ))}
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div
+                role="menu"
+                className="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+              >
+                {SECONDARY_VIEWS.map((v) => (
+                  <button
+                    key={v.key}
+                    role="menuitem"
+                    onClick={() => { setView(v.key); setMenuOpen(false) }}
+                    className={cx(
+                      'flex w-full items-center rounded px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700',
+                      view === v.key && 'font-semibold text-brand-600 dark:text-brand-300',
+                    )}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -233,7 +338,7 @@ export default function Inbox() {
             <NoteCard
               key={note.id}
               note={note}
-              archived={archived}
+              editable={!archived}
               busy={busy}
               onEdit={editNote}
               onArchive={archiveNote}
