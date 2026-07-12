@@ -5,6 +5,7 @@ import {
   Search,
   Plus,
   Sun,
+  Inbox,
   CalendarDays,
   KanbanSquare,
   Calendar,
@@ -25,6 +26,7 @@ import { cx, sanitizeUrl } from '../../lib/utils'
 
 const NAV = [
   { id: 'nav-hoje', label: 'Hoje', icon: Sun, to: '/' },
+  { id: 'nav-caixa', label: 'Caixa de Entrada', icon: Inbox, to: '/caixa' },
   { id: 'nav-dia', label: 'Agenda do dia', icon: CalendarDays, to: '/dia' },
   { id: 'nav-semana', label: 'Kanban semanal', icon: KanbanSquare, to: '/semana' },
   { id: 'nav-mes', label: 'Calendario', icon: Calendar, to: '/mes' },

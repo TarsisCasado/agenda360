@@ -99,6 +99,7 @@ function seed() {
     ],
     categories,
     tasks,
+    inbox_items: [],
     links: [],
     reminders: [],
     activity_logs: [],

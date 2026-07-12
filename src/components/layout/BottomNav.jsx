@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { Sun, KanbanSquare, Calendar, Link2, Sparkles } from 'lucide-react'
+import { Sun, Inbox, KanbanSquare, Calendar, Link2, Sparkles } from 'lucide-react'
 import { cx } from '../../lib/utils'
 
 // Menu inferior fixo — visivel apenas no mobile (escondido em lg+).
 const ITEMS = [
   { to: '/', label: 'Hoje', icon: Sun, end: true },
+  { to: '/caixa', label: 'Caixa', icon: Inbox },
   { to: '/semana', label: 'Semana', icon: KanbanSquare },
   { to: '/mes', label: 'Calendario', icon: Calendar },
   { to: '/links', label: 'Links', icon: Link2 },

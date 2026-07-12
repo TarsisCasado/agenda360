@@ -12,6 +12,7 @@ import Today from './pages/Today'
 // Code-splitting por rota: reduz o bundle inicial e acelera o carregamento no
 // celular. A tela "Hoje" (principal) e carregada de imediato; as demais sob
 // demanda.
+const Inbox = lazy(() => import('./pages/Inbox'))
 const DayAgenda = lazy(() => import('./pages/DayAgenda'))
 const WeekKanban = lazy(() => import('./pages/WeekKanban'))
 const MonthCalendar = lazy(() => import('./pages/MonthCalendar'))
@@ -61,6 +62,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Layout />}>
                 <Route index element={<Today />} />
+                <Route path="caixa" element={<Inbox />} />
                 <Route path="dia" element={<DayAgenda />} />
                 <Route path="semana" element={<WeekKanban />} />
                 <Route path="mes" element={<MonthCalendar />} />
