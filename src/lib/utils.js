@@ -40,11 +40,40 @@ export function titleFromUrl(rawUrl) {
   }
 }
 
+// Esquemas seguros para links clicaveis. Bloqueia javascript:/data:/etc. que
+// permitiriam XSS ao serem renderizados como href (defesa contra links salvos
+// por outro membro do workspace).
+const SAFE_URL_PROTOCOLS = ['http:', 'https:']
+
 export function isValidUrl(value) {
   try {
-    return Boolean(new URL(value))
+    const u = new URL(value)
+    return SAFE_URL_PROTOCOLS.includes(u.protocol)
   } catch {
     return false
+  }
+}
+
+// Retorna a URL apenas se for um link http(s) seguro; caso contrario retorna ''.
+// Use no href de qualquer link vindo do usuario.
+export function sanitizeUrl(value) {
+  const raw = (value ?? '').trim()
+  if (!raw) return ''
+  try {
+    const u = new URL(raw)
+    return SAFE_URL_PROTOCOLS.includes(u.protocol) ? raw : ''
+  } catch {
+    return ''
+  }
+}
+
+// Envolve uma promessa para que NUNCA rejeite: retorna { data, error }.
+// Garante que carregamentos sempre "assentem" (evita loading infinito).
+export async function guard(promise) {
+  try {
+    return { data: await promise, error: null }
+  } catch (error) {
+    return { data: null, error }
   }
 }
 

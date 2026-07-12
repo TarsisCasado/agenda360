@@ -21,7 +21,7 @@ import { taskService } from '../../services/taskService'
 import { linkService } from '../../services/linkService'
 import { STATUS_META } from '../../lib/constants'
 import { formatShort } from '../../lib/date'
-import { cx } from '../../lib/utils'
+import { cx, sanitizeUrl } from '../../lib/utils'
 
 const NAV = [
   { id: 'nav-hoje', label: 'Hoje', icon: Sun, to: '/' },
@@ -59,11 +59,16 @@ export default function CommandPalette({ open, onClose, onNewTask }) {
     Promise.all([
       taskService.list(workspaceId, {}),
       linkService.list(workspaceId),
-    ]).then(([t, l]) => {
-      if (!alive) return
-      setTasks(t)
-      setLinks(l)
-    })
+    ])
+      .then(([t, l]) => {
+        if (!alive) return
+        setTasks(t)
+        setLinks(l)
+      })
+      .catch((err) => {
+        if (!alive) return
+        console.error('[CommandPalette] falha ao carregar dados:', err?.message || err)
+      })
     return () => {
       alive = false
     }
@@ -132,7 +137,10 @@ export default function CommandPalette({ open, onClose, onNewTask }) {
           icon: ExternalLink,
           label: l.title || l.url,
           hint: 'Abrir link',
-          run: () => window.open(l.url, '_blank', 'noopener'),
+          run: () => {
+            const safe = sanitizeUrl(l.url)
+            if (safe) window.open(safe, '_blank', 'noopener')
+          },
         }))
       if (linkItems.length) g.push({ title: 'Links', items: linkItems })
     }

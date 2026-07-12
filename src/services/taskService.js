@@ -28,6 +28,17 @@ const TASK_DEFAULTS = {
   reschedule_count: 0,
 }
 
+// Registro de historico "best-effort": uma falha ao gravar o log NUNCA pode
+// impedir/derrubar a operacao principal (criar/editar/mover/excluir tarefa).
+async function safeLog(entry) {
+  try {
+    return await logService.record(entry)
+  } catch (err) {
+    console.warn('[taskService] falha ao registrar log (ignorada):', err?.message || err)
+    return null
+  }
+}
+
 function localList(workspaceId, { start, end } = {}) {
   return localStore
     .table('tasks')
@@ -100,7 +111,7 @@ export const taskService = {
       saved = data
     }
 
-    await logService.record({
+    await safeLog({
       workspaceId,
       actorId: userId,
       taskId: saved.id,
@@ -136,7 +147,7 @@ export const taskService = {
       saved = data
     }
 
-    await logService.record({
+    await safeLog({
       workspaceId,
       actorId: userId,
       taskId: task.id,
@@ -228,7 +239,7 @@ export const taskService = {
       if (error) throw error
     }
     // task_id fica null: o registro ja foi removido (evita violar a FK).
-    await logService.record({
+    await safeLog({
       workspaceId: task.workspace_id,
       actorId: userId,
       taskId: null,

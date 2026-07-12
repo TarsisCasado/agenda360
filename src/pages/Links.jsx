@@ -13,7 +13,7 @@ import {
   LINK_ACTION_LABELS,
   STATUS,
 } from '../lib/constants'
-import { titleFromUrl, isValidUrl } from '../lib/utils'
+import { titleFromUrl, isValidUrl, sanitizeUrl, guard } from '../lib/utils'
 import { toISODate } from '../lib/date'
 
 // Mapeia a acao desejada do link -> categoria sugerida da tarefa gerada.
@@ -44,8 +44,9 @@ export default function Links() {
   const load = useCallback(async () => {
     if (!workspaceId) return
     setLoading(true)
-    const data = await linkService.list(workspaceId)
-    setLinks(data)
+    const { data, error } = await guard(linkService.list(workspaceId))
+    if (error) console.error('[Links] falha ao carregar links:', error?.message || error)
+    else setLinks(data)
     setLoading(false)
   }, [workspaceId])
 
@@ -209,14 +210,20 @@ export default function Links() {
                     <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                       {l.title}
                     </p>
-                    <a
-                      href={l.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 truncate text-xs text-brand-600 hover:underline"
-                    >
-                      {l.url} <ExternalLink size={11} />
-                    </a>
+                    {sanitizeUrl(l.url) ? (
+                      <a
+                        href={sanitizeUrl(l.url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 truncate text-xs text-brand-600 hover:underline"
+                      >
+                        {l.url} <ExternalLink size={11} />
+                      </a>
+                    ) : (
+                      <span className="flex items-center gap-1 truncate text-xs text-slate-400" title="Link inseguro (bloqueado)">
+                        {l.url}
+                      </span>
+                    )}
                     {l.note && (
                       <p className="mt-1 text-sm text-slate-500">{l.note}</p>
                     )}

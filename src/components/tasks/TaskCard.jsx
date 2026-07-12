@@ -23,7 +23,7 @@ import { taskService } from '../../services/taskService'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { STATUS_ORDER, STATUS_META, STATUS } from '../../lib/constants'
 import { isTaskOverdue } from '../../lib/date'
-import { cx } from '../../lib/utils'
+import { cx, sanitizeUrl } from '../../lib/utils'
 
 // Botao de acao rapida (mobile-first, alvo de toque grande)
 function QuickAction({ icon: Icon, label, onClick, tone = 'slate' }) {
@@ -227,9 +227,9 @@ function TaskCard({
         <StatusBadge status={task.status} size="xs" />
         {!compact && category && <CategoryBadge category={category} />}
         {!compact && <PriorityBadge priority={task.priority} />}
-        {task.link && (
+        {task.link && sanitizeUrl(task.link) && (
           <a
-            href={task.link}
+            href={sanitizeUrl(task.link)}
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}

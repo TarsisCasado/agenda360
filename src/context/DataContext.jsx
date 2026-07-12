@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { categoryService } from '../services/categoryService'
 import { useWorkspace } from './WorkspaceContext'
+import { guard } from '../lib/utils'
 
 // Compartilha categorias (usadas em varias telas) e um contador de "reload"
 // que as paginas observam para recarregar suas listas apos mudancas.
@@ -14,8 +15,9 @@ export function DataProvider({ children }) {
 
   const loadCategories = useCallback(async () => {
     if (!workspaceId) return
-    const cats = await categoryService.list(workspaceId)
-    setCategories(cats)
+    const { data, error } = await guard(categoryService.list(workspaceId))
+    if (error) console.error('[DataContext] falha ao carregar categorias:', error?.message || error)
+    else setCategories(data)
     setLoading(false)
   }, [workspaceId])
 

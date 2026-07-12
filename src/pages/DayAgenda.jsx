@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Plus, Inbox } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Inbox, MoonStar } from 'lucide-react'
 import { PageHeader } from '../components/ui/Common'
 import TaskCard from '../components/tasks/TaskCard'
 import TaskModal from '../components/tasks/TaskModal'
@@ -13,13 +13,22 @@ import {
   fromISODate,
 } from '../lib/date'
 import { DAY_START_HOUR, DAY_END_HOUR } from '../lib/constants'
+import { partitionDayTasks, timeToHour, resolveDayDate } from '../lib/dayView'
 
 export default function DayAgenda() {
   const [searchParams] = useSearchParams()
   // Permite abrir um dia especifico (ex.: vindo da Command Palette: /dia?date=...)
-  const [date, setDate] = useState(
-    searchParams.get('date') || toISODate(new Date()),
+  const [date, setDate] = useState(() =>
+    resolveDayDate(searchParams.get('date'), toISODate(new Date())),
   )
+
+  // Mantem o dia exibido em sincronia com o parametro ?date (ex.: navegar para
+  // /dia?date=... ja estando na tela, vindo da Command Palette).
+  const dateParam = searchParams.get('date')
+  useEffect(() => {
+    if (dateParam) setDate(dateParam)
+  }, [dateParam])
+
   const range = useMemo(() => ({ start: date, end: date }), [date])
   const { tasks } = useTasks(range)
   const [modal, setModal] = useState({ open: false, task: null, defaults: null })
@@ -27,11 +36,14 @@ export default function DayAgenda() {
   const hours = []
   for (let h = DAY_START_HOUR; h <= DAY_END_HOUR; h += 1) hours.push(h)
 
-  const timed = tasks.filter((t) => t.start_time)
-  const untimed = tasks.filter((t) => !t.start_time)
+  // Particiona garantindo que tarefas fora da grade (ex.: antes das 06:00) nao
+  // fiquem invisiveis.
+  const { untimed, timed, outOfGrid } = useMemo(
+    () => partitionDayTasks(tasks, { startHour: DAY_START_HOUR, endHour: DAY_END_HOUR }),
+    [tasks],
+  )
 
-  const tasksAtHour = (h) =>
-    timed.filter((t) => Number(t.start_time.split(':')[0]) === h)
+  const tasksAtHour = (h) => timed.filter((t) => timeToHour(t.start_time) === h)
 
   const go = (delta) => setDate(toISODate(addDays(fromISODate(date), delta)))
 
@@ -83,6 +95,27 @@ export default function DayAgenda() {
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {untimed.map((t) => (
+              <TaskCard
+                key={t.id}
+                task={t}
+                onEdit={(task) => setModal({ open: true, task, defaults: null })}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Fora da grade (ex.: antes das 06:00 ou apos as 23:00): garante que
+          nenhuma tarefa com horario fique invisivel. */}
+      {outOfGrid.length > 0 && (
+        <div className="card mb-4 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-500">
+            <MoonStar size={16} /> Fora da grade (antes das{' '}
+            {String(DAY_START_HOUR).padStart(2, '0')}:00 ou apos as{' '}
+            {String(DAY_END_HOUR).padStart(2, '0')}:00)
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {outOfGrid.map((t) => (
               <TaskCard
                 key={t.id}
                 task={t}

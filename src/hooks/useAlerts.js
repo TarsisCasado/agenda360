@@ -4,6 +4,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
 import { toISODate, addDays, isTaskOverdue } from '../lib/date'
 import { STATUS } from '../lib/constants'
+import { guard } from '../lib/utils'
 
 // Calcula os alertas in-app do usuario:
 //  - atividades atrasadas (pendentes com horario vencido)
@@ -19,7 +20,14 @@ export function useAlerts() {
     if (!workspaceId) return
     const today = toISODate(new Date())
     const start = toISODate(addDays(new Date(), -30))
-    const tasks = await taskService.list(workspaceId, { start, end: today })
+    const { data: tasks, error } = await guard(
+      taskService.list(workspaceId, { start, end: today }),
+    )
+    if (error) {
+      console.error('[useAlerts] falha ao carregar alertas:', error?.message || error)
+      setLoading(false)
+      return
+    }
 
     const overdue = tasks
       .filter((t) => isTaskOverdue(t))
