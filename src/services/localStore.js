@@ -101,6 +101,7 @@ function seed() {
     tasks,
     inbox_items: [],
     inbox_checklist_items: [],
+    inbox_events: [],
     links: [],
     reminders: [],
     activity_logs: [],

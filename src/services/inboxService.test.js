@@ -22,13 +22,14 @@ const WS2 = '00000000-0000-4000-8000-0000000000b2'
 const USER = '00000000-0000-4000-8000-000000000001'
 
 describe('inboxService — nota de texto (A1/A1.5)', () => {
-  it('cria nota com title/content, status inbox e seen false', async () => {
+  it('cria nota com title/content, status inbox, seen false e origem manual', async () => {
     const saved = await inboxService.create(WS, USER, { title: 'Comprar tablets', content: 'Samsung' })
     expect(saved.type).toBe('note')
     expect(saved.title).toBe('Comprar tablets')
     expect(saved.content).toBe('Samsung')
     expect(saved.status).toBe('inbox')
     expect(saved.seen).toBe(false)
+    expect(saved.origin).toBe('manual')
     expect(saved.created_by).toBe(USER)
     expect(saved.updated_by).toBe(USER)
   })
@@ -130,5 +131,56 @@ describe('inboxService — conversao de tipo (A2.1)', () => {
     expect(conv.type).toBe('note')
     expect(conv.content).toBe('um\ndois')
     expect(await inboxService.listChecklistItems(WS, cl.id)).toHaveLength(0)
+  })
+})
+
+describe('inboxService — timeline / historico (A2.2)', () => {
+  const actions = async (note) => (await inboxService.listEvents(WS, note.id)).map((e) => e.action)
+
+  it('registra "created" ao criar (com actor)', async () => {
+    const n = await inboxService.create(WS, USER, { content: 'x' })
+    const events = await inboxService.listEvents(WS, n.id)
+    expect(events).toHaveLength(1)
+    expect(events[0].action).toBe('created')
+    expect(events[0].actor_id).toBe(USER)
+  })
+
+  it('registra "edited" ao editar conteudo', async () => {
+    const n = await inboxService.create(WS, USER, { content: 'x' })
+    await inboxService.editContent(n, { content: 'y' }, USER)
+    expect(await actions(n)).toEqual(['edited', 'created']) // mais recente 1o
+  })
+
+  it('registra cada movimentacao e o historico NUNCA e apagado (reversivel)', async () => {
+    const n = await inboxService.create(WS, USER, { content: 'x' })
+    // inbox -> para pensar -> arquivado -> inbox (restaurado)
+    await inboxService.moveToThink(n, USER)
+    await inboxService.archive(n, USER)
+    await inboxService.restore(n, USER)
+    const acts = await actions(n)
+    // ordem cronologica reversa (mais recente 1o)
+    expect(acts).toEqual(['restored', 'archived', 'moved_to_think', 'created'])
+    // volta para caixa a partir de "para pensar" gera moved_to_inbox
+    await inboxService.moveToThink(n, USER)
+    await inboxService.moveToInbox(n, USER)
+    const acts2 = await actions(n)
+    expect(acts2[0]).toBe('moved_to_inbox')
+    expect(acts2).toContain('moved_to_think')
+    // nada foi removido: total cresce monotonicamente
+    expect(acts2.length).toBe(6)
+  })
+
+  it('registra "seen"/"unseen" ao marcar/desmarcar visto', async () => {
+    const n = await inboxService.create(WS, USER, { content: 'x' })
+    await inboxService.setSeen(n, true, USER)
+    await inboxService.setSeen(n, false, USER)
+    const acts = await actions(n)
+    expect(acts.slice(0, 2)).toEqual(['unseen', 'seen'])
+  })
+
+  it('falha ao gravar evento nao derruba a operacao (best-effort)', async () => {
+    // Mesmo sem actor, a nota e criada normalmente.
+    const n = await inboxService.create(WS, null, { content: 'x' })
+    expect(n.id).toBeTruthy()
   })
 })

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Inbox as InboxIcon, Send, Trash2, Archive, ArchiveRestore, Lightbulb,
-  ListChecks, FileText, Eye, EyeOff, Plus, X,
+  ListChecks, FileText, Eye, EyeOff, Plus, X, History,
+  FilePlus, Pencil, ArrowRight,
 } from 'lucide-react'
 import { PageHeader, EmptyState, ErrorState } from '../components/ui/Common'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
@@ -28,6 +29,54 @@ function timeLabel(iso) {
   } catch {
     return ''
   }
+}
+
+// Rotulos/icones da timeline (historico interno).
+const EVENT_META = {
+  created: { icon: FilePlus, label: 'Criada' },
+  edited: { icon: Pencil, label: 'Editada' },
+  archived: { icon: Archive, label: 'Arquivada' },
+  restored: { icon: ArchiveRestore, label: 'Restaurada' },
+  moved_to_think: { icon: Lightbulb, label: 'Movida para Para pensar' },
+  moved_to_inbox: { icon: InboxIcon, label: 'Movida para a Caixa' },
+  seen: { icon: Eye, label: 'Marcada como vista' },
+  unseen: { icon: EyeOff, label: 'Desmarcada como vista' },
+}
+
+// Painel de historico (collapse inline — sem modal, sem tela nova).
+function TimelinePanel({ note, loadEvents }) {
+  const [events, setEvents] = useState(null)
+  useEffect(() => {
+    let alive = true
+    loadEvents(note).then((data) => { if (alive) setEvents(data) }).catch(() => { if (alive) setEvents([]) })
+    return () => { alive = false }
+    // recarrega quando a nota muda (updated_at) para refletir novas acoes
+  }, [note, loadEvents])
+
+  return (
+    <div className="mt-2 animate-in rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Historico</p>
+      {events === null ? (
+        <p className="text-xs text-slate-400">Carregando...</p>
+      ) : events.length === 0 ? (
+        <p className="text-xs text-slate-400">Sem movimentacoes ainda.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {events.map((e) => {
+            const meta = EVENT_META[e.action] || { icon: ArrowRight, label: e.action }
+            const Icon = meta.icon
+            return (
+              <li key={e.id} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                <Icon size={13} className="shrink-0 text-slate-400" />
+                <span className="flex-1">{meta.label}</span>
+                <span className="shrink-0 text-slate-400">{timeLabel(e.created_at)}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 // --- Titulo com edicao inline (clica, edita, sai) ---------------------------
@@ -262,9 +311,19 @@ function NoteCard({ note, items, busy, handlers }) {
   const toThink = note.status === 'to_think'
   const editable = !archived
   const done = items.filter((i) => i.checked).length
+  const complete = items.length > 0 && done === items.length // checklist concluido
+  const [showHistory, setShowHistory] = useState(false)
 
   return (
-    <div className={cx('card p-4', toThink && 'border-l-2 border-l-violet-300 dark:border-l-violet-700')}>
+    <div
+      className={cx(
+        'card p-4 transition-opacity',
+        // "Para pensar": identidade visual propria (mais criativa).
+        toThink && 'border-l-2 border-l-violet-300 bg-gradient-to-br from-violet-50/50 to-white dark:border-l-violet-700 dark:from-violet-950/15 dark:to-slate-900',
+        // Visto: opacidade discretamente reduzida (restaura no hover).
+        note.seen && !archived && 'opacity-60 hover:opacity-100',
+      )}
+    >
       {/* Cabecalho: titulo + progresso + Novo */}
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -274,7 +333,15 @@ function NoteCard({ note, items, busy, handlers }) {
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {isChecklist && (
-            <span className="chip bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+            <span
+              key={complete ? 'done' : 'wip'} // reinicia a microinteracao ao concluir
+              className={cx(
+                'chip',
+                complete
+                  ? 'animate-pop bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300',
+              )}
+            >
               {done}/{items.length}
             </span>
           )}
@@ -302,6 +369,12 @@ function NoteCard({ note, items, busy, handlers }) {
       <div className="mt-2.5 flex items-center justify-between gap-2">
         <span className="text-[11px] text-slate-400">{timeLabel(note.updated_at)}</span>
         <div className="flex items-center gap-0.5">
+          <Action
+            icon={History}
+            label="Historico"
+            disabled={busy}
+            onClick={() => setShowHistory((v) => !v)}
+          />
           {archived ? (
             <>
               <Action icon={ArchiveRestore} label="Restaurar" tone="amber" disabled={busy}
@@ -334,6 +407,8 @@ function NoteCard({ note, items, busy, handlers }) {
           )}
         </div>
       </div>
+
+      {showHistory && <TimelinePanel note={note} loadEvents={handlers.loadEvents} />}
     </div>
   )
 }
@@ -365,6 +440,9 @@ export default function Inbox() {
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const contentRef = useRef(null)
+
+  // Estavel: evita refetch em loop no painel de historico.
+  const loadEvents = useCallback((note) => inboxService.listEvents(workspaceId, note.id), [workspaceId])
 
   const create = async () => {
     const content = draft.trim()
@@ -411,22 +489,26 @@ export default function Inbox() {
     }
   }
 
+  // Movimentacoes silenciosas (sem toast): "sem interromper o fluxo" (item 7).
+  // Cada acao registra sua propria timeline via inboxService (actor = user.id).
+  const actor = user?.id
   const handlers = {
-    saveNote: wrap((note, patch) => inboxService.update(note, patch)),
-    move: wrap((note, s) => inboxService.update(note, { status: s }),
-      { toast: 'Nota movida' }),
-    setSeen: wrap((note, v) => inboxService.setSeen(note, v)),
-    convert: wrap((note, type) => inboxService.setType(workspaceId, note, type)),
-    archive: wrap((note) => inboxService.archive(note), { toast: 'Nota arquivada' }),
-    restore: wrap((note) => inboxService.restore(note), { toast: 'Nota restaurada' }),
+    saveNote: wrap((note, patch) => inboxService.editContent(note, patch, actor)),
+    move: wrap((note, s) =>
+      s === 'to_think' ? inboxService.moveToThink(note, actor) : inboxService.moveToInbox(note, actor)),
+    setSeen: wrap((note, v) => inboxService.setSeen(note, v, actor)),
+    convert: wrap((note, type) => inboxService.setType(workspaceId, note, type, actor)),
+    archive: wrap((note) => inboxService.archive(note, actor)),
+    restore: wrap((note) => inboxService.restore(note, actor)),
     remove: async (note) => {
       if (!window.confirm('Excluir esta nota?')) return
-      await wrap((n) => inboxService.remove(n), { toast: 'Nota excluida' })(note)
+      await wrap((n) => inboxService.remove(n))(note)
     },
     addItem: wrap((note, text, position) => inboxService.addChecklistItem(workspaceId, note.id, { text, position })),
     toggleItem: wrap((item, checked) => inboxService.toggleChecklistItem(item, checked)),
     saveItem: wrap((item, text) => inboxService.updateChecklistItem(item, { text })),
     removeItem: wrap((item) => inboxService.removeChecklistItem(item)),
+    loadEvents,
   }
 
   const isToThink = filter === 'to_think'
