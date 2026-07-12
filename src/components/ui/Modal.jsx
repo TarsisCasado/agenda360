@@ -1,17 +1,65 @@
-import { useEffect } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cx } from '../../lib/utils'
 
+const FOCUSABLE =
+  'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+
 export default function Modal({ open, onClose, title, children, footer, size = 'md' }) {
+  const panelRef = useRef(null)
+  const previouslyFocused = useRef(null)
+  const titleId = useId()
+
   useEffect(() => {
     if (!open) return
-    const onKey = (e) => e.key === 'Escape' && onClose?.()
-    window.addEventListener('keydown', onKey)
+    // Guarda o elemento focado antes de abrir, para restaurar ao fechar.
+    previouslyFocused.current = document.activeElement
+    const panel = panelRef.current
+
+    const focusables = () =>
+      panel ? Array.from(panel.querySelectorAll(FOCUSABLE)) : []
+
+    // Foco inicial: preferimos o primeiro campo do formulario (mantem a UX de
+    // "titulo em foco" ao abrir); senao, o primeiro focavel; senao o painel.
+    const firstField = panel?.querySelector(
+      'input:not([type="hidden"]):not([disabled]),textarea:not([disabled]),select:not([disabled])',
+    )
+    ;(firstField || focusables()[0] || panel)?.focus?.()
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose?.()
+        return
+      }
+      if (e.key !== 'Tab') return
+      // Focus trap: mantem o Tab dentro do modal.
+      const items = focusables()
+      if (items.length === 0) {
+        e.preventDefault()
+        panel?.focus?.()
+        return
+      }
+      const firstEl = items[0]
+      const lastEl = items[items.length - 1]
+      const activeEl = document.activeElement
+      if (e.shiftKey && (activeEl === firstEl || activeEl === panel)) {
+        e.preventDefault()
+        lastEl.focus()
+      } else if (!e.shiftKey && activeEl === lastEl) {
+        e.preventDefault()
+        firstEl.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKey, true)
     document.body.style.overflow = 'hidden'
     return () => {
-      window.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
       document.body.style.overflow = ''
+      // Retorna o foco ao elemento anterior (acessibilidade).
+      previouslyFocused.current?.focus?.()
     }
   }, [open, onClose])
 
@@ -24,15 +72,20 @@ export default function Modal({ open, onClose, title, children, footer, size = '
         onClick={onClose}
       />
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className={cx(
-          'card relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden animate-scale-in rounded-b-none sm:rounded-b-xl',
+          'card relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden animate-scale-in rounded-b-none focus:outline-none sm:rounded-b-xl',
           size === 'sm' && 'sm:max-w-md',
           size === 'md' && 'sm:max-w-lg',
           size === 'lg' && 'sm:max-w-2xl',
         )}
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+          <h3 id={titleId} className="text-base font-bold text-slate-800 dark:text-slate-100">
             {title}
           </h3>
           <button

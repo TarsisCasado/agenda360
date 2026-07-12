@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Plus, Inbox, MoonStar } from 'lucide-react'
-import { PageHeader } from '../components/ui/Common'
+import { PageHeader, ErrorState } from '../components/ui/Common'
 import TaskCard from '../components/tasks/TaskCard'
 import TaskModal from '../components/tasks/TaskModal'
 import { useTasks } from '../hooks/useTasks'
@@ -15,6 +15,16 @@ import {
 import { DAY_START_HOUR, DAY_END_HOUR } from '../lib/constants'
 import { partitionDayTasks, timeToHour, resolveDayDate } from '../lib/dayView'
 
+// ---------------------------------------------------------------------------
+// DECISAO DE PRODUTO (navegacao) — B5/RC-1B. NAO implementar agora; apenas
+// documentado para evitar regressoes:
+//  - Agenda do Dia aberta pelo MENU LATERAL (NavLink "/dia", sem query) deve
+//    SEMPRE abrir em Hoje. Isso ja acontece: sem ?date, o dia inicial e hoje.
+//  - No Calendario havera, no FUTURO, uma acao "Abrir agenda deste dia" que
+//    navegara para: /agenda-do-dia?date=YYYY-MM-DD
+//    (rota atual e "/dia?date=..."; o alias "/agenda-do-dia" e uma evolucao
+//     planejada). Nao criar essa acao nesta sprint.
+// ---------------------------------------------------------------------------
 export default function DayAgenda() {
   const [searchParams] = useSearchParams()
   // Permite abrir um dia especifico (ex.: vindo da Command Palette: /dia?date=...)
@@ -30,7 +40,7 @@ export default function DayAgenda() {
   }, [dateParam])
 
   const range = useMemo(() => ({ start: date, end: date }), [date])
-  const { tasks } = useTasks(range)
+  const { tasks, error, reload } = useTasks(range)
   const [modal, setModal] = useState({ open: false, task: null, defaults: null })
 
   const hours = []
@@ -87,6 +97,10 @@ export default function DayAgenda() {
         <p className="mb-3 text-xs font-medium text-brand-600">● Hoje</p>
       )}
 
+      {error ? (
+        <ErrorState onRetry={reload} />
+      ) : (
+        <>
       {/* Sem horario */}
       {untimed.length > 0 && (
         <div className="card mb-4 p-4">
@@ -175,6 +189,8 @@ export default function DayAgenda() {
           )
         })}
       </div>
+        </>
+      )}
 
       <TaskModal
         open={modal.open}

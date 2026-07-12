@@ -1,3 +1,4 @@
+import { AlertTriangle, RotateCcw } from 'lucide-react'
 import { cx } from '../../lib/utils'
 
 // Anel de progresso circular (SVG). Usado no resumo do dia da tela "Hoje".
@@ -74,6 +75,34 @@ export function StatCard({ label, value, icon: Icon, tone = 'brand', hint }) {
         {value}
       </p>
       {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
+    </div>
+  )
+}
+
+// Estado de ERRO padronizado (falha ao carregar): mensagem amigavel + retry.
+// Mantem o layout intacto e nunca "some" silenciosamente.
+export function ErrorState({
+  title = 'Nao foi possivel carregar',
+  description = 'Algo deu errado ao buscar os dados. Verifique sua conexao e tente novamente.',
+  onRetry,
+}) {
+  return (
+    <div
+      role="alert"
+      className="card flex flex-col items-center justify-center gap-3 px-6 py-14 text-center"
+    >
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500 dark:bg-red-950/40">
+        <AlertTriangle size={22} />
+      </div>
+      <div>
+        <p className="font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+      </div>
+      {onRetry && (
+        <button onClick={onRetry} className="btn-secondary press">
+          <RotateCcw size={16} /> Tentar novamente
+        </button>
+      )}
     </div>
   )
 }

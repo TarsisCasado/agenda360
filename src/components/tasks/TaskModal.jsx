@@ -117,7 +117,6 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
             value={form.title}
             onChange={set('title')}
             placeholder="Ex: Reuniao de alinhamento"
-            autoFocus
           />
         </div>
 

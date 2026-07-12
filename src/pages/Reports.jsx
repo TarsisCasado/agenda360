@@ -8,7 +8,7 @@ import {
   TrendingUp,
   TrendingDown,
 } from 'lucide-react'
-import { PageHeader, StatCard, EmptyState } from '../components/ui/Common'
+import { PageHeader, StatCard, EmptyState, ErrorState } from '../components/ui/Common'
 import { Skeleton } from '../components/ui/Skeleton'
 import { useTasks } from '../hooks/useTasks'
 import { useData } from '../context/DataContext'
@@ -57,7 +57,7 @@ function BarList({ title, items, colorKey, emptyLabel }) {
 }
 
 export default function Reports() {
-  const { tasks, loading } = useTasks({}) // todas as atividades
+  const { tasks, loading, error, reload } = useTasks({}) // todas as atividades
   const { categories, categoryById } = useData()
 
   const m = useMemo(() => {
@@ -124,6 +124,15 @@ export default function Reports() {
       rescheduled,
     }
   }, [tasks, categories, categoryById])
+
+  if (error) {
+    return (
+      <div>
+        <PageHeader title="Relatorios" subtitle="Metricas da sua produtividade" />
+        <ErrorState onRetry={reload} />
+      </div>
+    )
+  }
 
   if (loading && tasks.length === 0) {
     return (

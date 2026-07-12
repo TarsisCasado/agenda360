@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, CalendarPlus } from 'lucide-react'
-import { PageHeader, EmptyState } from '../components/ui/Common'
+import { PageHeader, EmptyState, ErrorState } from '../components/ui/Common'
 import TaskCard from '../components/tasks/TaskCard'
 import TaskModal from '../components/tasks/TaskModal'
 import Modal from '../components/ui/Modal'
@@ -24,7 +24,7 @@ export default function MonthCalendar() {
   const { categoryById } = useData()
   const grid = useMemo(() => getMonthGrid(reference), [reference])
   const range = useMemo(() => monthRange(reference), [reference])
-  const { tasks } = useTasks(range)
+  const { tasks, error, reload } = useTasks(range)
 
   const [dayModal, setDayModal] = useState({ open: false, iso: null })
   const [taskModal, setTaskModal] = useState({ open: false, task: null, defaults: null })
@@ -55,6 +55,8 @@ export default function MonthCalendar() {
         }
       />
 
+      {error && <div className="mb-4"><ErrorState onRetry={reload} /></div>}
+
       <div className="card overflow-hidden">
         <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60">
           {WEEK_HEADERS.map((d) => (
@@ -74,6 +76,10 @@ export default function MonthCalendar() {
             const inMonth = isSameMonth(day, reference)
             const today = isToday(day)
             return (
+              // DECISAO DE PRODUTO (B5/RC-1B): no FUTURO, este dia tera a acao
+              // "Abrir agenda deste dia" navegando para
+              // /agenda-do-dia?date=YYYY-MM-DD. Nao implementar agora — hoje o
+              // clique apenas abre o modal do dia (comportamento inalterado).
               <button
                 key={iso}
                 onClick={() => setDayModal({ open: true, iso })}

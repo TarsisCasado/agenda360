@@ -8,11 +8,14 @@ import TaskModal from '../tasks/TaskModal'
 import QuickTaskModal from '../tasks/QuickTaskModal'
 import CommandPalette from '../command/CommandPalette'
 import OnboardingFlow from '../onboarding/OnboardingFlow'
+import WorkspaceMissing from '../workspace/WorkspaceMissing'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { isOnboarded } from '../../lib/preferences'
+import { workspaceGate } from '../../lib/uiState'
 
 export default function Layout() {
-  const { workspaceId } = useWorkspace()
+  const { workspaceId, workspaces, loading: wsLoading } = useWorkspace()
+  const gate = workspaceGate({ loading: wsLoading, workspaces })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [fullTaskOpen, setFullTaskOpen] = useState(false)
   const [quickTaskOpen, setQuickTaskOpen] = useState(false)
@@ -53,7 +56,9 @@ export default function Layout() {
           onOpenPalette={() => setPaletteOpen(true)}
         />
         <main className="flex-1 overflow-y-auto px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-8">
-          <Outlet />
+          {/* Portao de workspace: sem workspace -> estado de recuperacao (nunca
+              loading eterno nem excecao). 'loading'/'ready' seguem para as rotas. */}
+          {gate === 'empty' ? <WorkspaceMissing /> : <Outlet />}
         </main>
       </div>
 

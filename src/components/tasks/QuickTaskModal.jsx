@@ -95,7 +95,6 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
             value={form.title}
             onChange={set('title')}
             placeholder="O que precisa ser feito?"
-            autoFocus
           />
         </div>
 

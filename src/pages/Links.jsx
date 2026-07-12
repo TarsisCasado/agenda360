@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link2, Plus, Trash2, ExternalLink, Wand2 } from 'lucide-react'
-import { PageHeader, EmptyState } from '../components/ui/Common'
+import { PageHeader, EmptyState, ErrorState } from '../components/ui/Common'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -33,6 +33,7 @@ export default function Links() {
   const { toast } = useToast()
   const [links, setLinks] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [form, setForm] = useState({
     url: '',
     title: '',
@@ -44,9 +45,14 @@ export default function Links() {
   const load = useCallback(async () => {
     if (!workspaceId) return
     setLoading(true)
-    const { data, error } = await guard(linkService.list(workspaceId))
-    if (error) console.error('[Links] falha ao carregar links:', error?.message || error)
-    else setLinks(data)
+    setError(null)
+    const { data, error: err } = await guard(linkService.list(workspaceId))
+    if (err) {
+      console.error('[Links] falha ao carregar links:', err?.message || err)
+      setError(err)
+    } else {
+      setLinks(data)
+    }
     setLoading(false)
   }, [workspaceId])
 
@@ -193,6 +199,8 @@ export default function Links() {
         <div className="lg:col-span-3">
           {loading ? (
             <TaskListSkeleton count={3} />
+          ) : error ? (
+            <ErrorState onRetry={load} />
           ) : links.length === 0 ? (
             <EmptyState
               icon={Link2}
