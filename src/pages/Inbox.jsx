@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Inbox as InboxIcon, Send, Trash2, Archive, ArchiveRestore, Lightbulb,
   ListChecks, FileText, Eye, EyeOff, Plus, X, History,
-  FilePlus, Pencil, ArrowRight,
+  FilePlus, Pencil, ArrowRight, Check, Sparkles,
 } from 'lucide-react'
-import { PageHeader, EmptyState, ErrorState } from '../components/ui/Common'
+import { EmptyState, ErrorState } from '../components/ui/Common'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
 import { useInbox } from '../hooks/useInbox'
 import { useAuth } from '../context/AuthContext'
@@ -20,6 +20,9 @@ const FILTERS = [
   { key: 'to_think', label: 'Para pensar', status: 'to_think' },
   { key: 'archived', label: 'Arquivadas', status: 'archived' },
 ]
+
+// Referencia estavel para notas sem itens (preserva o memo dos cards).
+const EMPTY_ITEMS = []
 
 function timeLabel(iso) {
   try {
@@ -54,8 +57,14 @@ function TimelinePanel({ note, loadEvents }) {
   }, [note, loadEvents])
 
   return (
-    <div className="mt-2 animate-in rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Historico</p>
+    <div
+      role="region"
+      aria-label="Historico da nota"
+      className="mt-3 animate-in rounded-xl border border-slate-100 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-800/40"
+    >
+      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <History size={12} /> Historico
+      </p>
       {events === null ? (
         <p className="text-xs text-slate-400">Carregando...</p>
       ) : events.length === 0 ? (
@@ -205,7 +214,7 @@ function ChecklistItemRow({ item, editable, onToggle, onSave, onRemove }) {
         onChange={(e) => onToggle(e.target.checked)}
         disabled={!editable}
         aria-label={item.text || 'Item'}
-        className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+        className="h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 accent-brand-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 dark:border-slate-600"
       />
       {editing ? (
         <input
@@ -227,8 +236,8 @@ function ChecklistItemRow({ item, editable, onToggle, onSave, onRemove }) {
           onClick={() => editable && setEditing(true)}
           onKeyDown={(e) => { if (editable && e.key === 'Enter') setEditing(true) }}
           className={cx(
-            'min-w-0 flex-1 break-words text-sm',
-            item.checked ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-200',
+            'min-w-0 flex-1 break-words text-sm transition-colors',
+            item.checked ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-700 dark:text-slate-200',
             editable && 'cursor-text',
           )}
         >
@@ -259,6 +268,11 @@ function ChecklistBody({ items, editable, onAdd, onToggle, onSaveItem, onRemoveI
   }
   return (
     <div>
+      {items.length === 0 && (
+        <p className="mb-1 text-xs italic text-slate-400">
+          {editable ? 'Lista vazia — adicione o primeiro item abaixo.' : 'Lista vazia.'}
+        </p>
+      )}
       <div className="space-y-0.5">
         {items.map((item) => (
           <ChecklistItemRow
@@ -298,14 +312,18 @@ function Action({ icon: Icon, label, onClick, disabled, tone = 'slate' }) {
   }
   return (
     <button onClick={onClick} disabled={disabled} aria-label={label} title={label}
-      className={cx('rounded-lg p-1.5', tones[tone])}>
+      className={cx(
+        'press rounded-lg p-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:opacity-40',
+        tones[tone],
+      )}>
       <Icon size={16} />
     </button>
   )
 }
 
 // --- Cartao de nota ----------------------------------------------------------
-function NoteCard({ note, items, busy, handlers }) {
+// memo + handlers/props estaveis: digitar no composer nao re-renderiza a lista.
+const NoteCard = memo(function NoteCard({ note, items, busy, handlers }) {
   const isChecklist = note.type === 'checklist'
   const archived = note.status === 'archived'
   const toThink = note.status === 'to_think'
@@ -317,11 +335,11 @@ function NoteCard({ note, items, busy, handlers }) {
   return (
     <div
       className={cx(
-        'card p-4 transition-opacity',
+        'card animate-in p-4 transition-all duration-200 hover:shadow-md',
         // "Para pensar": identidade visual propria (mais criativa).
-        toThink && 'border-l-2 border-l-violet-300 bg-gradient-to-br from-violet-50/50 to-white dark:border-l-violet-700 dark:from-violet-950/15 dark:to-slate-900',
+        toThink && 'border-l-2 border-l-violet-300 bg-gradient-to-br from-violet-50/60 to-white dark:border-l-violet-700 dark:from-violet-950/20 dark:to-slate-900',
         // Visto: opacidade discretamente reduzida (restaura no hover).
-        note.seen && !archived && 'opacity-60 hover:opacity-100',
+        note.seen && !archived && 'opacity-[0.62] hover:opacity-100',
       )}
     >
       {/* Cabecalho: titulo + progresso + Novo */}
@@ -336,12 +354,13 @@ function NoteCard({ note, items, busy, handlers }) {
             <span
               key={complete ? 'done' : 'wip'} // reinicia a microinteracao ao concluir
               className={cx(
-                'chip',
+                'chip transition-colors',
                 complete
                   ? 'animate-pop bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300'
                   : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300',
               )}
             >
+              {complete && <Check size={11} className="-ml-0.5" />}
               {done}/{items.length}
             </span>
           )}
@@ -411,7 +430,7 @@ function NoteCard({ note, items, busy, handlers }) {
       {showHistory && <TimelinePanel note={note} loadEvents={handlers.loadEvents} />}
     </div>
   )
-}
+})
 
 export default function Inbox() {
   const { user } = useAuth()
@@ -474,12 +493,12 @@ export default function Inbox() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); create() }
   }
 
-  // Handlers de nota / checklist ---------------------------------------------
-  const wrap = (fn, opts = {}) => async (...args) => {
+  // Executor comum (mantido estavel): movimentacoes silenciosas — "sem
+  // interromper o fluxo" (item 7). Cada acao registra sua timeline no service.
+  const run = useCallback(async (fn) => {
     setBusy(true)
     try {
-      await fn(...args)
-      if (opts.toast) toast(opts.toast)
+      await fn()
       reload()
       loadChecklists()
     } catch (err) {
@@ -487,35 +506,45 @@ export default function Inbox() {
     } finally {
       setBusy(false)
     }
-  }
+  }, [reload, loadChecklists, toast])
 
-  // Movimentacoes silenciosas (sem toast): "sem interromper o fluxo" (item 7).
-  // Cada acao registra sua propria timeline via inboxService (actor = user.id).
+  // Handlers memoizados: evitam re-render da lista ao digitar no composer.
   const actor = user?.id
-  const handlers = {
-    saveNote: wrap((note, patch) => inboxService.editContent(note, patch, actor)),
-    move: wrap((note, s) =>
+  const handlers = useMemo(() => ({
+    saveNote: (note, patch) => run(() => inboxService.editContent(note, patch, actor)),
+    move: (note, s) => run(() =>
       s === 'to_think' ? inboxService.moveToThink(note, actor) : inboxService.moveToInbox(note, actor)),
-    setSeen: wrap((note, v) => inboxService.setSeen(note, v, actor)),
-    convert: wrap((note, type) => inboxService.setType(workspaceId, note, type, actor)),
-    archive: wrap((note) => inboxService.archive(note, actor)),
-    restore: wrap((note) => inboxService.restore(note, actor)),
-    remove: async (note) => {
+    setSeen: (note, v) => run(() => inboxService.setSeen(note, v, actor)),
+    convert: (note, type) => run(() => inboxService.setType(workspaceId, note, type, actor)),
+    archive: (note) => run(() => inboxService.archive(note, actor)),
+    restore: (note) => run(() => inboxService.restore(note, actor)),
+    remove: (note) => {
       if (!window.confirm('Excluir esta nota?')) return
-      await wrap((n) => inboxService.remove(n))(note)
+      run(() => inboxService.remove(note))
     },
-    addItem: wrap((note, text, position) => inboxService.addChecklistItem(workspaceId, note.id, { text, position })),
-    toggleItem: wrap((item, checked) => inboxService.toggleChecklistItem(item, checked)),
-    saveItem: wrap((item, text) => inboxService.updateChecklistItem(item, { text })),
-    removeItem: wrap((item) => inboxService.removeChecklistItem(item)),
+    addItem: (note, text, position) => run(() => inboxService.addChecklistItem(workspaceId, note.id, { text, position })),
+    toggleItem: (item, checked) => run(() => inboxService.toggleChecklistItem(item, checked)),
+    saveItem: (item, text) => run(() => inboxService.updateChecklistItem(item, { text })),
+    removeItem: (item) => run(() => inboxService.removeChecklistItem(item)),
     loadEvents,
-  }
+  }), [run, actor, workspaceId, loadEvents])
 
   const isToThink = filter === 'to_think'
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="Caixa de Entrada" subtitle="Capture agora, organize depois." />
+      {/* Cabecalho com identidade propria (tile em gradiente da marca). */}
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm">
+          <InboxIcon size={22} />
+        </div>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
+            Caixa de Entrada
+          </h1>
+          <p className="text-sm text-slate-500">Capture agora, organize depois.</p>
+        </div>
+      </div>
 
       {/* Composer PROTAGONISTA — fixo no topo mesmo com scroll. */}
       <div className="sticky top-0 z-10 -mt-1 bg-slate-50 pb-3 pt-1 dark:bg-slate-950">
@@ -529,11 +558,12 @@ export default function Inbox() {
               <button
                 key={t.key}
                 onClick={() => setComposerType(t.key)}
+                aria-pressed={composerType === t.key}
                 className={cx(
-                  'press flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold',
+                  'press flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
                   composerType === t.key
                     ? 'bg-white text-brand-600 shadow-sm dark:bg-slate-900 dark:text-brand-300'
-                    : 'text-slate-500',
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300',
                 )}
               >
                 <t.icon size={13} /> {t.label}
@@ -576,8 +606,9 @@ export default function Inbox() {
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
+            aria-pressed={filter === f.key}
             className={cx(
-              'press shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors',
+              'press shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
               filter === f.key
                 ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
                 : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800',
@@ -590,14 +621,18 @@ export default function Inbox() {
 
       {/* Banner criativo do "Para pensar" (espaco separado, visual distinto) */}
       {isToThink && (
-        <div className="mb-4 rounded-2xl border border-violet-100 bg-gradient-to-br from-amber-50 via-violet-50 to-white p-5 dark:border-violet-900/40 dark:from-amber-950/20 dark:via-violet-950/20 dark:to-slate-900">
-          <div className="flex items-center gap-2 text-violet-600 dark:text-violet-300">
-            <Lightbulb size={18} />
-            <h2 className="font-bold">Para pensar</h2>
+        <div className="animate-in mb-4 flex items-start gap-3.5 overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 via-fuchsia-50/60 to-amber-50/40 p-5 dark:border-violet-900/40 dark:from-violet-950/25 dark:via-fuchsia-950/15 dark:to-slate-900">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-sm">
+            <Lightbulb size={22} />
           </div>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Um espaco para ideias, projetos, negocios, viagens, melhorias e sonhos. Deixe a mente respirar.
-          </p>
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-1.5 font-bold text-violet-700 dark:text-violet-200">
+              Para pensar <Sparkles size={14} className="text-fuchsia-400" />
+            </h2>
+            <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
+              Onde as ideias descansam ate amadurecer — projetos, negocios, viagens, sonhos. Sem pressa, sem prazo.
+            </p>
+          </div>
         </div>
       )}
 
@@ -607,16 +642,28 @@ export default function Inbox() {
         <ErrorState onRetry={reload} />
       ) : notes.length === 0 ? (
         <EmptyState
-          icon={isToThink ? Lightbulb : InboxIcon}
+          icon={filter === 'archived' ? Archive : isToThink ? Lightbulb : InboxIcon}
           title={
             filter === 'archived' ? 'Nada arquivado'
               : isToThink ? 'Nenhuma ideia aqui ainda'
-                : 'Caixa de entrada vazia'
+                : filter === 'all' ? 'Nada por aqui ainda'
+                  : 'Caixa de entrada vazia'
           }
           description={
-            filter === 'archived' ? 'Notas arquivadas aparecem aqui.'
-              : isToThink ? 'Mova notas para ca quando quiser incubar uma ideia. Sem pressa.'
-                : 'Capture uma ideia, um lembrete ou uma lista acima. Sem data, sem prioridade.'
+            filter === 'archived' ? 'O que voce arquivar aparece aqui — nada se perde.'
+              : isToThink ? 'Mova uma nota para ca quando quiser incubar uma ideia. Sem pressa, sem prazo.'
+                : 'Capture uma ideia, um lembrete ou uma lista. Sem data, sem prioridade.'
+          }
+          action={
+            isToThink || filter === 'archived' ? (
+              <button onClick={() => setFilter('inbox')} className="btn-secondary press">
+                <InboxIcon size={16} /> Ir para a Caixa
+              </button>
+            ) : (
+              <button onClick={() => contentRef.current?.focus()} className="btn-primary press">
+                <Send size={16} /> Capturar agora
+              </button>
+            )
           }
         />
       ) : (
@@ -625,7 +672,7 @@ export default function Inbox() {
             <NoteCard
               key={note.id}
               note={note}
-              items={checklist[note.id] || []}
+              items={checklist[note.id] || EMPTY_ITEMS}
               busy={busy}
               handlers={handlers}
             />

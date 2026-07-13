@@ -202,9 +202,15 @@ export default function CommandPalette({ open, onClose, onNewTask }) {
         {/* Resultados */}
         <div ref={listRef} className="max-h-[52vh] overflow-y-auto p-2">
           {flat.length === 0 ? (
-            <p className="px-3 py-8 text-center text-sm text-slate-400">
-              {`Nada encontrado para "${query}".`}
-            </p>
+            <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800">
+                <Search size={18} />
+              </div>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-300">
+                {`Nada encontrado para "${query}"`}
+              </p>
+              <p className="text-xs text-slate-400">Tente outro termo ou navegue pelo menu.</p>
+            </div>
           ) : (
             groups.map((group) => (
               <div key={group.title} className="mb-1">
