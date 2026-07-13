@@ -11,7 +11,12 @@ import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useToast } from '../context/ToastContext'
 import { inboxService } from '../services/inboxService'
-import { cx } from '../lib/utils'
+import { cx, uid } from '../lib/utils'
+import { createSyncQueue } from '../lib/sync/syncQueue'
+import {
+  upsertNote, patchNote, removeNote, replaceNote,
+  setItems, addItem, patchItem, removeItem, replaceItem, moveItems, dropItems,
+} from '../lib/sync/optimistic'
 
 // Filtros simples (tudo dentro da Caixa de Entrada — uma unica tela).
 const FILTERS = [
@@ -323,7 +328,8 @@ function Action({ icon: Icon, label, onClick, disabled, tone = 'slate' }) {
 
 // --- Cartao de nota ----------------------------------------------------------
 // memo + handlers/props estaveis: digitar no composer nao re-renderiza a lista.
-const NoteCard = memo(function NoteCard({ note, items, busy, handlers }) {
+// `syncing` = esta nota tem uma operacao pendente na fila (feedback discreto).
+const NoteCard = memo(function NoteCard({ note, items, syncing, handlers }) {
   const isChecklist = note.type === 'checklist'
   const archived = note.status === 'archived'
   const toThink = note.status === 'to_think'
@@ -342,7 +348,7 @@ const NoteCard = memo(function NoteCard({ note, items, busy, handlers }) {
         note.seen && !archived && 'opacity-[0.62] hover:opacity-100',
       )}
     >
-      {/* Cabecalho: titulo + progresso + Novo */}
+      {/* Cabecalho: titulo + progresso + Novo + sincronizando */}
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           {isChecklist
@@ -350,6 +356,14 @@ const NoteCard = memo(function NoteCard({ note, items, busy, handlers }) {
             : null}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* Feedback discreto de sincronizacao (estado por item). */}
+          {syncing && (
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"
+              title="Sincronizando..."
+              aria-label="Sincronizando"
+            />
+          )}
           {isChecklist && (
             <span
               key={complete ? 'done' : 'wip'} // reinicia a microinteracao ao concluir
@@ -375,52 +389,46 @@ const NoteCard = memo(function NoteCard({ note, items, busy, handlers }) {
         <ChecklistBody
           items={items}
           editable={editable}
-          onAdd={(text) => handlers.addItem(note, text, items.length)}
-          onToggle={(item, checked) => handlers.toggleItem(item, checked)}
-          onSaveItem={(item, text) => handlers.saveItem(item, text)}
-          onRemoveItem={(item) => handlers.removeItem(item)}
+          onAdd={(text) => handlers.addItem(note, text)}
+          onToggle={(item, checked) => handlers.toggleItem(note, item, checked)}
+          onSaveItem={(item, text) => handlers.saveItem(note, item, text)}
+          onRemoveItem={(item) => handlers.removeItem(note, item)}
         />
       ) : (
         <NoteBody note={note} editable={editable} onSave={(patch) => handlers.saveNote(note, patch)} />
       )}
 
-      {/* Acoes */}
+      {/* Acoes (nunca bloqueadas por sincronizacao — a fila serializa por item) */}
       <div className="mt-2.5 flex items-center justify-between gap-2">
         <span className="text-[11px] text-slate-400">{timeLabel(note.updated_at)}</span>
         <div className="flex items-center gap-0.5">
-          <Action
-            icon={History}
-            label="Historico"
-            disabled={busy}
-            onClick={() => setShowHistory((v) => !v)}
-          />
+          <Action icon={History} label="Historico" onClick={() => setShowHistory((v) => !v)} />
           {archived ? (
             <>
-              <Action icon={ArchiveRestore} label="Restaurar" tone="amber" disabled={busy}
+              <Action icon={ArchiveRestore} label="Restaurar" tone="amber"
                 onClick={() => handlers.restore(note)} />
-              <Action icon={Trash2} label="Excluir" tone="red" disabled={busy}
+              <Action icon={Trash2} label="Excluir" tone="red"
                 onClick={() => handlers.remove(note)} />
             </>
           ) : (
             <>
               <Action icon={note.seen ? EyeOff : Eye} label={note.seen ? 'Marcar como novo' : 'Marcar como visto'}
-                disabled={busy} onClick={() => handlers.setSeen(note, !note.seen)} />
+                onClick={() => handlers.setSeen(note, !note.seen)} />
               {toThink ? (
-                <Action icon={InboxIcon} label="Mover para a Caixa" disabled={busy}
+                <Action icon={InboxIcon} label="Mover para a Caixa"
                   onClick={() => handlers.move(note, 'inbox')} />
               ) : (
-                <Action icon={Lightbulb} label="Mover para Para pensar" tone="violet" disabled={busy}
+                <Action icon={Lightbulb} label="Mover para Para pensar" tone="violet"
                   onClick={() => handlers.move(note, 'to_think')} />
               )}
               <Action
                 icon={isChecklist ? FileText : ListChecks}
                 label={isChecklist ? 'Transformar em nota' : 'Transformar em checklist'}
-                disabled={busy}
                 onClick={() => handlers.convert(note, isChecklist ? 'note' : 'checklist')}
               />
-              <Action icon={Archive} label="Arquivar" tone="amber" disabled={busy}
+              <Action icon={Archive} label="Arquivar" tone="amber"
                 onClick={() => handlers.archive(note)} />
-              <Action icon={Trash2} label="Excluir" tone="red" disabled={busy}
+              <Action icon={Trash2} label="Excluir" tone="red"
                 onClick={() => handlers.remove(note)} />
             </>
           )}
@@ -437,10 +445,16 @@ export default function Inbox() {
   const { workspaceId } = useWorkspace()
   const { toast } = useToast()
   const [filter, setFilter] = useState('inbox')
-  const status = FILTERS.find((f) => f.key === filter)?.status ?? null
-  const { notes, loading, error, reload } = useInbox({ status })
+  const filterStatus = FILTERS.find((f) => f.key === filter)?.status ?? null
+  const { notes, setNotes, loading, error, reload } = useInbox({ status: filterStatus })
+  const actor = user?.id
 
   const [checklist, setChecklist] = useState({})
+  const checklistRef = useRef(checklist)
+  useEffect(() => { checklistRef.current = checklist }, [checklist])
+
+  // Carrega os itens de checklist apenas quando o filtro muda (nao a cada
+  // mutacao otimista) — elimina reloads completos.
   const loadChecklists = useCallback(async () => {
     if (!workspaceId) return
     try {
@@ -452,82 +466,219 @@ export default function Inbox() {
       console.error('[Inbox] falha ao carregar checklists:', err?.message || err)
     }
   }, [workspaceId])
-  useEffect(() => { loadChecklists() }, [loadChecklists, notes])
+  useEffect(() => { loadChecklists() }, [loadChecklists, filter])
 
   const [composerType, setComposerType] = useState('note')
   const [title, setTitle] = useState('')
   const [draft, setDraft] = useState('')
-  const [busy, setBusy] = useState(false)
   const contentRef = useRef(null)
 
-  // Estavel: evita refetch em loop no painel de historico.
+  // Estado de sincronizacao POR ITEM (idle/pending/failed/synced) — sem busy global.
+  const [syncMap, setSyncMap] = useState({})
+
+  // Fila de sincronizacao (camada unica isolada). Criada uma unica vez.
+  const queueRef = useRef(null)
+  if (!queueRef.current) {
+    queueRef.current = createSyncQueue({
+      onStatus: (op, statusName) => {
+        setSyncMap((m) => {
+          const next = { ...m }
+          if (statusName === 'pending') next[op.key] = 'pending'
+          else delete next[op.key] // synced/failed: some (feedback discreto + rollback)
+          return next
+        })
+      },
+    })
+  }
+
   const loadEvents = useCallback((note) => inboxService.listEvents(workspaceId, note.id), [workspaceId])
 
-  const create = async () => {
+  // Nucleo otimista: aplica a mudanca local AGORA, enfileira a persistencia em
+  // segundo plano e reverte automaticamente em caso de falha definitiva.
+  const mutate = useCallback(({ key, apply, revert, run, onOk }) => {
+    apply()
+    queueRef.current.enqueue({
+      key,
+      origin: 'inbox',
+      run,
+      onSuccess: (result) => { try { onOk?.(result) } catch { /* callback do chamador */ } },
+      onError: () => {
+        revert()
+        toast('Nao foi possivel sincronizar. Alteracao desfeita.', 'error')
+      },
+    })
+  }, [toast])
+
+  const showsInbox = filter === 'inbox' || filter === 'all'
+
+  // ----- Captura (composer): otimista e NUNCA bloqueia -----
+  const createNote = (t, content) => {
+    const id = 'tmp-' + uid()
+    const now = new Date().toISOString()
+    const temp = {
+      id, workspace_id: workspaceId, created_by: actor, updated_by: actor,
+      type: 'note', title: t, content, status: 'inbox', seen: false, origin: 'manual',
+      created_at: now, updated_at: now,
+    }
+    mutate({
+      key: id,
+      apply: () => { if (showsInbox) setNotes((ns) => [temp, ...ns]) },
+      revert: () => setNotes((ns) => removeNote(ns, id)),
+      run: () => inboxService.create(workspaceId, actor, { type: 'note', title: t, content }),
+      onOk: (saved) => (showsInbox ? setNotes((ns) => replaceNote(ns, id, saved)) : reload()),
+    })
+  }
+
+  const createChecklist = (t, lines) => {
+    const id = 'tmp-' + uid()
+    const now = new Date().toISOString()
+    const temp = {
+      id, workspace_id: workspaceId, created_by: actor, updated_by: actor,
+      type: 'checklist', title: t, content: '', status: 'inbox', seen: false, origin: 'manual',
+      created_at: now, updated_at: now,
+    }
+    const tempItems = lines.map((text, i) => ({
+      id: 'tmp-' + uid(), inbox_item_id: id, workspace_id: workspaceId, position: i, text, checked: false,
+    }))
+    mutate({
+      key: id,
+      apply: () => { if (showsInbox) { setNotes((ns) => [temp, ...ns]); setChecklist((m) => setItems(m, id, tempItems)) } },
+      revert: () => { setNotes((ns) => removeNote(ns, id)); setChecklist((m) => dropItems(m, id)) },
+      run: async () => {
+        const note = await inboxService.create(workspaceId, actor, { type: 'checklist', title: t })
+        let position = 0
+        for (const text of lines) await inboxService.addChecklistItem(workspaceId, note.id, { text, position: position++ })
+        const items = await inboxService.listChecklistItems(workspaceId, note.id)
+        return { note, items }
+      },
+      onOk: ({ note, items }) => {
+        if (!showsInbox) { reload(); return }
+        setNotes((ns) => replaceNote(ns, id, note))
+        setChecklist((m) => setItems(moveItems(m, id, note.id), note.id, items))
+      },
+    })
+  }
+
+  const submitComposer = () => {
     const content = draft.trim()
     const t = title.trim()
-    if ((!content && !t) || busy) return
-    setBusy(true)
-    try {
-      if (composerType === 'checklist') {
-        const note = await inboxService.create(workspaceId, user.id, { type: 'checklist', title: t })
-        const lines = content.split('\n').map((s) => s.trim()).filter(Boolean)
-        let position = 0
-        for (const line of lines) {
-          await inboxService.addChecklistItem(workspaceId, note.id, { text: line, position: position++ })
-        }
-      } else {
-        await inboxService.create(workspaceId, user.id, { type: 'note', title: t, content })
-      }
-      setTitle(''); setDraft(''); contentRef.current?.focus()
-      if (filter !== 'inbox' && filter !== 'all') setFilter('inbox')
-      else { reload(); loadChecklists() }
-    } catch (err) {
-      toast('Erro ao salvar: ' + (err?.message || 'erro'), 'error')
-    } finally {
-      setBusy(false)
+    if (!content && !t) return
+    const wasHidden = !showsInbox
+    if (composerType === 'checklist') {
+      createChecklist(t, content.split('\n').map((s) => s.trim()).filter(Boolean))
+    } else {
+      createNote(t, content)
     }
+    setTitle(''); setDraft(''); contentRef.current?.focus()
+    if (wasHidden) setFilter('inbox')
   }
+  const onComposerKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComposer() } }
 
-  const onComposerKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); create() }
-  }
-
-  // Executor comum (mantido estavel): movimentacoes silenciosas — "sem
-  // interromper o fluxo" (item 7). Cada acao registra sua timeline no service.
-  const run = useCallback(async (fn) => {
-    setBusy(true)
-    try {
-      await fn()
-      reload()
-      loadChecklists()
-    } catch (err) {
-      toast('Erro: ' + (err?.message || 'erro'), 'error')
-    } finally {
-      setBusy(false)
+  // ----- Handlers dos cards (otimistas, memoizados/estaveis) -----
+  const handlers = useMemo(() => {
+    const changeStatus = (note, newStatus, runFn) => {
+      const leaving = filterStatus !== null && filterStatus !== newStatus
+      mutate({
+        key: note.id,
+        apply: () => setNotes((ns) => (leaving
+          ? removeNote(ns, note.id)
+          : patchNote(ns, note.id, { status: newStatus, updated_at: new Date().toISOString() }))),
+        revert: () => setNotes((ns) => (leaving ? upsertNote(ns, note) : patchNote(ns, note.id, { status: note.status }))),
+        run: runFn,
+      })
     }
-  }, [reload, loadChecklists, toast])
-
-  // Handlers memoizados: evitam re-render da lista ao digitar no composer.
-  const actor = user?.id
-  const handlers = useMemo(() => ({
-    saveNote: (note, patch) => run(() => inboxService.editContent(note, patch, actor)),
-    move: (note, s) => run(() =>
-      s === 'to_think' ? inboxService.moveToThink(note, actor) : inboxService.moveToInbox(note, actor)),
-    setSeen: (note, v) => run(() => inboxService.setSeen(note, v, actor)),
-    convert: (note, type) => run(() => inboxService.setType(workspaceId, note, type, actor)),
-    archive: (note) => run(() => inboxService.archive(note, actor)),
-    restore: (note) => run(() => inboxService.restore(note, actor)),
-    remove: (note) => {
-      if (!window.confirm('Excluir esta nota?')) return
-      run(() => inboxService.remove(note))
-    },
-    addItem: (note, text, position) => run(() => inboxService.addChecklistItem(workspaceId, note.id, { text, position })),
-    toggleItem: (item, checked) => run(() => inboxService.toggleChecklistItem(item, checked)),
-    saveItem: (item, text) => run(() => inboxService.updateChecklistItem(item, { text })),
-    removeItem: (item) => run(() => inboxService.removeChecklistItem(item)),
-    loadEvents,
-  }), [run, actor, workspaceId, loadEvents])
+    return {
+      saveNote: (note, patch) => {
+        const prev = { title: note.title, content: note.content }
+        mutate({
+          key: note.id,
+          apply: () => setNotes((ns) => patchNote(ns, note.id, { ...patch, updated_at: new Date().toISOString() })),
+          revert: () => setNotes((ns) => patchNote(ns, note.id, prev)),
+          run: () => inboxService.editContent(note, patch, actor),
+        })
+      },
+      move: (note, s) => changeStatus(note, s, () =>
+        (s === 'to_think' ? inboxService.moveToThink(note, actor) : inboxService.moveToInbox(note, actor))),
+      archive: (note) => changeStatus(note, 'archived', () => inboxService.archive(note, actor)),
+      restore: (note) => changeStatus(note, 'inbox', () => inboxService.restore(note, actor)),
+      setSeen: (note, v) => mutate({
+        key: note.id,
+        apply: () => setNotes((ns) => patchNote(ns, note.id, { seen: v })),
+        revert: () => setNotes((ns) => patchNote(ns, note.id, { seen: !v })),
+        run: () => inboxService.setSeen(note, v, actor),
+      }),
+      convert: (note, type) => {
+        const isToChecklist = type === 'checklist'
+        const prevNote = { type: note.type, content: note.content }
+        const prevItems = checklistRef.current[note.id] || []
+        const joined = prevItems.map((i) => i.text).join('\n')
+        const tempItems = isToChecklist
+          ? String(note.content || '').split('\n').map((s) => s.trim()).filter(Boolean)
+            .map((text, i) => ({ id: 'tmp-' + uid(), inbox_item_id: note.id, workspace_id: workspaceId, position: i, text, checked: false }))
+          : []
+        mutate({
+          key: note.id,
+          apply: () => {
+            setNotes((ns) => patchNote(ns, note.id, { type, content: isToChecklist ? '' : joined }))
+            setChecklist((m) => setItems(m, note.id, isToChecklist ? tempItems : []))
+          },
+          revert: () => {
+            setNotes((ns) => patchNote(ns, note.id, prevNote))
+            setChecklist((m) => setItems(m, note.id, prevItems))
+          },
+          run: () => inboxService.setType(workspaceId, note, type, actor),
+          onOk: async () => {
+            const items = await inboxService.listChecklistItems(workspaceId, note.id)
+            setChecklist((m) => setItems(m, note.id, items))
+          },
+        })
+      },
+      remove: (note) => {
+        if (!window.confirm('Excluir esta nota?')) return
+        const prevItems = checklistRef.current[note.id] || []
+        mutate({
+          key: note.id,
+          apply: () => { setNotes((ns) => removeNote(ns, note.id)); setChecklist((m) => dropItems(m, note.id)) },
+          revert: () => { setNotes((ns) => upsertNote(ns, note)); setChecklist((m) => setItems(m, note.id, prevItems)) },
+          run: () => inboxService.remove(note),
+        })
+      },
+      addItem: (note, text) => {
+        const tid = 'tmp-' + uid()
+        const position = (checklistRef.current[note.id] || []).length
+        const temp = { id: tid, inbox_item_id: note.id, workspace_id: workspaceId, position, text, checked: false }
+        mutate({
+          key: note.id,
+          apply: () => setChecklist((m) => addItem(m, note.id, temp)),
+          revert: () => setChecklist((m) => removeItem(m, note.id, tid)),
+          run: () => inboxService.addChecklistItem(workspaceId, note.id, { text, position }),
+          onOk: (saved) => setChecklist((m) => replaceItem(m, note.id, tid, saved)),
+        })
+      },
+      toggleItem: (note, item, checked) => mutate({
+        key: note.id,
+        apply: () => setChecklist((m) => patchItem(m, note.id, item.id, { checked })),
+        revert: () => setChecklist((m) => patchItem(m, note.id, item.id, { checked: !checked })),
+        run: () => inboxService.toggleChecklistItem(item, checked),
+      }),
+      saveItem: (note, item, text) => {
+        const prev = item.text
+        mutate({
+          key: note.id,
+          apply: () => setChecklist((m) => patchItem(m, note.id, item.id, { text })),
+          revert: () => setChecklist((m) => patchItem(m, note.id, item.id, { text: prev })),
+          run: () => inboxService.updateChecklistItem(item, { text }),
+        })
+      },
+      removeItem: (note, item) => mutate({
+        key: note.id,
+        apply: () => setChecklist((m) => removeItem(m, note.id, item.id)),
+        revert: () => setChecklist((m) => addItem(m, note.id, item)),
+        run: () => inboxService.removeChecklistItem(item),
+      }),
+      loadEvents,
+    }
+  }, [mutate, setNotes, setChecklist, workspaceId, actor, filterStatus, loadEvents])
 
   const isToThink = filter === 'to_think'
 
@@ -593,7 +744,8 @@ export default function Inbox() {
             autoFocus
           />
           <div className="flex justify-end">
-            <button onClick={create} disabled={busy || (!draft.trim() && !title.trim())} className="btn-primary press">
+            {/* Nunca bloqueado por sincronizacao — captura e prioridade maxima. */}
+            <button onClick={submitComposer} disabled={!draft.trim() && !title.trim()} className="btn-primary press">
               <Send size={16} /> Salvar
             </button>
           </div>
@@ -673,7 +825,7 @@ export default function Inbox() {
               key={note.id}
               note={note}
               items={checklist[note.id] || EMPTY_ITEMS}
-              busy={busy}
+              syncing={Boolean(syncMap[note.id])}
               handlers={handlers}
             />
           ))}
