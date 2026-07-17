@@ -37,3 +37,35 @@ export function useTasks(range = {}) {
 
   return { tasks, loading, error, reload: load, setTasks }
 }
+
+// Carrega SOMENTE as atividades sem data (date NULL) do workspace. Usado pela
+// "Visao Sem data" — nunca aparecem nas telas por periodo (Hoje, Calendario,
+// Kanban), que filtram por intervalo. Recarrega junto com o reloadKey global.
+export function useUndatedTasks() {
+  const { workspaceId } = useWorkspace()
+  const { reloadKey } = useData()
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const load = useCallback(async () => {
+    if (!workspaceId) return
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await taskService.listUndated(workspaceId)
+      setTasks(data)
+    } catch (err) {
+      console.error('[useUndatedTasks] falha ao carregar sem-data:', err?.message || err)
+      setError(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [workspaceId])
+
+  useEffect(() => {
+    load()
+  }, [load, reloadKey])
+
+  return { tasks, loading, error, reload: load, setTasks }
+}

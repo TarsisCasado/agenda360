@@ -126,8 +126,10 @@ export default function CommandPalette({ open, onClose, onNewTask }) {
           icon: CheckSquare,
           dot: STATUS_META[t.status]?.dot,
           label: t.title,
-          hint: formatShort(t.date),
-          run: () => navigate(`/dia?date=${t.date}`),
+          // Sem data: rotulo proprio e navegacao para "Hoje" (onde a secao
+          // "Sem data" a exibe), evitando /dia?date=null.
+          hint: t.date ? formatShort(t.date) : 'Sem data',
+          run: () => navigate(t.date ? `/dia?date=${t.date}` : '/'),
         }))
       if (taskItems.length) g.push({ title: 'Tarefas', items: taskItems })
 

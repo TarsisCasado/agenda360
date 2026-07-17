@@ -61,6 +61,17 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
+  // "Sem data": atividade sem data nao pode ter horarios orfaos. Ao marcar,
+  // limpa date/start_time/end_time; ao desmarcar, volta a data padrao (hoje).
+  const noDate = !form.date
+  const toggleNoDate = (e) => {
+    if (e.target.checked) {
+      setForm((f) => ({ ...f, date: '', start_time: '', end_time: '' }))
+    } else {
+      setForm((f) => ({ ...f, date: toISODate(new Date()) }))
+    }
+  }
+
   const submit = async () => {
     if (!form.title.trim()) {
       toast('Informe um titulo para a atividade', 'error')
@@ -70,6 +81,7 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
     try {
       const payload = {
         ...form,
+        date: form.date || null,
         category_id: form.category_id || null,
         start_time: form.start_time || null,
         end_time: form.end_time || null,
@@ -132,7 +144,22 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
 
         <div>
           <label className="label">Data</label>
-          <input type="date" className="input" value={form.date} onChange={set('date')} />
+          <input
+            type="date"
+            className="input"
+            value={form.date}
+            onChange={set('date')}
+            disabled={noDate}
+          />
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={noDate}
+              onChange={toggleNoDate}
+              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            />
+            Sem data
+          </label>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -142,6 +169,7 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
               className="input"
               value={form.start_time}
               onChange={set('start_time')}
+              disabled={noDate}
             />
           </div>
           <div>
@@ -151,6 +179,7 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
               className="input"
               value={form.end_time}
               onChange={set('end_time')}
+              disabled={noDate}
             />
           </div>
         </div>

@@ -47,6 +47,17 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
+  // "Sem data": limpa data e hora (sem horarios orfaos). Ao desmarcar, volta
+  // a data padrao (hoje).
+  const noDate = !form.date
+  const toggleNoDate = (e) => {
+    if (e.target.checked) {
+      setForm((f) => ({ ...f, date: '', start_time: '' }))
+    } else {
+      setForm((f) => ({ ...f, date: toISODate(new Date()) }))
+    }
+  }
+
   const submit = async () => {
     if (!form.title.trim()) {
       toast('Informe um titulo', 'error')
@@ -56,6 +67,7 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
     try {
       const saved = await taskService.create(workspaceId, user.id, {
         ...form,
+        date: form.date || null,
         category_id: form.category_id || null,
         start_time: form.start_time || null,
       })
@@ -101,7 +113,13 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Data</label>
-            <input type="date" className="input" value={form.date} onChange={set('date')} />
+            <input
+              type="date"
+              className="input"
+              value={form.date}
+              onChange={set('date')}
+              disabled={noDate}
+            />
           </div>
           <div>
             <label className="label">Hora</label>
@@ -110,9 +128,20 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
               className="input"
               value={form.start_time}
               onChange={set('start_time')}
+              disabled={noDate}
             />
           </div>
         </div>
+
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={noDate}
+            onChange={toggleNoDate}
+            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+          />
+          Sem data
+        </label>
 
         <div>
           <label className="label">Categoria</label>

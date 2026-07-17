@@ -14,6 +14,7 @@ import { LOG_ACTIONS, STATUS, STATUS_META } from '../lib/constants'
 
 const TASK_DEFAULTS = {
   description: '',
+  date: null,
   start_time: null,
   end_time: null,
   category_id: null,
@@ -26,6 +27,32 @@ const TASK_DEFAULTS = {
   alert_minutes_before: 15,
   alert_sent: false,
   reschedule_count: 0,
+  // Proveniencia da atividade. Criacao manual = 'manual'. Origens diferentes
+  // so podem vir de fluxos internos confiaveis (nunca de formularios comuns).
+  origin: 'manual',
+}
+
+// Origens que a APLICACAO reconhece (o banco aceita text livre; a lista de
+// confianca vive aqui). Formularios comuns NUNCA escolhem origin: apenas
+// fluxos internos confiaveis passam um valor desta lista.
+export const TASK_ORIGINS = [
+  'manual',
+  'inbox',
+  'assistant',
+  'photo',
+  'pdf',
+  'audio',
+  'google_calendar',
+  'email',
+  'integration',
+]
+
+// Invariante do T-Core: uma atividade SEM data nao pode manter horarios
+// orfaos. Normaliza qualquer objeto de task/patch que defina `date`.
+function normalizeUndated(obj) {
+  if (!obj || !('date' in obj)) return obj
+  if (obj.date) return obj // com data: horarios permanecem como vieram
+  return { ...obj, date: null, start_time: null, end_time: null }
 }
 
 // Registro de historico "best-effort": uma falha ao gravar o log NUNCA pode
@@ -43,10 +70,14 @@ function localList(workspaceId, { start, end } = {}) {
   return localStore
     .table('tasks')
     .filter((t) => t.workspace_id === workspaceId)
-    .filter((t) => (start ? t.date >= start : true))
-    .filter((t) => (end ? t.date <= end : true))
+    // date NULL (sem data) fica de fora de qualquer intervalo com start/end.
+    .filter((t) => (start ? t.date != null && t.date >= start : true))
+    .filter((t) => (end ? t.date != null && t.date <= end : true))
     .sort((a, b) => {
-      if (a.date !== b.date) return a.date < b.date ? -1 : 1
+      // Sem data vai para o fim (ordem estavel), com data em ordem crescente.
+      const da = a.date ?? '9999-99-99'
+      const db = b.date ?? '9999-99-99'
+      if (da !== db) return da < db ? -1 : 1
       return (a.start_time ?? '99:99').localeCompare(b.start_time ?? '99:99')
     })
 }
@@ -64,6 +95,26 @@ export const taskService = {
     if (range.start) query = query.gte('date', range.start)
     if (range.end) query = query.lte('date', range.end)
     const { data, error } = await query
+    if (error) throw error
+    return data
+  },
+
+  // Lista SOMENTE as atividades sem data (date NULL) do workspace. Aditivo:
+  // nenhum fluxo por-periodo usa isto; serve a "Visao Sem data". Ordena por
+  // criacao decrescente (mais recentes primeiro).
+  async listUndated(workspaceId) {
+    if (!isSupabaseConfigured) {
+      return localStore
+        .table('tasks')
+        .filter((t) => t.workspace_id === workspaceId && t.date == null)
+        .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
+    }
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .is('date', null)
+      .order('created_at', { ascending: false })
     if (error) throw error
     return data
   },
@@ -91,13 +142,17 @@ export const taskService = {
 
   async create(workspaceId, userId, payload) {
     const now = new Date().toISOString()
-    const task = {
+    // origin so pode assumir um valor reconhecido; qualquer coisa fora da
+    // lista de confianca (inclusive input de formulario comum) vira 'manual'.
+    const origin = TASK_ORIGINS.includes(payload?.origin) ? payload.origin : 'manual'
+    const task = normalizeUndated({
       ...TASK_DEFAULTS,
       ...payload,
+      origin,
       workspace_id: workspaceId,
       created_by: userId,
       assignee_id: payload.assignee_id ?? userId,
-    }
+    })
 
     let saved
     if (!isSupabaseConfigured) {
@@ -126,17 +181,23 @@ export const taskService = {
     const updated_at = new Date().toISOString()
     const workspaceId = task.workspace_id
 
+    // Edicao comum NUNCA altera a origem: descarta origin do patch. (Fluxos
+    // internos que precisem mudar origem devem faze-lo por caminho proprio.)
+    // Se o patch mexe na data, aplica a invariante sem-data -> sem-horarios.
+    const { origin: _origin, ...rest } = patch
+    const safePatch = normalizeUndated(rest)
+
     let saved
     if (!isSupabaseConfigured) {
       const rows = localStore.table('tasks')
       const idx = rows.findIndex((t) => t.id === task.id)
       if (idx === -1) throw new Error('Atividade nao encontrada')
-      rows[idx] = { ...rows[idx], ...patch, updated_at }
+      rows[idx] = { ...rows[idx], ...safePatch, updated_at }
       localStore.setTable('tasks', rows)
       saved = rows[idx]
     } else {
       // Remove campos imutaveis/gerados do UPDATE.
-      const { id: _id, created_at: _c, workspace_id: _w, created_by: _cb, ...clean } = patch
+      const { id: _id, created_at: _c, workspace_id: _w, created_by: _cb, ...clean } = safePatch
       const { data, error } = await supabase
         .from('tasks')
         .update({ ...clean, updated_at })

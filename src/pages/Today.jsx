@@ -11,12 +11,13 @@ import {
   Coffee,
   Sparkles,
   Target,
+  Inbox as InboxIcon,
 } from 'lucide-react'
 import TaskCard from '../components/tasks/TaskCard'
 import TaskModal from '../components/tasks/TaskModal'
 import { EmptyState, ProgressRing } from '../components/ui/Common'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
-import { useTasks } from '../hooks/useTasks'
+import { useTasks, useUndatedTasks } from '../hooks/useTasks'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import {
@@ -80,6 +81,7 @@ export default function Today() {
     [],
   )
   const { tasks, loading } = useTasks(range)
+  const { tasks: undated } = useUndatedTasks()
   const [editing, setEditing] = useState(null)
   const [creating, setCreating] = useState(false)
   const [createDefaults, setCreateDefaults] = useState(null)
@@ -329,6 +331,21 @@ export default function Today() {
               </div>
             )}
           </section>
+
+          {/* Sem data: atividades ainda nao agendadas. Discreta, so aparece se
+              existir algo. Nao entra em nenhuma visao por periodo. */}
+          {undated.length > 0 && (
+            <section>
+              <h2 className="mb-2 flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-slate-400">
+                <InboxIcon size={14} /> Sem data ({undated.length})
+              </h2>
+              <div className="space-y-2.5">
+                {undated.map((t) => (
+                  <TaskCard key={t.id} task={t} showActions onEdit={setEditing} />
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
 

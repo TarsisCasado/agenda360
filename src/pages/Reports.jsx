@@ -77,10 +77,12 @@ export default function Reports() {
       if (t.status === STATUS.MISSED) catMiss[name] = (catMiss[name] || 0) + 1
     }
 
-    // Por dia da semana
+    // Por dia da semana (atividades sem data nao tem dia — ficam de fora daqui,
+    // mas continuam contando nos totais/categorias acima).
     const dayCount = {}
     const dayMiss = {}
     for (const t of tasks) {
+      if (!t.date) continue
       const dow = fromISODate(t.date).getDay()
       dayCount[dow] = (dayCount[dow] || 0) + 1
       if (t.status === STATUS.MISSED) dayMiss[dow] = (dayMiss[dow] || 0) + 1
