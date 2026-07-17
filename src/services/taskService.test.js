@@ -179,3 +179,62 @@ describe('T1.1.5 — atividades sem data + origin', () => {
     expect(upd.origin).toBe('inbox')
   })
 })
+
+// Regressao do bug de producao: "invalid input syntax for type date: \"\"".
+// O ponto CENTRAL (service) precisa converter string vazia -> null,
+// independentemente do componente que chamou.
+describe('T1.2A — normalizacao de date/time vazios (bug producao)', () => {
+  it('create com date="" persiste date = null (nunca "")', async () => {
+    const t = await taskService.create(WS, USER, { title: 'Vazia', date: '' })
+    expect(t.date).toBeNull()
+    expect(t.date).not.toBe('')
+  })
+
+  it('create sem data zera start_time/end_time', async () => {
+    const t = await taskService.create(WS, USER, {
+      title: 'Sem data',
+      date: '',
+      start_time: '09:00',
+      end_time: '10:00',
+    })
+    expect(t.date).toBeNull()
+    expect(t.start_time).toBeNull()
+    expect(t.end_time).toBeNull()
+  })
+
+  it('create com data valida + horarios "" mantem a data e zera horarios "" (nunca "")', async () => {
+    const t = await taskService.create(WS, USER, {
+      title: 'Com data, sem horario',
+      date: '2026-07-20',
+      start_time: '',
+      end_time: '',
+    })
+    expect(t.date).toBe('2026-07-20')
+    expect(t.start_time).toBeNull()
+    expect(t.end_time).toBeNull()
+  })
+
+  it('update com date="" transforma em null e limpa horarios', async () => {
+    const t = await taskService.create(WS, USER, {
+      title: 'Tinha data',
+      date: '2026-07-20',
+      start_time: '09:00',
+    })
+    const upd = await taskService.update(USER, t, { date: '' })
+    expect(upd.date).toBeNull()
+    expect(upd.start_time).toBeNull()
+    expect(upd.end_time).toBeNull()
+  })
+
+  it('create com data valida permanece inalterado', async () => {
+    const t = await taskService.create(WS, USER, {
+      title: 'Normal',
+      date: '2026-07-20',
+      start_time: '09:00',
+      end_time: '10:00',
+    })
+    expect(t.date).toBe('2026-07-20')
+    expect(t.start_time).toBe('09:00')
+    expect(t.end_time).toBe('10:00')
+  })
+})

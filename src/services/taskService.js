@@ -47,12 +47,32 @@ export const TASK_ORIGINS = [
   'integration',
 ]
 
-// Invariante do T-Core: uma atividade SEM data nao pode manter horarios
-// orfaos. Normaliza qualquer objeto de task/patch que defina `date`.
-function normalizeUndated(obj) {
-  if (!obj || !('date' in obj)) return obj
-  if (obj.date) return obj // com data: horarios permanecem como vieram
-  return { ...obj, date: null, start_time: null, end_time: null }
+// Postgres nao aceita string vazia em colunas date/time: "" -> erro
+// "invalid input syntax for type date/time". undefined/ausente permanece
+// ausente (nao forca valor em patches parciais).
+function emptyToNull(value) {
+  return value === '' ? null : value
+}
+
+// Ponto CENTRAL de normalizacao antes de persistir (create e update). Garante,
+// independentemente do componente/fluxo que chamou:
+//   - date/start_time/end_time "" -> null (nunca envia "" ao banco);
+//   - invariante do T-Core: sem data -> sem horarios orfaos (start/end null).
+// Aplica-se apenas as chaves presentes no objeto (nao "inventa" campos num
+// patch parcial que nao toca em data/horarios).
+function normalizeTaskFields(obj) {
+  if (!obj) return obj
+  const out = { ...obj }
+  if ('date' in out) out.date = emptyToNull(out.date)
+  if ('start_time' in out) out.start_time = emptyToNull(out.start_time)
+  if ('end_time' in out) out.end_time = emptyToNull(out.end_time)
+  // Se o objeto define a data e ela ficou vazia (null), zera horarios.
+  if ('date' in out && !out.date) {
+    out.date = null
+    out.start_time = null
+    out.end_time = null
+  }
+  return out
 }
 
 // Registro de historico "best-effort": uma falha ao gravar o log NUNCA pode
@@ -145,7 +165,7 @@ export const taskService = {
     // origin so pode assumir um valor reconhecido; qualquer coisa fora da
     // lista de confianca (inclusive input de formulario comum) vira 'manual'.
     const origin = TASK_ORIGINS.includes(payload?.origin) ? payload.origin : 'manual'
-    const task = normalizeUndated({
+    const task = normalizeTaskFields({
       ...TASK_DEFAULTS,
       ...payload,
       origin,
@@ -185,7 +205,7 @@ export const taskService = {
     // internos que precisem mudar origem devem faze-lo por caminho proprio.)
     // Se o patch mexe na data, aplica a invariante sem-data -> sem-horarios.
     const { origin: _origin, ...rest } = patch
-    const safePatch = normalizeUndated(rest)
+    const safePatch = normalizeTaskFields(rest)
 
     let saved
     if (!isSupabaseConfigured) {
