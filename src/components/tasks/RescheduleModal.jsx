@@ -16,7 +16,8 @@ export default function RescheduleModal({ open, onClose, task, onDone }) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (open && task) setDate(task.date)
+    // Atividade sem data tambem pode ser agendada aqui: começa com campo vazio.
+    if (open && task) setDate(task.date || '')
   }, [open, task])
 
   const shortcuts = [
@@ -52,7 +53,7 @@ export default function RescheduleModal({ open, onClose, task, onDone }) {
           <button className="btn-secondary" onClick={onClose} disabled={saving}>
             Cancelar
           </button>
-          <button className="btn-primary" onClick={() => apply(date)} disabled={saving}>
+          <button className="btn-primary" onClick={() => apply(date)} disabled={saving || !date}>
             <CalendarClock size={16} /> Reagendar
           </button>
         </>
@@ -63,7 +64,7 @@ export default function RescheduleModal({ open, onClose, task, onDone }) {
           <span className="font-semibold text-slate-700 dark:text-slate-200">
             {task.title}
           </span>{' '}
-          — atualmente em {formatShort(task.date)}.
+          {task.date ? `— atualmente em ${formatShort(task.date)}.` : '— ainda sem data.'}
         </p>
       )}
       <div className="mb-4 flex flex-wrap gap-2">

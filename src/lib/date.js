@@ -30,6 +30,8 @@ export function formatLong(date) {
 }
 
 export function formatShort(date) {
+  // Atividades sem data: nunca renderiza Invalid Date — exibe rotulo neutro.
+  if (!date) return 'sem data'
   const d = typeof date === 'string' ? fromISODate(date) : date
   return format(d, 'dd/MM/yyyy', { locale: ptBR })
 }
