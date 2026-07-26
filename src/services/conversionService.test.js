@@ -74,6 +74,20 @@ describe('T1.2B — conversao InboxItem -> Task (demo)', () => {
     expect(task.origin).toBe('inbox')
   })
 
+  it('compensacao: se o vinculo falhar, a Task recem-criada e desfeita (sem orfa)', async () => {
+    const spy = vi
+      .spyOn(inboxTaskLinkService, 'create')
+      .mockRejectedValueOnce(new Error('link indisponivel'))
+    await expect(
+      conversionService.convertInboxItemToTask(WS, USER, inboxItem, { title: 'X', date: null }),
+    ).rejects.toThrow('link indisponivel')
+    // Nenhuma Task com origin 'inbox' permaneceu (a criada foi desfeita).
+    // (O seed demo tem tarefas, mas nenhuma com origin 'inbox'.)
+    const inboxTasks = (await taskService.list(WS, {})).filter((t) => t.origin === 'inbox')
+    expect(inboxTasks).toHaveLength(0)
+    spy.mockRestore()
+  })
+
   it('paridade demo do cascade: excluida a Task, o vinculo some do convertedMap', async () => {
     const { task } = await conversionService.convertInboxItemToTask(WS, USER, inboxItem, {
       title: 'Captura',

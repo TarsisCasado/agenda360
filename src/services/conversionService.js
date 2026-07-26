@@ -23,10 +23,21 @@ export const conversionService = {
       ...formPayload,
       origin: 'inbox',
     })
-    const link = await inboxTaskLinkService.create(workspaceId, userId, {
-      inbox_item_id: inboxItem.id,
-      task_id: task.id,
-    })
+
+    let link
+    try {
+      link = await inboxTaskLinkService.create(workspaceId, userId, {
+        inbox_item_id: inboxItem.id,
+        task_id: task.id,
+      })
+    } catch (err) {
+      // Compensacao minima (sem transacao server-side nesta fase): se o vinculo
+      // falhar, a Task recem-criada ficaria orfa (origin 'inbox' sem retorno a
+      // captura). Desfaz a Task para transformar sucesso-parcial em falha limpa;
+      // a exclusao e best-effort para nao mascarar o erro original.
+      try { await taskService.remove(userId, task) } catch { /* best-effort */ }
+      throw err
+    }
     return { task, link }
   },
 }

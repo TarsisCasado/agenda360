@@ -469,14 +469,17 @@ export default function Inbox() {
   const { user } = useAuth()
   const { workspaceId } = useWorkspace()
   const { toast } = useToast()
-  const [filter, setFilter] = useState('inbox')
-  const filterStatus = FILTERS.find((f) => f.key === filter)?.status ?? null
-  const { notes, setNotes, loading, error, reload } = useInbox({ status: filterStatus })
-  const actor = user?.id
 
   // Deep-link vindo da Task ("Origem: Caixa de Entrada") -> realca a captura.
   const [searchParams] = useSearchParams()
   const highlightId = searchParams.get('item')
+
+  // Ao chegar por deep-link, comeca em "Todos" para que a captura seja
+  // localizavel mesmo se estiver arquivada ou em "Para pensar".
+  const [filter, setFilter] = useState(highlightId ? 'all' : 'inbox')
+  const filterStatus = FILTERS.find((f) => f.key === filter)?.status ?? null
+  const { notes, setNotes, loading, error, reload } = useInbox({ status: filterStatus })
+  const actor = user?.id
 
   // Conversao Inbox -> Task: mapa de convertidos (selo), modal de conversao e
   // modal de edicao da Task vinculada.
