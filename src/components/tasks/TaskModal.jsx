@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Inbox as InboxIcon } from 'lucide-react'
 import Modal from '../ui/Modal'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
 import { useToast } from '../../context/ToastContext'
 import { taskService } from '../../services/taskService'
+import { inboxTaskLinkService } from '../../services/inboxTaskLinkService'
 import {
   STATUS_ORDER,
   STATUS_META,
@@ -32,13 +35,19 @@ const empty = (defaults = {}) => ({
   ...defaults,
 })
 
-export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
+// `onCreate` (opcional) injeta a persistencia na CRIACAO — usado pela conversao
+// Inbox -> Task para criar a Task (origin 'inbox') e o vinculo. Se ausente, usa
+// taskService.create. TaskModal permanece generico (sem redesign).
+export default function TaskModal({ open, onClose, task, defaults, onSaved, onCreate }) {
   const { user } = useAuth()
   const { workspaceId } = useWorkspace()
   const { categories, reload } = useData()
   const { toast } = useToast()
+  const navigate = useNavigate()
   const [form, setForm] = useState(empty())
   const [saving, setSaving] = useState(false)
+  // Vinculo com a Caixa de Entrada (quando a Task veio de uma captura).
+  const [inboxLink, setInboxLink] = useState(null)
   const isEdit = Boolean(task)
 
   useEffect(() => {
@@ -55,6 +64,27 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
       setForm(empty(defaults))
     }
   }, [open, task, defaults])
+
+  // Origem "Inbox": ao editar uma Task com origin 'inbox', busca o vinculo para
+  // oferecer o atalho "abrir a captura relacionada". Discreto e best-effort.
+  useEffect(() => {
+    if (!open || !task || task.origin !== 'inbox' || !workspaceId) {
+      setInboxLink(null)
+      return
+    }
+    let alive = true
+    inboxTaskLinkService
+      .getByTask(workspaceId, task.id)
+      .then((l) => { if (alive) setInboxLink(l) })
+      .catch(() => { if (alive) setInboxLink(null) })
+    return () => { alive = false }
+  }, [open, task, workspaceId])
+
+  const openOrigin = () => {
+    if (!inboxLink) return
+    onClose()
+    navigate(`/caixa?item=${inboxLink.inbox_item_id}`)
+  }
 
   const set = (key) => (e) => {
     const value = e?.target?.type === 'checkbox' ? e.target.checked : e.target.value
@@ -90,6 +120,9 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
       let saved
       if (isEdit) {
         saved = await taskService.update(user.id, task, payload)
+      } else if (onCreate) {
+        // Fluxo injetado (ex.: conversao Inbox -> Task cria a Task + o vinculo).
+        saved = await onCreate(workspaceId, user.id, payload)
       } else {
         saved = await taskService.create(workspaceId, user.id, payload)
       }
@@ -122,6 +155,19 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved }) {
       }
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* Origem discreta: Task criada a partir de uma captura da Caixa. */}
+        {inboxLink && (
+          <div className="sm:col-span-2">
+            <button
+              type="button"
+              onClick={openOrigin}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-600 transition-colors hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300"
+              title="Abrir a captura na Caixa de Entrada"
+            >
+              <InboxIcon size={13} /> Origem: Caixa de Entrada
+            </button>
+          </div>
+        )}
         <div className="sm:col-span-2">
           <label className="label">Titulo *</label>
           <input

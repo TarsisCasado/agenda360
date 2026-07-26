@@ -1,16 +1,21 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Inbox as InboxIcon, Send, Trash2, Archive, ArchiveRestore, Lightbulb,
   ListChecks, FileText, Eye, EyeOff, Plus, X, History,
-  FilePlus, Pencil, ArrowRight, Check, Sparkles,
+  FilePlus, Pencil, ArrowRight, Check, Sparkles, CalendarPlus, CheckCircle2,
 } from 'lucide-react'
 import { EmptyState, ErrorState } from '../components/ui/Common'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
+import TaskModal from '../components/tasks/TaskModal'
 import { useInbox } from '../hooks/useInbox'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useToast } from '../context/ToastContext'
 import { inboxService } from '../services/inboxService'
+import { taskService } from '../services/taskService'
+import { conversionService } from '../services/conversionService'
+import { inboxTaskLinkService } from '../services/inboxTaskLinkService'
 import { cx, uid } from '../lib/utils'
 import { createSyncQueue } from '../lib/sync/syncQueue'
 import {
@@ -329,7 +334,7 @@ function Action({ icon: Icon, label, onClick, disabled, tone = 'slate' }) {
 // --- Cartao de nota ----------------------------------------------------------
 // memo + handlers/props estaveis: digitar no composer nao re-renderiza a lista.
 // `syncing` = esta nota tem uma operacao pendente na fila (feedback discreto).
-const NoteCard = memo(function NoteCard({ note, items, syncing, handlers }) {
+const NoteCard = memo(function NoteCard({ note, items, syncing, converted, highlight, handlers }) {
   const isChecklist = note.type === 'checklist'
   const archived = note.status === 'archived'
   const toThink = note.status === 'to_think'
@@ -337,15 +342,23 @@ const NoteCard = memo(function NoteCard({ note, items, syncing, handlers }) {
   const done = items.filter((i) => i.checked).length
   const complete = items.length > 0 && done === items.length // checklist concluido
   const [showHistory, setShowHistory] = useState(false)
+  const cardRef = useRef(null)
+
+  // Realce quando aberto a partir da Task (deep-link /caixa?item=<id>).
+  useEffect(() => {
+    if (highlight) cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [highlight])
 
   return (
     <div
+      ref={cardRef}
       className={cx(
         'card animate-in p-4 transition-all duration-200 hover:shadow-md',
         // "Para pensar": identidade visual propria (mais criativa).
         toThink && 'border-l-2 border-l-violet-300 bg-gradient-to-br from-violet-50/60 to-white dark:border-l-violet-700 dark:from-violet-950/20 dark:to-slate-900',
         // Visto: opacidade discretamente reduzida (restaura no hover).
         note.seen && !archived && 'opacity-[0.62] hover:opacity-100',
+        highlight && 'ring-2 ring-brand-400 ring-offset-2 dark:ring-offset-slate-950',
       )}
     >
       {/* Cabecalho: titulo + progresso + Novo + sincronizando */}
@@ -377,6 +390,16 @@ const NoteCard = memo(function NoteCard({ note, items, syncing, handlers }) {
               {complete && <Check size={11} className="-ml-0.5" />}
               {done}/{items.length}
             </span>
+          )}
+          {converted && (
+            <button
+              type="button"
+              onClick={() => handlers.openTask(note)}
+              title="Abrir a atividade criada a partir desta captura"
+              className="chip cursor-pointer bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300"
+            >
+              <CheckCircle2 size={11} /> Convertido
+            </button>
           )}
           {!note.seen && !archived && (
             <span className="chip bg-brand-50 text-brand-600 dark:bg-brand-900/30">Novo</span>
@@ -426,6 +449,8 @@ const NoteCard = memo(function NoteCard({ note, items, syncing, handlers }) {
                 label={isChecklist ? 'Transformar em nota' : 'Transformar em checklist'}
                 onClick={() => handlers.convert(note, isChecklist ? 'note' : 'checklist')}
               />
+              <Action icon={CalendarPlus} label="Converter em atividade" tone="violet"
+                onClick={() => handlers.convertToTask(note)} />
               <Action icon={Archive} label="Arquivar" tone="amber"
                 onClick={() => handlers.archive(note)} />
               <Action icon={Trash2} label="Excluir" tone="red"
@@ -448,6 +473,26 @@ export default function Inbox() {
   const filterStatus = FILTERS.find((f) => f.key === filter)?.status ?? null
   const { notes, setNotes, loading, error, reload } = useInbox({ status: filterStatus })
   const actor = user?.id
+
+  // Deep-link vindo da Task ("Origem: Caixa de Entrada") -> realca a captura.
+  const [searchParams] = useSearchParams()
+  const highlightId = searchParams.get('item')
+
+  // Conversao Inbox -> Task: mapa de convertidos (selo), modal de conversao e
+  // modal de edicao da Task vinculada.
+  const [convertedMap, setConvertedMap] = useState({})
+  const [converting, setConverting] = useState(null)
+  const [editingTask, setEditingTask] = useState(null)
+
+  const loadConverted = useCallback(async () => {
+    if (!workspaceId) return
+    try {
+      setConvertedMap(await inboxTaskLinkService.convertedMap(workspaceId))
+    } catch (err) {
+      console.error('[Inbox] falha ao carregar vinculos:', err?.message || err)
+    }
+  }, [workspaceId])
+  useEffect(() => { loadConverted() }, [loadConverted])
 
   const [checklist, setChecklist] = useState({})
   const checklistRef = useRef(checklist)
@@ -676,9 +721,23 @@ export default function Inbox() {
         revert: () => setChecklist((m) => addItem(m, note.id, item)),
         run: () => inboxService.removeChecklistItem(item),
       }),
+      // Abre o modal de conversao (nao altera a captura: Inbox permanece intacta).
+      convertToTask: (note) => setConverting(note),
+      // Abre a Task vinculada (selo "Convertido").
+      openTask: async (note) => {
+        const link = convertedMap[note.id]
+        if (!link) return
+        try {
+          const t = await taskService.getById(workspaceId, link.task_id)
+          if (t) setEditingTask(t)
+          else { toast('A atividade vinculada nao foi encontrada.', 'error'); loadConverted() }
+        } catch (err) {
+          toast('Erro ao abrir atividade: ' + err.message, 'error')
+        }
+      },
       loadEvents,
     }
-  }, [mutate, setNotes, setChecklist, workspaceId, actor, filterStatus, loadEvents])
+  }, [mutate, setNotes, setChecklist, workspaceId, actor, filterStatus, loadEvents, convertedMap, toast, loadConverted])
 
   const isToThink = filter === 'to_think'
 
@@ -826,11 +885,41 @@ export default function Inbox() {
               note={note}
               items={checklist[note.id] || EMPTY_ITEMS}
               syncing={Boolean(syncMap[note.id])}
+              converted={Boolean(convertedMap[note.id])}
+              highlight={highlightId === note.id}
               handlers={handlers}
             />
           ))}
         </div>
       )}
+
+      {/* Conversao Inbox -> Task: reutiliza o TaskModal (form completo), com a
+          persistencia injetada (cria a Task com origin 'inbox' + o vinculo). */}
+      <TaskModal
+        open={Boolean(converting)}
+        task={null}
+        defaults={
+          converting
+            ? {
+                title: (converting.title || converting.content || '').split('\n')[0].trim(),
+                description: converting.type === 'checklist' ? '' : (converting.content || ''),
+              }
+            : null
+        }
+        onCreate={(ws, uidArg, payload) =>
+          conversionService
+            .convertInboxItemToTask(ws, uidArg, converting, payload)
+            .then((r) => r.task)}
+        onSaved={() => { loadConverted(); toast('Convertido em atividade') }}
+        onClose={() => setConverting(null)}
+      />
+
+      {/* Edicao da Task vinculada, aberta pelo selo "Convertido". */}
+      <TaskModal
+        open={Boolean(editingTask)}
+        task={editingTask}
+        onClose={() => { setEditingTask(null); loadConverted() }}
+      />
     </div>
   )
 }
