@@ -197,9 +197,15 @@ export const inboxService = {
         CHECKLIST,
         localStore.table(CHECKLIST).filter((i) => i.inbox_item_id !== note.id),
       )
+      // descritores de anexo tambem (paridade com a FK on delete cascade da
+      // 0009). O binario no Storage NAO e responsabilidade daqui.
+      localStore.setTable(
+        'inbox_attachments',
+        localStore.table('inbox_attachments').filter((a) => a.inbox_item_id !== note.id),
+      )
       return
     }
-    // No Supabase, o on delete cascade remove os itens de checklist.
+    // No Supabase, o on delete cascade remove checklist e anexos (0005/0009).
     const { error } = await supabase.from(TABLE).delete().eq('id', note.id)
     if (error) throw error
   },
