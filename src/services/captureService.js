@@ -19,9 +19,7 @@ import { inboxAttachmentService } from './inboxAttachmentService'
 // Objetivo: nunca deixar orfaos.
 // ---------------------------------------------------------------------------
 
-// Canais reconhecidos (ADR glossario). Este servico e o caminho de captura por
-// ARQUIVO; na Sprint 1 usa-se 'photo'. Os demais ficam prontos p/ sprints
-// futuras (pdf/audio/file) sem alterar o dominio.
+// Canais reconhecidos (ADR glossario) — referencia do que existira no futuro.
 export const CAPTURE_CHANNELS = [
   'text',
   'assistant',
@@ -37,6 +35,12 @@ export const CAPTURE_CHANNELS = [
   'share',
   'file',
 ]
+
+// Canais efetivamente SUPORTADOS por esta etapa (com adapter + origin
+// persistivel). So 'photo' agora; pdf/audio/... entram quando seus adapters e
+// origins existirem. Aceitar aqui um canal que o inboxService ainda nao
+// persiste causaria coercao silenciosa para 'manual' — por isso restringimos.
+export const CAPTURE_CHANNELS_SUPPORTED = ['photo']
 
 // Remocao best-effort: a compensacao nunca pode mascarar o erro original.
 async function safeRemoveAsset(descriptor) {
@@ -65,8 +69,8 @@ export const captureService = {
     if (!file || typeof file.arrayBuffer !== 'function') {
       throw new Error('Arquivo invalido (esperado Blob/File).')
     }
-    if (!CAPTURE_CHANNELS.includes(channel)) {
-      throw new Error(`Canal de captura invalido: ${channel}`)
+    if (!CAPTURE_CHANNELS_SUPPORTED.includes(channel)) {
+      throw new Error(`Canal de captura nao suportado nesta etapa: ${channel}`)
     }
 
     // Pre-gera o id da captura para compor o path do asset ANTES de existir a
@@ -79,7 +83,9 @@ export const captureService = {
     // 4) Cria o InboxItem (usando o id pre-gerado). Se falhar, remove o binario.
     let item
     try {
-      item = await inboxService.create(workspaceId, userId, { id: inboxItemId, type: 'note' })
+      // Persiste explicitamente a origem = canal da captura (reusa
+      // inbox_items.origin; nenhum campo novo no banco).
+      item = await inboxService.create(workspaceId, userId, { id: inboxItemId, type: 'note', origin: channel })
     } catch (err) {
       await safeRemoveAsset(descriptor)
       throw err

@@ -51,6 +51,17 @@ describe('captureService — orquestracao (demo)', () => {
     expect(await inboxAttachmentService.listByInboxItem(WS, cap.id)).toHaveLength(1)
   })
 
+  it('canal photo persiste InboxItem.origin = photo', async () => {
+    const cap = await captureService.capture(WS, USER, { file: photo(), channel: 'photo' })
+    expect(cap.item.origin).toBe('photo')
+  })
+
+  it('rejeita canal ainda nao suportado nesta etapa (ex.: pdf)', async () => {
+    await expect(captureService.capture(WS, USER, { file: photo(), channel: 'pdf' }))
+      .rejects.toThrow(/nao suportado/i)
+    expect(counts()).toEqual({ items: 0, atts: 0, blobs: 0 })
+  })
+
   it('validacao: rejeita canal invalido, arquivo invalido e ids ausentes', async () => {
     await expect(captureService.capture(WS, USER, { file: photo(), channel: 'nope' })).rejects.toThrow(/canal/i)
     await expect(captureService.capture(WS, USER, { file: null, channel: 'photo' })).rejects.toThrow(/arquivo/i)

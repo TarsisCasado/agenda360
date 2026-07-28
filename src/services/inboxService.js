@@ -24,7 +24,14 @@ const NOTE_TYPES = ['note', 'checklist']
 // UI nesta etapa). 'convertido/delegado/em atividade' ficam para milestones
 // futuros.
 const STATUSES = ['inbox', 'to_think', 'archived', 'processed']
-const ORIGINS = ['manual'] // A2.2: apenas manual (arquitetura preparada)
+// Canais de captura ja PERSISTIVEIS. Cada valor novo entra quando seu adapter
+// existir (pdf/audio/email/... ficam de fora ate la). Entrada fora da lista cai
+// para 'manual' (comportamento legado, menor risco) — os fluxos internos novos
+// (captureService) so enviam canais validos, entao nunca dependem dessa coercao.
+const ORIGINS = ['manual', 'photo']
+
+// UUID (qualquer versao). Usado para validar `id` explicito ANTES de persistir.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const normType = (t) => (NOTE_TYPES.includes(t) ? t : 'note')
 const normStatus = (s) => (STATUSES.includes(s) ? s : 'inbox')
@@ -84,6 +91,11 @@ export const inboxService = {
   // captureService precisa do id antes do upload para compor o path do asset).
   // Aditivo e retrocompativel — sem id, o comportamento e o de sempre.
   async create(workspaceId, userId, { id, type = 'note', title = '', content = '', origin = 'manual' } = {}) {
+    // `id` explicito e opcional e SO para fluxos internos; se vier, precisa ser
+    // UUID valido (nunca deixa um id malformado chegar ao Supabase).
+    if (id !== undefined && !UUID_RE.test(String(id))) {
+      throw new Error('id de captura invalido (esperado UUID).')
+    }
     const now = new Date().toISOString()
     const note = {
       ...(id ? { id } : {}),

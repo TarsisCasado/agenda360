@@ -88,6 +88,34 @@ describe('T1.2B — conversao InboxItem -> Task (demo)', () => {
     spy.mockRestore()
   })
 
+  it('captura por foto (InboxItem origin photo) gera Task origin photo', async () => {
+    const photoItem = { id: 'photo-1', workspace_id: WS, origin: 'photo' }
+    const { task } = await conversionService.convertInboxItemToTask(WS, USER, photoItem, {
+      title: 'Da foto',
+      date: null,
+    })
+    expect(task.origin).toBe('photo')
+  })
+
+  it('captura manual (InboxItem origin manual) gera Task origin inbox', async () => {
+    const manualItem = { id: 'man-1', workspace_id: WS, origin: 'manual' }
+    const { task } = await conversionService.convertInboxItemToTask(WS, USER, manualItem, {
+      title: 'Da caixa',
+      date: null,
+    })
+    expect(task.origin).toBe('inbox')
+  })
+
+  it('origin da Task e derivada do InboxItem, nao do payload do modal', async () => {
+    const photoItem = { id: 'photo-2', workspace_id: WS, origin: 'photo' }
+    const { task } = await conversionService.convertInboxItemToTask(WS, USER, photoItem, {
+      title: 'Tentou forcar',
+      date: null,
+      origin: 'google_calendar', // payload malicioso e ignorado
+    })
+    expect(task.origin).toBe('photo')
+  })
+
   it('paridade demo do cascade: excluida a Task, o vinculo some do convertedMap', async () => {
     const { task } = await conversionService.convertInboxItemToTask(WS, USER, inboxItem, {
       title: 'Captura',

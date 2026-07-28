@@ -9,19 +9,29 @@ import { inboxTaskLinkService } from './inboxTaskLinkService'
 // para registrar o vinculo. Assim inboxService e taskService permanecem
 // desacoplados (nenhum importa o outro).
 //
-// Regras (T1.2B):
-//   - a Task nasce com origin = 'inbox' (fluxo interno confiavel);
+// Regras:
+//   - a origem da Task e DERIVADA do InboxItem persistido (T1.2D/Etapa 4),
+//     nunca do payload editavel do modal;
 //   - created_by e workspace vem da sessao (via taskService.create);
 //   - o InboxItem NAO e arquivado nem excluido (a captura permanece intacta);
 //   - apos criar a Task, cria-se o vinculo inbox_task_links.
 // ---------------------------------------------------------------------------
 
+// Deriva a origem da Task a partir da origem do InboxItem (fonte confiavel):
+//   - captura por foto (origin 'photo')            -> Task origin 'photo';
+//   - captura manual da Caixa (origin 'manual'/def) -> Task origin 'inbox'.
+// Canais futuros (pdf/audio/...) mapeiam 1:1 assim que existirem.
+function taskOriginFromInbox(inboxItem) {
+  return inboxItem?.origin === 'photo' ? 'photo' : 'inbox'
+}
+
 export const conversionService = {
   async convertInboxItemToTask(workspaceId, userId, inboxItem, formPayload = {}) {
-    // origin forcado: a conversao e um fluxo interno confiavel.
+    // origin NUNCA vem do payload: derivada do InboxItem e imposta por ultimo
+    // (o spread de formPayload nao consegue sobrescreve-la).
     const task = await taskService.create(workspaceId, userId, {
       ...formPayload,
-      origin: 'inbox',
+      origin: taskOriginFromInbox(inboxItem),
     })
 
     let link
