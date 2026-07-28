@@ -80,9 +80,13 @@ export const inboxService = {
     return data
   },
 
-  async create(workspaceId, userId, { type = 'note', title = '', content = '', origin = 'manual' } = {}) {
+  // `id` opcional: permite ao chamador PRE-GERAR o id da captura (ex.: o
+  // captureService precisa do id antes do upload para compor o path do asset).
+  // Aditivo e retrocompativel — sem id, o comportamento e o de sempre.
+  async create(workspaceId, userId, { id, type = 'note', title = '', content = '', origin = 'manual' } = {}) {
     const now = new Date().toISOString()
     const note = {
+      ...(id ? { id } : {}),
       workspace_id: workspaceId,
       created_by: userId,
       updated_by: userId, // preparado para workspaces compartilhados (sem logica ainda)
@@ -96,7 +100,7 @@ export const inboxService = {
 
     let saved
     if (!isSupabaseConfigured) {
-      saved = { id: uid(), created_at: now, updated_at: now, ...note }
+      saved = { id: note.id ?? uid(), created_at: now, updated_at: now, ...note }
       localStore.setTable(TABLE, [...localStore.table(TABLE), saved])
     } else {
       const { data, error } = await supabase.from(TABLE).insert(note).select().single()
