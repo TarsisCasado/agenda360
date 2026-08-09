@@ -1,5 +1,9 @@
 -- ===========================================================================
--- VERIFICACAO da migration 0009 (rode apos aplicar)
+-- VERIFICACAO da migration 0009 (rode apos aplicar) — 12 checks
+-- ---------------------------------------------------------------------------
+-- Os checks 11 e 12 (grants) se auto-avaliam e devolvem veredito OK|FALHOU:
+-- conferir listas de privilegios a olho foi exatamente o que deixou passar o
+-- UPDATE/TRUNCATE herdados das default privileges.
 -- ===========================================================================
 
 -- 1) Tabela criada? Esperado: nao-nulo.
@@ -54,8 +58,21 @@ from pg_policies
 where schemaname='storage' and tablename='objects' and policyname like 'captures %'
 order by cmd, policyname;
 
--- 11) Grants na tabela (sem UPDATE)? Esperado: SELECT, INSERT, DELETE.
-select privilege_type
+-- 11) Grants de `authenticated`: EXATAMENTE SELECT, INSERT, DELETE (sem UPDATE
+--     nem TRUNCATE). Esperado: veredito = 'OK'.
+select
+  coalesce(string_agg(privilege_type, ',' order by privilege_type), '(nenhum)') as privilegios,
+  case
+    when coalesce(string_agg(privilege_type, ',' order by privilege_type), '') = 'DELETE,INSERT,SELECT'
+    then 'OK' else 'FALHOU'
+  end as veredito
 from information_schema.role_table_grants
-where table_schema='public' and table_name='inbox_attachments' and grantee='authenticated'
-order by privilege_type;
+where table_schema='public' and table_name='inbox_attachments' and grantee='authenticated';
+
+-- 12) `anon` NAO pode ter privilegio nenhum nesta tabela.
+--     Esperado: veredito = 'OK' (privilegios_anon = 0).
+select
+  count(*) as privilegios_anon,
+  case when count(*) = 0 then 'OK' else 'FALHOU' end as veredito
+from information_schema.role_table_grants
+where table_schema='public' and table_name='inbox_attachments' and grantee='anon';

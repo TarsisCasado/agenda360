@@ -67,6 +67,15 @@ drop policy if exists inbox_attachments_delete on public.inbox_attachments;
 create policy inbox_attachments_delete on public.inbox_attachments
   for delete using (public.is_workspace_member(workspace_id));
 
+-- GRANTS — estado explicito, nunca herdado.
+-- O schema.sql tem `alter default privileges ... grant select,insert,update,
+-- delete` e o Supabase provisiona defaults nativos; ambos alcancam esta tabela
+-- ja no CREATE TABLE. GRANT apenas SOMA privilegios — por isso REVOKE primeiro,
+-- para que o conjunto final seja deterministico e a imutabilidade (sem UPDATE)
+-- seja real, e nao apenas uma intencao documentada.
+-- TRUNCATE importa em especial: NAO e filtrado por RLS.
+revoke all privileges on public.inbox_attachments from anon;
+revoke all privileges on public.inbox_attachments from authenticated;
 grant select, insert, delete on public.inbox_attachments to authenticated;
 
 -- ---------------------------------------------------------------------------
