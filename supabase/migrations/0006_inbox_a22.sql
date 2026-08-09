@@ -62,6 +62,15 @@ create policy inbox_events_insert on public.inbox_events
     and (actor_id is null or actor_id = (select auth.uid()))
   );
 
+-- GRANTS — estado explicito, nunca herdado.
+-- A tabela nasce com privilegios das default privileges (schema.sql e as
+-- nativas do Supabase) e GRANT apenas SOMA. REVOKE primeiro torna o conjunto
+-- final deterministico e a imutabilidade (append-only) real, nao apenas uma
+-- intencao documentada.
+-- TRUNCATE importa em especial: NAO e filtrado por RLS — apagaria a timeline
+-- inteira, de todos os workspaces, sem deixar rastro.
+revoke all privileges on public.inbox_events from anon;
+revoke all privileges on public.inbox_events from authenticated;
 grant select, insert on public.inbox_events to authenticated;
 
 commit;

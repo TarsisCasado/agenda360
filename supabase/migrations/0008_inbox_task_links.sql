@@ -58,6 +58,16 @@ create policy inbox_task_links_insert on public.inbox_task_links
     and created_by = (select auth.uid())
   );
 
+-- GRANTS — estado explicito, nunca herdado.
+-- A tabela nasce com privilegios das default privileges (schema.sql e as
+-- nativas do Supabase) e GRANT apenas SOMA. REVOKE primeiro torna o conjunto
+-- final deterministico e a imutabilidade (append-only) real, nao apenas uma
+-- intencao documentada. DELETE fica de fora de proposito: a remocao deve vir
+-- por CASCADE quando a Task/InboxItem some, nunca do cliente.
+-- TRUNCATE importa em especial: NAO e filtrado por RLS — apagaria toda a
+-- proveniencia captura -> atividade, deixando Tasks e capturas orfas.
+revoke all privileges on public.inbox_task_links from anon;
+revoke all privileges on public.inbox_task_links from authenticated;
 grant select, insert on public.inbox_task_links to authenticated;
 
 commit;

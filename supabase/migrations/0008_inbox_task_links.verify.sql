@@ -1,5 +1,9 @@
 -- ===========================================================================
--- VERIFICACAO da migration 0008 (rode apos aplicar)
+-- VERIFICACAO da migration 0008 (rode apos aplicar) — 9 checks
+-- ---------------------------------------------------------------------------
+-- Os checks 8 e 9 (grants) se auto-avaliam e devolvem veredito OK|FALHOU:
+-- conferir listas de privilegios a olho foi exatamente o que deixou passar os
+-- privilegios herdados das default privileges (UPDATE/DELETE/TRUNCATE).
 -- ===========================================================================
 
 -- 1) Tabela criada? Esperado: nao-nulo.
@@ -36,3 +40,23 @@ order by cmd, policyname;
 -- 7) Indice de busca por inbox_item_id presente? Esperado: idx_inbox_task_links_inbox.
 select indexname from pg_indexes
 where schemaname='public' and tablename='inbox_task_links';
+
+-- 8) Grants de `authenticated`: EXATAMENTE SELECT, INSERT (sem UPDATE nem
+--    TRUNCATE; DELETE fica de fora — remocao so por CASCADE).
+--    Esperado: veredito = 'OK'.
+select
+  coalesce(string_agg(privilege_type, ',' order by privilege_type), '(nenhum)') as privilegios,
+  case
+    when coalesce(string_agg(privilege_type, ',' order by privilege_type), '') = 'INSERT,SELECT'
+    then 'OK' else 'FALHOU'
+  end as veredito
+from information_schema.role_table_grants
+where table_schema='public' and table_name='inbox_task_links' and grantee='authenticated';
+
+-- 9) `anon` NAO pode ter privilegio nenhum nesta tabela.
+--    Esperado: veredito = 'OK' (privilegios_anon = 0).
+select
+  count(*) as privilegios_anon,
+  case when count(*) = 0 then 'OK' else 'FALHOU' end as veredito
+from information_schema.role_table_grants
+where table_schema='public' and table_name='inbox_task_links' and grantee='anon';
