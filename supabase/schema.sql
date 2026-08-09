@@ -508,11 +508,34 @@ create policy ai_messages_all on public.ai_messages
 
 -- ===========================================================================
 -- GRANTS (RLS continua sendo a barreira efetiva por linha)
+-- ---------------------------------------------------------------------------
+-- PRINCIPIO: privilegio e SEMPRE explicito.
+--   * Tabelas NOVAS nao devem depender de DEFAULT PRIVILEGES para receber
+--     acesso — nenhuma tabela nasce com privilegio automatico.
+--   * Cada migration DECLARA explicitamente os privilegios da tabela que cria.
+--   * O padrao preferencial e `revoke all` (anon + authenticated) seguido de
+--     `grant <minimo>` para authenticated (ver 0006/0008/0009), porque GRANT
+--     apenas SOMA: sem o revoke, o conjunto final nao e deterministico.
+--
+-- LIMITE CONHECIDO: o Supabase mantem default privileges proprias no schema
+-- public sob o papel `supabase_admin`. Elas sao da PLATAFORMA, nao sao
+-- alteradas por este arquivo nem pela migration 0010, e por isso o `revoke all`
+-- por tabela nas migrations continua OBRIGATORIO — remover as nossas defaults
+-- reduz a superficie, mas nao substitui aquele passo.
 -- ===========================================================================
 grant usage on schema public to anon, authenticated;
+
+-- Grant de bootstrap: cobre APENAS as tabelas criadas ACIMA, neste arquivo.
+-- Nao e retroativo nem prospectivo — tabelas futuras vem das migrations, com
+-- grant proprio.
 grant select, insert, update, delete on all tables in schema public to authenticated;
-alter default privileges in schema public
-  grant select, insert, update, delete on tables to authenticated;
+
+-- REMOVIDO de proposito (ver migration 0010):
+--   alter default privileges in schema public
+--     grant select, insert, update, delete on tables to authenticated;
+-- Era a causa de tabelas novas nascerem mutaveis para authenticated — incluindo
+-- TRUNCATE via defaults da plataforma, que NAO e filtrado por RLS e atravessa o
+-- isolamento multi-tenant.
 
 -- ===========================================================================
 -- FIM

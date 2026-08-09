@@ -1,0 +1,56 @@
+-- ===========================================================================
+-- ROLLBACK da migration 0010 — DOCUMENTAL / INATIVO POR PADRAO
+-- ===========================================================================
+--
+--  /!\  ATENCAO — LEIA ANTES DE DESCOMENTAR QUALQUER LINHA  /!\
+--
+--  Este arquivo NAO executa nada. Isso e DELIBERADO.
+--
+--  A 0010 removeu DEFAULT PRIVILEGES inseguros: elas faziam toda tabela nova
+--  no schema public nascer com privilegios amplos para anon/authenticated —
+--  incluindo TRUNCATE, que NAO e filtrado por RLS e atravessa o isolamento
+--  multi-tenant.
+--
+--  Restaurar esse estado REINTRODUZ a vulnerabilidade, de forma silenciosa e
+--  para TODAS as tabelas criadas dali em diante. Um rollback que rodasse
+--  sozinho "por precaucao" reabriria o buraco sem ninguem perceber — por isso
+--  o SQL abaixo esta comentado e exige acao deliberada.
+--
+-- ---------------------------------------------------------------------------
+-- POR QUE E SEGURO NAO TER ROLLBACK AUTOMATICO
+-- ---------------------------------------------------------------------------
+--   * A 0010 NAO e destrutiva: nao altera dados, nao altera tabelas
+--     existentes, nao altera RLS/policies/storage. Nao ha estado a
+--     reconstruir nem dado a recuperar.
+--   * ALTER DEFAULT PRIVILEGES so afeta objetos criados DEPOIS. Reverter nao
+--     "conserta" nada retroativamente — apenas volta a conceder no futuro.
+--   * O efeito colateral real da 0010 e este: uma tabela nova criada sem
+--     `grant` explicito fica inacessivel pela API ate alguem conceder. Isso e
+--     falha BARULHENTA e desejada; a correcao certa e adicionar o grant na
+--     migration que criou a tabela, NAO reverter a 0010.
+--
+-- ---------------------------------------------------------------------------
+-- UNICO CENARIO LEGITIMO DE RESTAURACAO
+-- ---------------------------------------------------------------------------
+--   Uma ferramenta EXTERNA (fora deste repositorio) cria tabelas em public e
+--   depende do default automatico para funcionar, e voce precisa de uma janela
+--   temporaria enquanto corrige essa ferramenta.
+--   Mesmo nesse caso: restaure, corrija a ferramenta e rode a 0010 de novo.
+--   Nao deixe o default restaurado como estado permanente.
+--
+-- ---------------------------------------------------------------------------
+-- SQL DE RESTAURACAO — MANTENHA COMENTADO
+-- ---------------------------------------------------------------------------
+-- begin;
+--
+-- alter default privileges for role postgres in schema public
+--   grant select, insert, update, delete on tables to authenticated;
+--
+-- commit;
+--
+--  NOTA: o comando acima restaura APENAS o que o schema.sql concedia
+--  originalmente (4 privilegios para authenticated). Ele NAO restaura os
+--  privilegios extras (TRUNCATE, REFERENCES, TRIGGER, MAINTAIN) nem qualquer
+--  default para `anon`: nada disso veio deste repositorio, e reproduzi-los
+--  aqui seria transformar um passivo herdado em decisao nossa.
+-- ===========================================================================
