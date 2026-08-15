@@ -1,8 +1,35 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { localStore } from './localStore'
 import { logService } from './logService'
+import { reminderService } from './reminderService'
 import { uid } from '../lib/utils'
 import { LOG_ACTIONS, STATUS, STATUS_META } from '../lib/constants'
+
+// Campos da task que afetam os reminders. So sincronizamos quando o patch toca
+// um deles (edicao de titulo/descricao/etc. nao dispara reconciliacao).
+const REMINDER_KEYS = new Set([
+  'alert_enabled',
+  'alert_type',
+  'alert_minutes_before',
+  'date',
+  'start_time',
+  'status',
+  'assignee_id',
+])
+
+// Sincroniza reminders SEM derrubar a operacao principal (task ja persistida).
+// A falha e observada (console.warn) e sinalizada ao chamador, que exibe o
+// aviso "Atividade salva, mas o lembrete nao pode ser agendado." A task NUNCA
+// e revertida por causa de um lembrete.
+async function syncRemindersSafe(task, actorId) {
+  try {
+    await reminderService.syncForTask(task, { actorId })
+    return { ok: true }
+  } catch (err) {
+    console.warn('[taskService] sincronizacao de lembrete falhou (task salva):', err?.message || err)
+    return { ok: false }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Servico de atividades (tasks), escopado por workspace.
@@ -193,7 +220,10 @@ export const taskService = {
       action: LOG_ACTIONS.CREATE,
       description: `Atividade criada: "${saved.title}"`,
     })
-    return saved
+
+    // Sincroniza os reminders da nova task (best-effort, falha surfavel).
+    const sync = await syncRemindersSafe(saved, userId)
+    return sync.ok ? saved : { ...saved, reminder_sync_failed: true }
   },
 
   // Atualiza uma task existente. O escopo (workspace) vem do proprio registro.
@@ -235,6 +265,15 @@ export const taskService = {
       action: logAction ?? LOG_ACTIONS.UPDATE,
       description: logDescription ?? `Atividade editada: "${saved.title}"`,
     })
+
+    // Reconcilia reminders APENAS quando o patch toca campos que os afetam
+    // (alerta/data/hora/status/assignee). Cobre reagendar, concluir/cancelar,
+    // delegar, etc., que passam por este mesmo funil.
+    const touchesReminder = Object.keys(patch || {}).some((k) => REMINDER_KEYS.has(k))
+    if (touchesReminder) {
+      const sync = await syncRemindersSafe(saved, userId)
+      if (!sync.ok) return { ...saved, reminder_sync_failed: true }
+    }
     return saved
   },
 
@@ -319,6 +358,13 @@ export const taskService = {
       const { error } = await supabase.from('tasks').delete().eq('id', task.id)
       if (error) throw error
     }
+    // Reminders: Supabase remove via ON DELETE CASCADE; demo remove manualmente.
+    try {
+      await reminderService.onTaskDeleted(task)
+    } catch (err) {
+      console.warn('[taskService] limpeza de lembretes na exclusao falhou:', err?.message || err)
+    }
+
     // task_id fica null: o registro ja foi removido (evita violar a FK).
     await safeLog({
       workspaceId: task.workspace_id,

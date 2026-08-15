@@ -107,6 +107,16 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
       toast('Informe um titulo para a atividade', 'error')
       return
     }
+    // Alerta exige data + horario para calcular o lembrete (nao inventamos
+    // horario padrao). Tarefa sem horario segue permitida quando alerta = off.
+    if (form.alert_enabled && !form.date) {
+      toast('Defina uma data e um horario para ativar o lembrete.', 'error')
+      return
+    }
+    if (form.alert_enabled && !form.start_time) {
+      toast('Defina um horario para ativar o lembrete.', 'error')
+      return
+    }
     setSaving(true)
     try {
       const payload = {
@@ -126,7 +136,12 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
       } else {
         saved = await taskService.create(workspaceId, user.id, payload)
       }
-      toast(isEdit ? 'Atividade atualizada' : 'Atividade criada')
+      if (saved?.reminder_sync_failed) {
+        // Task foi salva; apenas o agendamento do lembrete falhou (surfavel).
+        toast('Atividade salva, mas o lembrete nao pode ser agendado.', 'error')
+      } else {
+        toast(isEdit ? 'Atividade atualizada' : 'Atividade criada')
+      }
       reload()
       onSaved?.(saved)
       onClose()

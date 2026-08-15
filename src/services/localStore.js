@@ -18,6 +18,9 @@ const DEMO_USER = {
   full_name: 'Usuario Demo',
   role: ROLES.ADMIN,
   default_workspace_id: DEMO_WORKSPACE_ID,
+  // Espelha profiles.timezone (0012) para paridade demo/Supabase no motor de
+  // lembretes. Preferencia editavel; default = o mesmo da coluna.
+  timezone: 'America/Sao_Paulo',
 }
 
 const DEMO_WORKSPACE = {

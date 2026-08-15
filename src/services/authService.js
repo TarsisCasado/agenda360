@@ -38,6 +38,9 @@ export const authService = {
         full_name: profile?.full_name ?? data.user.email,
         role: profile?.role ?? ROLES.COLLABORATOR,
         default_workspace_id: profile?.default_workspace_id ?? null,
+        // Fonte unica do fuso do usuario (coluna adicionada na 0012). O motor
+        // de lembretes le daqui; nunca assume um fuso fixo.
+        timezone: profile?.timezone ?? 'America/Sao_Paulo',
       }
     } catch (err) {
       // Rede indisponivel / Supabase inacessivel: nao trava o app, cai na tela
