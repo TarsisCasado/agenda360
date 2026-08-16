@@ -110,78 +110,108 @@ Resposta (somente contadores + ids tecnicos — nunca secrets/payload sensivel):
 
 ---
 
-## Agendamento — PRE-CHECK (somente leitura; NAO cria a 0013 ainda)
+## Agendamento — migration 0013 (`0013_reminders_scheduler.*`)
 
-A decisao aprovada exige, **antes** de qualquer migration 0013, confirmar
-`pg_cron` e `pg_net` no banco de producao. **Rode voce mesmo** as consultas
-abaixo (read-only) e me informe os resultados. **Nada aqui altera o banco.**
+O agendamento e versionado em `supabase/migrations/0013_reminders_scheduler.*`
+(precheck / sql / verify / post_activation_verify / rollback). **Precheck de
+producao ja executado** (2026-08): `pg_cron` 1.6.4 e `pg_net` 0.20.3
+disponiveis; `supabase_vault` 0.3.1 instalado. Arquitetura viavel:
 
-**1) `pg_cron` esta disponivel/instalado?**
-
-```sql
--- extensao disponivel para instalar?
-select name, default_version, installed_version
-from pg_available_extensions
-where name = 'pg_cron';
-
--- ja instalada?
-select extname, extversion from pg_extension where extname = 'pg_cron';
+```
+cron.job (agenda360-reminders-worker, * * * * *, INATIVO ate ativacao manual)
+  -> le URL e segredo do Vault POR NOME (nunca literais no command)
+  -> net.http_post(url, headers{ x-reminders-secret }, body '{}')  (fire-and-forget)
+    -> Edge Function reminders-worker (verify_jwt=false)
+       -> valida x-reminders-secret (tempo constante)
+       -> client service_role (nunca sai da Function) -> enqueue
 ```
 
-**2) `pg_net` esta disponivel/instalado?**
+### Desenho em duas fases (o job NASCE INATIVO)
+
+A 0013 **cria o job desativado** (`active=false`). A ativacao e uma acao
+**manual e deliberada**, feita so depois que a Function existe e responde. Isso
+impede um job ativo apontando para uma Function ainda nao publicada/sem segredo.
+
+- **Fase A** (logo apos aplicar a 0013): `verify.sql` exige o job existindo,
+  correto e **INATIVO**. Um job ativo aqui e FALHA.
+- **Fase B** (apos ativacao manual): `post_activation_verify.sql` exige o job
+  **ATIVO**. Um job inativo aqui e FALHA. Os dois nunca aceitam ambos os
+  estados como validos.
+
+### Segredos no Vault (valores NUNCA vao para o Git)
+
+Dois segredos, **configurados manualmente em producao** e referenciados **so
+por nome** no command do cron:
+
+| Nome no Vault              | Valor (so em producao)                                         |
+| -------------------------- | ------------------------------------------------------------- |
+| `reminders_worker_url`     | `https://<project-ref>.supabase.co/functions/v1/reminders-worker` |
+| `reminders_worker_secret`  | segredo dedicado (== env `REMINDERS_WORKER_SECRET` da Function) |
+
+Guardar a URL no Vault e o padrao oficialmente mostrado pelo Supabase para
+agendar Functions: nao ha GUC nativo confiavel com o project-ref, e assim a
+**mesma migration roda em qualquer ambiente** (cada Vault carrega seus valores)
+sem project-ref hardcoded no repositorio.
+
+### Contexto de execucao × Vault
+
+O job roda com o papel que o **agendou** (aplique a 0013 como `postgres`).
+`postgres` ja tem `SELECT` em `vault.decrypted_secrets` (a view e restrita;
+`anon`/`authenticated` nao leem). O command le o segredo em tempo de execucao
+com esse privilegio — **sem grants novos e sem ampliar exposicao do Vault**. O
+precheck confirma `has_table_privilege(current_user, 'vault.decrypted_secrets',
+'SELECT')` e o verify confirma o dono do job.
+
+### Configuracao manual em producao (fora do Git) — nomes, nunca valores
 
 ```sql
-select name, default_version, installed_version
-from pg_available_extensions
-where name = 'pg_net';
-
-select extname, extversion from pg_extension where extname = 'pg_net';
+-- 1) segredos no Vault (SUBSTITUA os valores; nao commitar):
+select vault.create_secret('<URL_DA_FUNCTION>',    'reminders_worker_url',    'URL da Edge Function reminders-worker');
+select vault.create_secret('<SEGREDO_DEDICADO>',   'reminders_worker_secret', 'Segredo do header x-reminders-secret');
+-- se ja existirem, use vault.update_secret(id, '<valor>', nome, descricao).
 ```
 
-**3) Vault disponivel (para guardar o segredo sem plaintext no `cron.job`)?**
+```bash
+# 2) secrets/env da Function (valores reais, nunca no Git):
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY="..."
+supabase secrets set REMINDERS_WORKER_SECRET="<mesmo segredo do Vault>"
+# opcional:
+supabase secrets set REMINDERS_WORKER_BATCH="100"
 
-```sql
-select extname, extversion from pg_extension where extname = 'supabase_vault';
--- se instalado, o segredo referenciado por nome:
--- select name from vault.secrets where name = 'reminders_worker_secret';
+# 3) deploy (verify_jwt desligado — auth e o segredo dedicado):
+supabase functions deploy reminders-worker --no-verify-jwt
 ```
 
-### Se `pg_cron` **e** `pg_net` estiverem disponiveis
+### Ordem segura de implantacao
 
-Podera ser proposta a **migration 0013** para versionar o agendamento. A
-invocacao nativa e segura seria (esboco — **NAO aplicar agora**; o segredo vem
-do Vault, nunca em plaintext no `cron.job`):
+1. criar os 2 segredos no Vault (passo 1 acima);
+2. configurar os secrets/env da Function (passo 2);
+3. `supabase functions deploy reminders-worker --no-verify-jwt`;
+4. smoke test: `POST` com header correto -> `200 {ok:true,...}`; header errado -> `401`;
+5. aplicar `0013_reminders_scheduler.precheck.sql` e conferir os vereditos;
+6. aplicar `0013_reminders_scheduler.sql` (cria o job INATIVO);
+7. aplicar `0013_reminders_scheduler.verify.sql` (fase A: exige INATIVO + OK);
+8. **ativar manualmente** o job:
+   ```sql
+   select cron.alter_job(
+     (select jobid from cron.job where jobname = 'agenda360-reminders-worker'),
+     active := true
+   );
+   ```
+9. aplicar `0013_reminders_scheduler.post_activation_verify.sql` (fase B: exige ATIVO + OK);
+10. observar `cron.job_run_details` e `net._http_response`; confirmar enqueue real.
 
-```sql
--- ESBOCO da 0013 (nao aplicar): agenda um POST a cada minuto.
-select cron.schedule(
-  'reminders-worker-every-minute',
-  '* * * * *',
-  $$
-  select net.http_post(
-    url    := 'https://<PROJECT_REF>.functions.supabase.co/reminders-worker',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-reminders-secret', (select decrypted_secret from vault.decrypted_secrets
-                             where name = 'reminders_worker_secret')
-    ),
-    body   := '{}'::jsonb
-  );
-  $$
-);
-```
+### Frequencia — 1/min (`* * * * *`)
 
-Riscos a considerar antes de aplicar:
-- **frequencia x custo/tempo**: `* * * * *` (1/min) mantem latencia baixa; o
-  batch limita o trabalho por execucao.
-- **segredo no cron.job**: usar Vault (`vault.decrypted_secrets`) para nao
-  deixar o segredo em texto plano no catalogo `cron.job`.
-- **concorrencia**: se duas execucoes se sobrepuserem, a UNIQUE
-  (`uq_notifications_reminder_channel`) e o `.eq('sent', false)` no update
-  garantem idempotencia sem lock adicional.
-- **project ref / URL**: parametro do ambiente, nunca hardcoded no cliente.
+Latencia maxima ~60 s (aceitavel); batch default 100 drena o volume tipico e o
+excedente cai no minuto seguinte (elegibilidade e `remind_at <= now()`, nao uma
+janela — nada se perde se um tick atrasar). `net.http_post` e fire-and-forget:
+o command retorna em ms, entao sobreposicao de ticks e improvavel; mesmo que
+duas invocacoes coincidam, a UNIQUE `uq_notifications_reminder_channel` + o
+`.eq('sent', false)` garantem idempotencia sem lock.
 
-### Se `pg_cron` **ou** `pg_net` **NAO** estiverem disponiveis
+### Rollback
 
-**PARAR e reportar.** Nao criar GitHub Actions, cron-job.org, Vercel Cron nem
-qualquer cron externo — nenhum fallback externo foi autorizado.
+`0013_reminders_scheduler.rollback.sql` remove **apenas** o job
+`agenda360-reminders-worker`. **Nao** faz `DROP EXTENSION`, **nao** remove
+segredos do Vault, **nao** toca reminders/notifications/dados.
