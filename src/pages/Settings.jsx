@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Trash2, Palette, History, Database, Users, Building2, Smartphone, Sparkles } from 'lucide-react'
+import { Plus, Trash2, Palette, History, Database, Users, Building2, Smartphone, Sparkles, Bell } from 'lucide-react'
 import { PageHeader } from '../components/ui/Common'
 import InstallGuide from '../components/pwa/InstallGuide'
+import DeviceNotifications from '../components/notifications/DeviceNotifications'
 import { resetPreferences } from '../lib/preferences'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -111,6 +112,19 @@ export default function Settings() {
           </div>
           <p className="mt-3 text-xs text-slate-400">
             A configuração da rotina personaliza as sugestões do assistente. Você pode refazê-la quando quiser.
+          </p>
+        </div>
+
+        {/* Notificacoes deste dispositivo */}
+        <div className="card p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2 text-brand-600">
+            <Bell size={18} />
+            <h2 className="font-bold">Notificacoes deste dispositivo</h2>
+          </div>
+          <DeviceNotifications variant="card" onOpenInstall={() => setInstallOpen(true)} />
+          <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-800/60">
+            Vale para <strong>este aparelho</strong>. No iPhone, as notificacoes
+            exigem o app adicionado a Tela de Inicio e aberto pelo icone.
           </p>
         </div>
 

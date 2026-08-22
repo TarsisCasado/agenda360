@@ -1,37 +1,19 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, AlertTriangle, Clock, BellRing, CheckCircle2 } from 'lucide-react'
-import {
-  useAlerts,
-  requestNotificationPermission,
-  showLocalNotification,
-} from '../../hooks/useAlerts'
+import { useAlerts } from '../../hooks/useAlerts'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
-import { useToast } from '../../context/ToastContext'
 import { formatShort } from '../../lib/date'
 import { cx } from '../../lib/utils'
+import DeviceNotifications from './DeviceNotifications'
 
-// Central de alertas (sino no topo). Notificacoes in-app + base para push.
+// Central de alertas (sino no topo). Notificacoes in-app + estado de
+// notificacoes do dispositivo (coerente com iPhone instalado como PWA).
 export default function AlertCenter() {
   const { alerts, count } = useAlerts()
-  const { toast } = useToast()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const [perm, setPerm] = useState(
-    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
-  )
   useEscapeKey(open, () => setOpen(false))
-
-  const enablePush = async () => {
-    const result = await requestNotificationPermission()
-    setPerm(result)
-    if (result === 'granted') {
-      showLocalNotification('Agenda 360', 'Notificacoes ativadas neste dispositivo.')
-      toast('Notificacoes ativadas')
-    } else if (result === 'denied') {
-      toast('Permissao negada pelo navegador', 'error')
-    }
-  }
 
   const goToTask = () => {
     setOpen(false)
@@ -113,13 +95,9 @@ export default function AlertCenter() {
               )}
             </div>
 
-            {perm !== 'granted' && perm !== 'unsupported' && (
-              <div className="border-t border-slate-100 p-3 dark:border-slate-700">
-                <button onClick={enablePush} className="btn-secondary w-full text-sm">
-                  <Bell size={14} /> Ativar notificacoes do dispositivo
-                </button>
-              </div>
-            )}
+            <div className="border-t border-slate-100 p-3 dark:border-slate-700">
+              <DeviceNotifications variant="compact" />
+            </div>
           </div>
         </>
       )}

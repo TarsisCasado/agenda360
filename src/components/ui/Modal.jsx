@@ -78,7 +78,10 @@ export default function Modal({ open, onClose, title, children, footer, size = '
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cx(
-          'card relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden animate-scale-in rounded-b-none focus:outline-none sm:rounded-b-xl',
+          // dvh (nao vh): no iOS PWA a barra dinamica/area segura encurtam a
+          // viewport; com vh o rodape/ultimo campo ficavam atras do "home
+          // indicator". dvh + safe-area no rodape mantem tudo alcancavel.
+          'card relative z-10 flex max-h-[92dvh] w-full flex-col overflow-hidden animate-scale-in rounded-b-none focus:outline-none sm:rounded-b-xl',
           size === 'sm' && 'sm:max-w-md',
           size === 'md' && 'sm:max-w-lg',
           size === 'lg' && 'sm:max-w-2xl',
@@ -97,7 +100,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-800">
+          <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] dark:border-slate-800">
             {footer}
           </div>
         )}

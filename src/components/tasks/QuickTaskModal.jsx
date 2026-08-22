@@ -11,12 +11,17 @@ import {
   STATUS_META,
   PRIORITY,
   PRIORITY_META,
+  ALERT_TYPES,
+  ALERT_TYPE_LABELS,
 } from '../../lib/constants'
 import { toISODate } from '../../lib/date'
 import { cx } from '../../lib/utils'
 
 // Formulario simplificado para criacao rapida (otimizado para mobile).
 // O formulario completo (TaskModal) continua disponivel para edicao detalhada.
+// Inclui os MESMOS campos de alerta/lembrete do TaskModal (Push, minutos antes)
+// pelo MESMO caminho de dados (taskService.create -> reminderService): o mobile
+// nao pode ficar sem criar lembretes.
 const empty = (defaults = {}) => ({
   title: '',
   date: toISODate(new Date()),
@@ -26,6 +31,9 @@ const empty = (defaults = {}) => ({
   status: 'todo',
   link: '',
   notes: '',
+  alert_enabled: false,
+  alert_type: ALERT_TYPES.IN_APP,
+  alert_minutes_before: 15,
   ...defaults,
 })
 
@@ -45,7 +53,10 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
     }
   }, [open, defaults])
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  const set = (key) => (e) => {
+    const value = e?.target?.type === 'checkbox' ? e.target.checked : e.target.value
+    setForm((f) => ({ ...f, [key]: value }))
+  }
 
   // "Sem data": limpa data e hora (sem horarios orfaos). Ao desmarcar, volta
   // a data padrao (hoje).
@@ -63,6 +74,16 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
       toast('Informe um titulo', 'error')
       return
     }
+    // Alerta exige data + horario para calcular o lembrete (mesma regra do
+    // TaskModal; nao inventamos horario padrao).
+    if (form.alert_enabled && !form.date) {
+      toast('Defina uma data e um horario para ativar o lembrete.', 'error')
+      return
+    }
+    if (form.alert_enabled && !form.start_time) {
+      toast('Defina um horario para ativar o lembrete.', 'error')
+      return
+    }
     setSaving(true)
     try {
       const saved = await taskService.create(workspaceId, user.id, {
@@ -70,8 +91,13 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
         date: form.date || null,
         category_id: form.category_id || null,
         start_time: form.start_time || null,
+        alert_minutes_before: Number(form.alert_minutes_before) || 0,
       })
-      toast('Atividade criada')
+      if (saved?.reminder_sync_failed) {
+        toast('Atividade salva, mas o lembrete nao pode ser agendado.', 'error')
+      } else {
+        toast('Atividade criada')
+      }
       reload()
       onSaved?.(saved)
       onClose()
@@ -189,6 +215,43 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Alerta / lembrete (mesmo caminho de dados do TaskModal) */}
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <input
+              type="checkbox"
+              checked={form.alert_enabled}
+              onChange={set('alert_enabled')}
+              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            />
+            Ativar alerta / lembrete
+          </label>
+          {form.alert_enabled && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Tipo</label>
+                <select className="input" value={form.alert_type} onChange={set('alert_type')}>
+                  {Object.entries(ALERT_TYPE_LABELS).map(([key, label]) => (
+                    <option key={key} value={key} disabled={key === ALERT_TYPES.WHATSAPP}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Minutos antes</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="input"
+                  value={form.alert_minutes_before}
+                  onChange={set('alert_minutes_before')}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Campos opcionais recolhidos por padrao */}
