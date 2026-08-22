@@ -211,37 +211,6 @@ describe('pushService.isSubscribed()', () => {
   })
 })
 
-const IPHONE_UA =
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
-const ANDROID_UA =
-  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'
-
-describe('pushService — deteccao iOS / standalone (orientacao de instalar)', () => {
-  it('isIOSDevice() detecta iPhone/iPad/iPod pelo userAgent', () => {
-    vi.stubGlobal('navigator', { userAgent: IPHONE_UA })
-    expect(pushService.isIOSDevice()).toBe(true)
-  })
-
-  it('isIOSDevice() e false em Android/desktop', () => {
-    vi.stubGlobal('navigator', { userAgent: ANDROID_UA })
-    expect(pushService.isIOSDevice()).toBe(false)
-  })
-
-  it('isStandaloneDisplay() usa matchMedia(display-mode: standalone)', () => {
-    vi.stubGlobal('navigator', { userAgent: IPHONE_UA })
-    vi.stubGlobal('window', { matchMedia: (q) => ({ matches: q === '(display-mode: standalone)' }) })
-    expect(pushService.isStandaloneDisplay()).toBe(true)
-  })
-
-  it('isStandaloneDisplay() usa o fallback navigator.standalone (iOS)', () => {
-    vi.stubGlobal('navigator', { userAgent: IPHONE_UA, standalone: true })
-    vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) })
-    expect(pushService.isStandaloneDisplay()).toBe(true)
-  })
-
-  it('isStandaloneDisplay() e false numa aba comum (nao instalado)', () => {
-    vi.stubGlobal('navigator', { userAgent: IPHONE_UA, standalone: false })
-    vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) })
-    expect(pushService.isStandaloneDisplay()).toBe(false)
-  })
-})
+// Deteccao de iOS/standalone: ver src/lib/device.test.js (fonte unica,
+// cobre tambem iPadOS 13+ via maxTouchPoints — pushService nao duplica mais
+// essa logica).

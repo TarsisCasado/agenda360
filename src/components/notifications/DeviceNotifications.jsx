@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bell, BellRing, BellOff, ShieldAlert, Smartphone } from 'lucide-react'
-import { requestNotificationPermission, showLocalNotification } from '../../hooks/useAlerts'
 import { useToast } from '../../context/ToastContext'
+import { useAuth } from '../../context/AuthContext'
+import { pushService } from '../../services/pushService'
 import { describeDeviceNotifications } from '../../lib/device'
 import { cx } from '../../lib/utils'
 
@@ -9,24 +10,57 @@ import { cx } from '../../lib/utils'
 // Android e iPhone instalado como PWA. Nao esconde a opcao por engano — cada
 // estado tem uma orientacao clara.
 //
+// A ACAO e Web Push DE VERDADE (pushService.subscribe -> VAPID + subscription
+// persistida no Supabase -> push-delivery-worker entrega mesmo com o app
+// fechado/tela bloqueada) — nao so a permissao local do navegador.
+//
 // variant='card'    -> bloco completo (usado em Configuracoes).
 // variant='compact' -> rodape enxuto (usado na Central de alertas).
 //
 // onOpenInstall (opcional): abre o guia de instalacao no caso iOS nao instalado.
+const SUBSCRIBE_ERROR_MESSAGES = {
+  demo_mode: 'Notificacoes push exigem o modo Supabase (indisponivel no modo demo).',
+  vapid_not_configured: 'Notificacoes push ainda nao foram configuradas neste ambiente.',
+  no_user: 'Faca login novamente para ativar as notificacoes.',
+  subscribe_failed: 'Nao foi possivel ativar as notificacoes agora. Tente novamente.',
+}
+
 export default function DeviceNotifications({ variant = 'card', onOpenInstall }) {
   const { toast } = useToast()
+  const { user } = useAuth()
+  // Chute inicial SINCRONO (baseado so em Notification.permission/plataforma);
+  // ajustado abaixo para 'granted' se ja existir uma subscription real.
   const [status, setStatus] = useState(() => describeDeviceNotifications())
 
-  const enable = async () => {
-    // Dispara o prompt NATIVO do dispositivo (no iOS instalado, o do iOS).
-    const result = await requestNotificationPermission()
-    setStatus(describeDeviceNotifications())
-    if (result === 'granted') {
-      showLocalNotification('Agenda 360', 'Notificacoes ativadas neste dispositivo.')
-      toast('Notificacoes ativadas')
-    } else if (result === 'denied') {
-      toast('Permissao negada pelo dispositivo', 'error')
+  useEffect(() => {
+    if (status !== 'prompt') return
+    let cancelled = false
+    pushService.isSubscribed().then((subscribed) => {
+      if (!cancelled && subscribed) setStatus('granted')
+    })
+    return () => {
+      cancelled = true
     }
+  }, [status])
+
+  const enable = async () => {
+    const result = await pushService.subscribe(user?.id)
+    if (result.ok) {
+      setStatus('granted')
+      toast('Notificacoes ativadas neste dispositivo')
+      return
+    }
+    if (result.reason === 'denied') {
+      setStatus('denied')
+      toast('Permissao negada pelo dispositivo', 'error')
+      return
+    }
+    if (result.reason === 'unsupported') {
+      setStatus('unsupported')
+      toast('Este navegador nao suporta notificacoes push', 'error')
+      return
+    }
+    toast(SUBSCRIBE_ERROR_MESSAGES[result.reason] || 'Nao foi possivel ativar as notificacoes', 'error')
   }
 
   const compact = variant === 'compact'

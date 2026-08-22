@@ -28,25 +28,9 @@ export function getPermission() {
   return Notification.permission
 }
 
-// iOS/iPadOS: Web Push so funciona em app instalado na Tela de Inicio
-// (standalone) — em aba comum do Safari, 'PushManager' nem existe em
-// `window` (isPushSupported() ja retorna false nesse caso). Usado para
-// mostrar a orientacao de instalacao SO quando faz sentido (iOS + navegador,
-// nao iOS + ja instalado).
-export function isIOSDevice() {
-  if (typeof navigator === 'undefined') return false
-  return /iphone|ipad|ipod/i.test(navigator.userAgent || '')
-}
-
-export function isStandaloneDisplay() {
-  if (typeof window === 'undefined') return false
-  const byMediaQuery =
-    typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches
-  // `navigator.standalone` e a propriedade proprietaria do Safari/iOS
-  // (display-mode: standalone via matchMedia nem sempre e confiavel no iOS).
-  const byIOSFlag = typeof navigator !== 'undefined' && navigator.standalone === true
-  return Boolean(byMediaQuery || byIOSFlag)
-}
+// Deteccao de iOS/standalone vive em ../lib/device.js (fonte unica — cobre
+// tambem iPadOS 13+, que se anuncia como "Macintosh" no user agent). Quem
+// precisa disso importa de la diretamente (ex.: DeviceNotifications.jsx).
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -74,8 +58,6 @@ async function upsertSubscription(userId, sub) {
 export const pushService = {
   isSupported: isPushSupported,
   getPermission,
-  isIOSDevice,
-  isStandaloneDisplay,
 
   // Fluxo completo, disparado por uma acao explicita do usuario:
   //   permissao -> registration.pushManager.subscribe() -> salva no Supabase.
