@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Plus, Inbox, MoonStar } from 'lucide-react'
 import { PageHeader, ErrorState } from '../components/ui/Common'
@@ -42,6 +42,21 @@ export default function DayAgenda() {
   const range = useMemo(() => ({ start: date, end: date }), [date])
   const { tasks, error, reload } = useTasks(range)
   const [modal, setModal] = useState({ open: false, task: null, defaults: null })
+
+  // Deep link vindo do clique numa notificacao push (?task=<id>): abre a
+  // atividade correspondente automaticamente. `autoOpenedRef` evita reabrir
+  // o modal sozinho depois que o usuario ja fechou (tasks recarrega apos
+  // qualquer edicao, o que rodaria este efeito de novo sem essa guarda).
+  const taskParam = searchParams.get('task')
+  const autoOpenedRef = useRef(null)
+  useEffect(() => {
+    if (!taskParam || autoOpenedRef.current === taskParam) return
+    const found = tasks.find((t) => t.id === taskParam)
+    if (found) {
+      autoOpenedRef.current = taskParam
+      setModal({ open: true, task: found, defaults: null })
+    }
+  }, [taskParam, tasks])
 
   const hours = []
   for (let h = DAY_START_HOUR; h <= DAY_END_HOUR; h += 1) hours.push(h)

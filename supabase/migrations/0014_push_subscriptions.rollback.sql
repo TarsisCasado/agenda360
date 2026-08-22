@@ -1,0 +1,31 @@
+-- ===========================================================================
+-- ROLLBACK da migration 0014 — PARCIAL POR SEGURANCA
+-- ---------------------------------------------------------------------------
+--  A tabela push_subscriptions, uma vez em uso, contem dados reais (endpoints
+--  e chaves de cifra de dispositivos de usuarios). DROP TABLE e IRREVERSIVEL.
+--  Perder essas linhas so exige que cada usuario clique em "Ativar
+--  notificacoes" de novo — inconveniente, mas nao catastrofico. Mesmo assim,
+--  seguimos o principio ja adotado na 0012: rollback INCOMPLETO e SEGURO por
+--  padrao; a parte destrutiva fica comentada e exige decisao consciente.
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- PARTE ATIVA — nenhuma (nao ha objeto derivado seguro para remover isolado:
+-- remover so os indices deixaria a tabela sem UNIQUE(endpoint), quebrando a
+-- idempotencia do upsert do frontend). Use a parte destrutiva abaixo.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- PARTE DESTRUTIVA — MANTENHA COMENTADA
+-- ---------------------------------------------------------------------------
+-- Descomente SOMENTE apos confirmar (select count(*) from
+-- public.push_subscriptions;) que a perda das linhas e aceitavel.
+--
+-- begin;
+-- drop table if exists public.push_subscriptions;
+-- commit;
+-- ===========================================================================
+
+-- ===========================================================================
+-- Para restaurar: reaplique 0014_push_subscriptions.sql (idempotente).
+-- ===========================================================================

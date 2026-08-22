@@ -37,3 +37,5 @@ dev-dist
 
 # Arquivos temporarios do Vite
 vite.config.js.timestamp-*.mjs
+.vercel
+.env*

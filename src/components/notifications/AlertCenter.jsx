@@ -8,7 +8,7 @@ import { cx } from '../../lib/utils'
 import DeviceNotifications from './DeviceNotifications'
 
 // Central de alertas (sino no topo). Notificacoes in-app + estado de
-// notificacoes do dispositivo (coerente com iPhone instalado como PWA).
+// notificacoes do dispositivo (Web Push real, ver DeviceNotifications).
 export default function AlertCenter() {
   const { alerts, count } = useAlerts()
   const navigate = useNavigate()

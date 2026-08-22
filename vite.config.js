@@ -8,9 +8,29 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'robots.txt'],
+      // injectManifest (em vez do generateSW padrao): o Service Worker
+      // passa a ter codigo PROPRIO (src/sw.js) para os eventos `push` e
+      // `notificationclick` — o generateSW nao permite anexar listeners
+      // customizados. Precache continua automatico via precacheAndRoute.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+      },
+      includeAssets: [
+        'favicon.svg',
+        'robots.txt',
+        'apple-touch-icon.png',
+        'icon-192.png',
+        'icon-512.png',
+        'icon-512-maskable.png',
+      ],
       devOptions: { enabled: false },
       manifest: {
+        // Identidade estavel do app (evita reinstalacao duplicada quando o
+        // manifest muda) — exigido por engines mais recentes de PWA install.
+        id: '/',
         name: 'Agenda Inteligente 360',
         short_name: 'Agenda 360',
         description:
@@ -26,16 +46,11 @@ export default defineConfig({
         dir: 'ltr',
         categories: ['productivity', 'business', 'lifestyle'],
         icons: [
-          {
-            src: 'favicon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any maskable',
-          },
+          { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
       },
     }),
   ],

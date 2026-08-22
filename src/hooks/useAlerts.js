@@ -52,20 +52,3 @@ export function useAlerts() {
 
   return { alerts, count: alerts.length, loading, reload: load }
 }
-
-// Solicita permissao de notificacao do dispositivo (estrutura base para push).
-export async function requestNotificationPermission() {
-  if (!('Notification' in window)) return 'unsupported'
-  if (Notification.permission === 'granted') return 'granted'
-  const result = await Notification.requestPermission()
-  return result
-}
-
-export function showLocalNotification(title, body) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return
-  try {
-    new Notification(title, { body, icon: '/favicon.svg' })
-  } catch {
-    // silencioso: alguns navegadores exigem service worker
-  }
-}
