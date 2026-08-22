@@ -119,7 +119,7 @@ describe('enqueueDueReminders — elegibilidade', () => {
   it('1. reminder vencido, vivo, com recipient -> enfileira 1', async () => {
     const db = makeDb([rem()])
     const c = await enqueueDueReminders(db, { now: NOW })
-    expect(c).toEqual({ found: 1, enqueued: 1, already_exists: 0, skipped: 0, errors: 0 })
+    expect(c).toEqual({ found: 1, enqueued: 1, already_exists: 0, skipped: 0, errors: 0, push_enqueued: 0 })
     expect(db._notifications).toHaveLength(1)
   })
 
@@ -318,6 +318,43 @@ describe('enqueueDueReminders — idempotencia (UNIQUE 23505)', () => {
   })
 })
 
+describe('enqueueDueReminders — contador push_enqueued (Etapa 1E, disparo imediato)', () => {
+  it('conta so push NOVO (nao already_exists, nao outros canais)', async () => {
+    const db = makeDb([
+      rem({ id: 'a', type: 'push' }),
+      rem({ id: 'b', type: 'in_app' }),
+      rem({ id: 'c', type: 'whatsapp' }),
+    ])
+    const c = await enqueueDueReminders(db, { now: NOW })
+    expect(c.push_enqueued).toBe(1)
+  })
+
+  it('push ja existente (already_exists) NAO conta — nao e novo neste lote', async () => {
+    const db = makeDb([rem({ type: 'push' })], {
+      notifications: [{ reminder_id: 'r1', channel: 'push', status: 'pending' }],
+    })
+    const c = await enqueueDueReminders(db, { now: NOW })
+    expect(c.already_exists).toBe(1)
+    expect(c.push_enqueued).toBe(0)
+  })
+
+  it('varios push novos no mesmo lote -> soma todos', async () => {
+    const db = makeDb([
+      rem({ id: 'p1', type: 'push' }),
+      rem({ id: 'p2', type: 'push' }),
+      rem({ id: 'p3', type: 'push' }),
+    ])
+    const c = await enqueueDueReminders(db, { now: NOW })
+    expect(c.push_enqueued).toBe(3)
+  })
+
+  it('nenhum reminder de push -> push_enqueued=0', async () => {
+    const db = makeDb([rem({ type: 'in_app' }), rem({ id: 'b', type: 'whatsapp' })])
+    const c = await enqueueDueReminders(db, { now: NOW })
+    expect(c.push_enqueued).toBe(0)
+  })
+})
+
 describe('enqueueDueReminders — batch e ordenacao', () => {
   it('22. respeita batchSize (processa no maximo N)', async () => {
     const many = Array.from({ length: 10 }, (_, i) =>
@@ -357,7 +394,7 @@ describe('enqueueDueReminders — observabilidade e relogio', () => {
       rem({ id: 'leg', recipient_id: null }),
     ], { notifications: [{ reminder_id: 'dup', channel: 'in_app', status: 'pending' }] })
     const c = await enqueueDueReminders(db, { now: NOW })
-    expect(c).toEqual({ found: 4, enqueued: 2, already_exists: 1, skipped: 1, errors: 0 })
+    expect(c).toEqual({ found: 4, enqueued: 2, already_exists: 1, skipped: 1, errors: 0, push_enqueued: 1 })
   })
 
   it('26. logs NUNCA contem segredos/tokens/payload sensivel', async () => {

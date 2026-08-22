@@ -27,13 +27,18 @@
 //   SUPABASE_SERVICE_ROLE_KEY    (backend-only; bypassa RLS p/ inserir notifs)
 //   REMINDERS_WORKER_SECRET      (segredo dedicado do agendador; != service_role)
 //   REMINDERS_WORKER_BATCH       (opcional; tamanho do lote, default 100)
+//   PUSH_WORKER_SECRET           (ja existe como secret do projeto — usado
+//                                 SOMENTE para o disparo imediato best-effort
+//                                 do push-delivery-worker; ver worker.ts)
+//   PUSH_WORKER_URL              (opcional; default =
+//                                 `${SUPABASE_URL}/functions/v1/push-delivery-worker`)
 // NENHUM valor e commitado. Ver README.md.
 //
 // Deploy (NAO executar agora): supabase functions deploy reminders-worker --no-verify-jwt
 // ===========================================================================
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
-import { enqueueDueReminders, DEFAULT_BATCH_SIZE } from './worker.ts'
+import { enqueueDueReminders, maybeTriggerPushDelivery, DEFAULT_BATCH_SIZE } from './worker.ts'
 
 // Comparacao em tempo constante: evita vazar o segredo por timing. Compara
 // bytes UTF-8; comprimentos diferentes -> false, sem short-circuit por tamanho
@@ -83,12 +88,22 @@ serve(async (req) => {
 
   // 4) Executa o enqueue. Log estruturado -> stdout da Function (so contadores
   //    e ids tecnicos; jamais secrets/tokens/payload sensivel).
+  const log = (entry: Record<string, unknown>) => console.log(JSON.stringify(entry))
+
   try {
-    const counters = await enqueueDueReminders(db, {
-      batchSize,
-      log: (entry) => console.log(JSON.stringify(entry)),
-    })
-    return json({ ok: true, ...counters })
+    const counters = await enqueueDueReminders(db, { batchSize, log })
+
+    // 5) Disparo IMEDIATO e BEST-EFFORT do push-delivery-worker (Etapa 1E).
+    //    So tenta quando ESTA execucao criou push novo (push_enqueued > 0);
+    //    qualquer falha aqui e engolida por maybeTriggerPushDelivery — nunca
+    //    faz este handler retornar erro nem toca em notifications/reminders.
+    //    O cron de 1/min do push-delivery-worker (0016) continua sendo o
+    //    fallback/retry de entrega, intocado.
+    const pushSecret = Deno.env.get('PUSH_WORKER_SECRET') ?? ''
+    const pushUrl = Deno.env.get('PUSH_WORKER_URL') || `${url}/functions/v1/push-delivery-worker`
+    const trigger = await maybeTriggerPushDelivery(counters, { url: pushUrl, secret: pushSecret, log })
+
+    return json({ ok: true, ...counters, push_delivery_triggered: trigger.attempted })
   } catch (err) {
     console.log(JSON.stringify({ level: 'error', event: 'worker_failed', message: String((err as Error)?.message || err) }))
     return json({ ok: false, error: 'worker_failed' }, 500)

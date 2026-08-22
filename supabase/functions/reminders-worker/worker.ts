@@ -43,6 +43,11 @@ interface Counters {
   already_exists: number
   skipped: number
   errors: number
+  // Quantas notifications NOVAS (nao already_exists) desta execucao sao
+  // channel='push' — e o sinal que decide o disparo imediato (ver
+  // maybeTriggerPushDelivery). NAO conta already_exists: se ja existia,
+  // ou uma execucao anterior ja disparou, ou o cron ja esta ciente dela.
+  push_enqueued: number
 }
 
 // `db` e duck-typed: apenas o subconjunto de supabase-js que usamos.
@@ -51,7 +56,14 @@ export async function enqueueDueReminders(db: any, opts: EnqueueOptions = {}): P
   const batchSize = opts.batchSize && opts.batchSize > 0 ? opts.batchSize : DEFAULT_BATCH_SIZE
   const nowIso = (opts.now ? new Date(opts.now) : new Date()).toISOString()
   const log: LogFn = typeof opts.log === 'function' ? opts.log : () => {}
-  const counters: Counters = { found: 0, enqueued: 0, already_exists: 0, skipped: 0, errors: 0 }
+  const counters: Counters = {
+    found: 0,
+    enqueued: 0,
+    already_exists: 0,
+    skipped: 0,
+    errors: 0,
+    push_enqueued: 0,
+  }
 
   // Elegibilidade (confirmada contra o schema real): sent=false AND
   // cancelled_at IS NULL AND remind_at <= agora. Futuros/cancelados/enviados
@@ -110,6 +122,7 @@ export async function enqueueDueReminders(db: any, opts: EnqueueOptions = {}): P
       }
     } else {
       counters.enqueued += 1
+      if (notification.channel === 'push') counters.push_enqueued += 1
     }
 
     // 2) SO AGORA marcar como processado. O `.eq('sent', false)` evita corrida
@@ -123,4 +136,96 @@ export async function enqueueDueReminders(db: any, opts: EnqueueOptions = {}): P
   }
 
   return counters
+}
+
+// ===========================================================================
+// DISPARO IMEDIATO do push-delivery-worker (Sprint 2 / Etapa 1E — LATENCIA)
+// ---------------------------------------------------------------------------
+// O cron do push-delivery-worker (migration 0016) roda 1/min — ate 60s de
+// latencia entre a notification 'pending' nascer e ser entregue. Quando este
+// enqueue acabou de criar notification(s) de push NOVAS, disparamos o
+// push-delivery-worker IMEDIATAMENTE, sem esperar o proximo tick.
+//
+// GARANTIAS (todas por construcao, nao por try/catch acidental):
+//   - BEST-EFFORT: qualquer falha (rede, timeout, 401, 5xx) e ENGOLIDA aqui.
+//     Nunca lanca, nunca faz o reminders-worker retornar erro por causa disto.
+//   - NUNCA toca em `notifications`/`reminders` — quem decide pending/
+//     processing/sent/failed continua sendo exclusivamente o
+//     push-delivery-worker (claim atomico dele, intacto, ver deliver.ts).
+//     Logo, uma falha no disparo NUNCA marca nada como failed.
+//   - NAO aumenta a frequencia dos crons: e uma chamada HTTP extra e pontual,
+//     nao um novo agendamento. O cron de 1/min continua sendo o fallback/
+//     retry — se o disparo falhar ou o processo cair, a notification
+//     continua 'pending' e o proximo tick entrega normalmente.
+//   - NO MAXIMO 1 chamada por execucao do reminders-worker, mesmo que N
+//     notifications de push tenham sido criadas no mesmo lote (o
+//     push-delivery-worker ja processa em lote — sem duplicidade logica).
+// ===========================================================================
+
+export interface TriggerOptions {
+  url: string
+  secret: string
+  fetchImpl?: typeof fetch
+  log?: LogFn
+  timeoutMs?: number
+}
+
+export interface TriggerResult {
+  attempted: boolean
+  ok: boolean
+  status?: number
+  error?: string
+}
+
+const DEFAULT_TRIGGER_TIMEOUT_MS = 5000
+
+// Faz a chamada HTTP em si. So exportada separada para o caso (raro) de
+// alguem precisar disparar fora do fluxo de enqueue; o caminho normal e via
+// maybeTriggerPushDelivery, abaixo.
+export async function triggerPushDelivery(opts: TriggerOptions): Promise<TriggerResult> {
+  const log: LogFn = typeof opts.log === 'function' ? opts.log : () => {}
+  const doFetch = opts.fetchImpl ?? fetch
+  const timeoutMs = opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : DEFAULT_TRIGGER_TIMEOUT_MS
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await doFetch(opts.url, {
+      method: 'POST',
+      headers: { 'x-push-worker-secret': opts.secret, 'Content-Type': 'application/json' },
+      body: '{}',
+      signal: controller.signal,
+    })
+    log({ level: 'info', event: 'push_delivery_triggered', status: res.status, ok: res.ok })
+    return { attempted: true, ok: res.ok, status: res.status }
+  } catch (err) {
+    // Rede/timeout/qualquer falha: engolida de proposito (best-effort). O
+    // cron entrega depois; isto NUNCA vira erro do reminders-worker.
+    log({
+      level: 'warn',
+      event: 'push_delivery_trigger_failed',
+      message: String((err as Error)?.message || err),
+    })
+    return { attempted: true, ok: false, error: String((err as Error)?.message || err) }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Decide SE dispara (so quando ha push novo neste lote) e delega o disparo em
+// si. E o ponto de entrada que o handler (index.ts) chama — mantem a decisao
+// pura/testavel, sem precisar de um fake de Deno.serve para testar.
+export async function maybeTriggerPushDelivery(
+  counters: Pick<Counters, 'push_enqueued'>,
+  opts: TriggerOptions,
+): Promise<TriggerResult> {
+  const log: LogFn = typeof opts.log === 'function' ? opts.log : () => {}
+  if (!counters.push_enqueued || counters.push_enqueued <= 0) {
+    return { attempted: false, ok: false }
+  }
+  if (!opts.url || !opts.secret) {
+    log({ level: 'warn', event: 'push_delivery_trigger_skipped', reason: 'missing_url_or_secret' })
+    return { attempted: false, ok: false }
+  }
+  return triggerPushDelivery(opts)
 }

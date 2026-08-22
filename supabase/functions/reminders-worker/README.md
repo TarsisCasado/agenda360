@@ -69,6 +69,8 @@ Nada e recalculado a partir da task.
 | `SUPABASE_SERVICE_ROLE_KEY` | secret da Function (backend-only) | client que bypassa RLS para inserir em `notifications` (a role `authenticated` e SELECT-only, migration 0011) |
 | `REMINDERS_WORKER_SECRET`   | secret da Function **+ Vault** | segredo dedicado do agendador, **!= service_role** |
 | `REMINDERS_WORKER_BATCH`    | secret/env da Function (opcional) | tamanho do lote (default 100) |
+| `PUSH_WORKER_SECRET`        | **ja existe** como secret do projeto (usado pelo `push-delivery-worker`) | reaproveitado SOMENTE para o disparo imediato best-effort (ver abaixo); sem ele, o disparo e pulado e o cron do push continua entregando normalmente |
+| `PUSH_WORKER_URL`           | secret/env da Function (opcional) | URL do `push-delivery-worker`; default `${SUPABASE_URL}/functions/v1/push-delivery-worker` |
 
 Regras (aprovadas): `service_role` e o segredo **nunca** vao para `src/`,
 **nunca** em `VITE_*`, **nunca** commitados, **nunca** logados, **nunca**
@@ -105,8 +107,32 @@ supabase functions deploy reminders-worker --no-verify-jwt
 Resposta (somente contadores + ids tecnicos — nunca secrets/payload sensivel):
 
 ```json
-{ "ok": true, "found": 4, "enqueued": 2, "already_exists": 1, "skipped": 1, "errors": 0 }
+{ "ok": true, "found": 4, "enqueued": 2, "already_exists": 1, "skipped": 1, "errors": 0, "push_enqueued": 1, "push_delivery_triggered": true }
 ```
+
+## Disparo imediato do push-delivery-worker (Etapa 1E — latencia)
+
+O cron do `push-delivery-worker` (0016) roda 1/min — ate 60s de latencia entre
+a `notification` nascer `pending` e ser entregue. Quando ESTA execucao cria
+`notification`(s) de `channel='push'` **novas** (`push_enqueued > 0`, ver
+`worker.ts`), o `reminders-worker` chama o `push-delivery-worker`
+IMEDIATAMENTE apos o enqueue, via `maybeTriggerPushDelivery`.
+
+Garantias (por construcao, testadas em `trigger.test.js`):
+
+- **best-effort**: qualquer falha (rede, timeout 5s, 401, 5xx) e engolida;
+  NUNCA faz o `reminders-worker` retornar erro;
+- **nunca marca `notification` como `failed`**: este disparo nao toca em
+  `notifications`/`reminders` — quem decide o status da entrega continua
+  sendo exclusivamente o claim atomico do `push-delivery-worker`;
+- **nao aumenta a frequencia dos crons**: e uma chamada HTTP pontual, nao um
+  novo agendamento; o cron de 1/min continua sendo o fallback/retry;
+- **no maximo 1 chamada por execucao**, mesmo com N `notification`s de push
+  no mesmo lote (o `push-delivery-worker` ja processa em lote).
+
+A protecao contra ENTREGA duplicada (disparo imediato e cron concorrendo no
+mesmo minuto) continua sendo o claim atomico do `push-delivery-worker`
+(`deliver.ts`), intocado por esta mudanca.
 
 ---
 
