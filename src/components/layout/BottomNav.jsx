@@ -1,15 +1,15 @@
 import { NavLink } from 'react-router-dom'
-import { Sun, Inbox, KanbanSquare, Calendar, Link2, Sparkles } from 'lucide-react'
+import { Sun, ListTodo, Lightbulb, Calendar } from 'lucide-react'
 import { cx } from '../../lib/utils'
 
 // Menu inferior fixo — visivel apenas no mobile (escondido em lg+).
+// Quatro areas conceituais do Agenda 360. A IA e TRANSVERSAL (acionada dentro
+// de cada area), por isso nao ocupa uma aba propria.
 const ITEMS = [
   { to: '/', label: 'Hoje', icon: Sun, end: true },
-  { to: '/caixa', label: 'Caixa', icon: Inbox },
-  { to: '/semana', label: 'Semana', icon: KanbanSquare },
-  { to: '/mes', label: 'Calendario', icon: Calendar },
-  { to: '/links', label: 'Links', icon: Link2 },
-  { to: '/assistente', label: 'IA', icon: Sparkles },
+  { to: '/tarefas', label: 'Tarefas', icon: ListTodo },
+  { to: '/ideias', label: 'Ideias', icon: Lightbulb },
+  { to: '/dia', label: 'Agenda', icon: Calendar },
 ]
 
 export default function BottomNav() {

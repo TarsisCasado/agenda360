@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import {
   Sun,
+  ListTodo,
+  Lightbulb,
   Inbox,
   CalendarDays,
   KanbanSquare,
@@ -13,12 +15,17 @@ import {
 } from 'lucide-react'
 import { cx } from '../../lib/utils'
 
-const NAV = [
+// Areas principais (as 4 do produto) + acessos secundarios preservados.
+const PRIMARY = [
   { to: '/', label: 'Hoje', icon: Sun, end: true },
-  { to: '/caixa', label: 'Caixa de Entrada', icon: Inbox },
-  { to: '/dia', label: 'Agenda do dia', icon: CalendarDays },
+  { to: '/tarefas', label: 'Tarefas', icon: ListTodo },
+  { to: '/ideias', label: 'Ideias', icon: Lightbulb },
+  { to: '/dia', label: 'Agenda', icon: CalendarDays },
+]
+const SECONDARY = [
   { to: '/semana', label: 'Kanban semanal', icon: KanbanSquare },
   { to: '/mes', label: 'Calendario', icon: Calendar },
+  { to: '/caixa', label: 'Caixa de Entrada', icon: Inbox },
   { to: '/links', label: 'Central de links', icon: Link2 },
   { to: '/assistente', label: 'Assistente IA', icon: Sparkles },
   { to: '/relatorios', label: 'Relatorios', icon: BarChart3 },
@@ -63,7 +70,30 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {PRIMARY.map(({ to, label, icon: Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              onClick={onClose}
+              className={({ isActive }) =>
+                cx(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors',
+                  isActive
+                    ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                )
+              }
+            >
+              <Icon size={18} />
+              {label}
+            </NavLink>
+          ))}
+
+          <p className="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Mais
+          </p>
+          {SECONDARY.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

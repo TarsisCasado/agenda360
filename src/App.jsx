@@ -12,6 +12,9 @@ import Today from './pages/Today'
 // Code-splitting por rota: reduz o bundle inicial e acelera o carregamento no
 // celular. A tela "Hoje" (principal) e carregada de imediato; as demais sob
 // demanda.
+const Tasks = lazy(() => import('./pages/Tasks'))
+const Ideas = lazy(() => import('./pages/Ideas'))
+const IdeaEditor = lazy(() => import('./pages/IdeaEditor'))
 const Inbox = lazy(() => import('./pages/Inbox'))
 const DayAgenda = lazy(() => import('./pages/DayAgenda'))
 const WeekKanban = lazy(() => import('./pages/WeekKanban'))
@@ -60,8 +63,13 @@ export default function App() {
         <ErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
+              {/* Editor de Ideias em TELA CHEIA (fora do Layout: sem
+                  sidebar/bottom-nav, viewport inteira, teclado/safe-area). */}
+              <Route path="/ideias/:id" element={<IdeaEditor />} />
               <Route path="/" element={<Layout />}>
                 <Route index element={<Today />} />
+                <Route path="tarefas" element={<Tasks />} />
+                <Route path="ideias" element={<Ideas />} />
                 <Route path="caixa" element={<Inbox />} />
                 <Route path="dia" element={<DayAgenda />} />
                 <Route path="semana" element={<WeekKanban />} />
