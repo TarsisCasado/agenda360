@@ -51,8 +51,60 @@ body {
 }
 
 @layer components {
+  /* -------------------------------------------------------------------------
+     DESIGN SYSTEM V2 — superficies em CAMADAS (fundo -> superficie -> elevado)
+     por cor + espaco, com MENOS borda/sombra. Marca (indigo) e acento, nao
+     plano de fundo. Neutro = slate (dark mode ja calibrado).
+     ------------------------------------------------------------------------- */
+
+  /* Superficie base: sem borda, sem sombra. Separa por cor do fundo do app. */
+  .surface {
+    @apply rounded-2xl bg-white dark:bg-slate-900;
+  }
+  /* Superficie com contorno hairline (quando precisa de leve definicao). */
+  .surface-outline {
+    @apply rounded-2xl bg-white ring-1 ring-slate-200/70 dark:bg-slate-900 dark:ring-slate-800/80;
+  }
+  /* Elevado de verdade (sheets, menus, popovers): a UNICA sombra forte. */
+  .elevated {
+    @apply rounded-2xl bg-white shadow-xl shadow-slate-900/10 ring-1 ring-slate-200/60 dark:bg-slate-900 dark:shadow-black/40 dark:ring-slate-800;
+  }
+
+  /* .card mantido para compatibilidade, porem MAIS LEVE (menos admin). */
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900;
+    @apply rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm shadow-slate-900/[0.03] dark:bg-slate-900 dark:ring-slate-800/80 dark:shadow-none;
+  }
+
+  /* Linha de lista compacta (operacional, densa). */
+  .list-row {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors;
+  }
+  .list-row-hover {
+    @apply list-row hover:bg-slate-50 dark:hover:bg-slate-800/50;
+  }
+  /* Divisor hairline discreto. */
+  .hair {
+    @apply border-slate-100 dark:border-slate-800/70;
+  }
+
+  /* Escala tipografica clara (evita font-bold indiscriminado). */
+  .text-display {
+    @apply text-[27px] font-extrabold leading-[1.15] tracking-tight text-slate-900 dark:text-white;
+  }
+  .text-page {
+    @apply text-[22px] font-bold tracking-tight text-slate-900 dark:text-slate-50;
+  }
+  .text-section {
+    @apply text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500;
+  }
+  .text-body {
+    @apply text-[15px] leading-snug text-slate-700 dark:text-slate-200;
+  }
+  .text-secondary {
+    @apply text-sm text-slate-500 dark:text-slate-400;
+  }
+  .text-caption {
+    @apply text-xs text-slate-400 dark:text-slate-500;
   }
 
   .btn {
@@ -84,6 +136,16 @@ body {
   }
   .chip {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  /* Pilulas de filtro (segmented-like) — mobile-first. */
+  .pill {
+    @apply shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors;
+  }
+  .pill-on {
+    @apply pill bg-slate-900 text-white dark:bg-white dark:text-slate-900;
+  }
+  .pill-off {
+    @apply pill bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700;
   }
 }
 

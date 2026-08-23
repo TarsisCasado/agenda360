@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Outlet } from 'react-router-dom'
-import { Plus } from 'lucide-react'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import BottomNav from './BottomNav'
@@ -55,24 +54,15 @@ export default function Layout() {
           onNewTask={() => setFullTaskOpen(true)}
           onOpenPalette={() => setPaletteOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-8">
+        <main className="flex-1 overflow-y-auto px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-10">
           {/* Portao de workspace: sem workspace -> estado de recuperacao (nunca
               loading eterno nem excecao). 'loading'/'ready' seguem para as rotas. */}
           {gate === 'empty' ? <WorkspaceMissing /> : <Outlet />}
         </main>
       </div>
 
-      {/* Botao flutuante de criacao rapida (mobile) */}
-      <button
-        onClick={() => openQuickTask(undefined)}
-        className="fab press lg:hidden"
-        aria-label="Nova atividade"
-      >
-        <Plus size={26} />
-      </button>
-
-      {/* Menu inferior fixo (mobile) */}
-      <BottomNav />
+      {/* Menu inferior fixo com Captura central (mobile) */}
+      <BottomNav onCreate={() => openQuickTask(undefined)} />
 
       {/* Command Palette (Cmd/Ctrl + K) */}
       <CommandPalette
