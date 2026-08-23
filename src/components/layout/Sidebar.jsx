@@ -45,7 +45,9 @@ export default function Sidebar({ open, onClose }) {
 
       <aside
         className={cx(
-          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform dark:border-slate-800 dark:bg-slate-900 lg:static lg:translate-x-0',
+          // pt-safe: sem isso o cabecalho do drawer fica SOB a status bar do
+          // iPhone (relogio sobreposto ao logo) — bug visto no QA real.
+          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white pt-safe transition-transform dark:border-slate-800 dark:bg-slate-900 lg:static lg:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
@@ -114,7 +116,7 @@ export default function Sidebar({ open, onClose }) {
           ))}
         </nav>
 
-        <div className="border-t border-slate-200 p-4 text-center text-[11px] text-slate-400 dark:border-slate-800">
+        <div className="border-t border-slate-200 p-4 pb-safe text-center text-[11px] text-slate-400 dark:border-slate-800">
           Agenda Inteligente 360 · v0.1
         </div>
       </aside>

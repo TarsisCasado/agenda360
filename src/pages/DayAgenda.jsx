@@ -63,12 +63,12 @@ export default function DayAgenda() {
   const gridStartMin = DAY_START_HOUR * 60
   const gridHeight = (DAY_END_HOUR - DAY_START_HOUR + 1) * HOUR_PX
 
-  const go = (delta) => setDate(toISODate(addDays(fromISODate(date), delta)))
+  const go = (delta) => setDate(toISODate(addDays(fromISODate(date) || new Date(), delta)))
   const openTask = (task) => setModal({ open: true, task, defaults: null })
   const openNew = (hour) =>
     setModal({ open: true, task: null, defaults: { date, start_time: hour != null ? `${String(hour).padStart(2, '0')}:00` : '' } })
 
-  const today = isToday(fromISODate(date))
+  const today = isToday(fromISODate(date) || new Date())
   const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
   const nowTop = ((nowMin - gridStartMin) / 60) * HOUR_PX
   const nowVisible = today && nowMin >= gridStartMin && nowMin <= (DAY_END_HOUR + 1) * 60

@@ -59,6 +59,59 @@ export function createConversationMemory() {
     return data
   }
 
+  // -------------------------------------------------------------------------
+  // CONTEXTO DA CONVERSA — usa a coluna ai_conversations.context (jsonb) que JA
+  // existe no schema. E aqui que mora a INTENCAO PENDENTE do slot-filling.
+  // Nenhuma migration foi necessaria.
+  // -------------------------------------------------------------------------
+  async function getContext(conversationId) {
+    if (!conversationId) return {}
+    if (!isSupabaseConfigured) {
+      const row = localStore.table('ai_conversations').find((c) => c.id === conversationId)
+      return row?.context || {}
+    }
+    const { data, error } = await supabase
+      .from('ai_conversations')
+      .select('context')
+      .eq('id', conversationId)
+      .single()
+    if (error) return {}
+    return data?.context || {}
+  }
+
+  async function setContext(conversationId, patch = {}) {
+    if (!conversationId) return {}
+    const current = await getContext(conversationId)
+    const next = { ...current, ...patch }
+    if (!isSupabaseConfigured) {
+      const rows = localStore.table('ai_conversations').map((c) =>
+        c.id === conversationId ? { ...c, context: next, updated_at: new Date().toISOString() } : c,
+      )
+      localStore.setTable('ai_conversations', rows)
+      return next
+    }
+    const { error } = await supabase
+      .from('ai_conversations')
+      .update({ context: next, updated_at: new Date().toISOString() })
+      .eq('id', conversationId)
+    if (error) throw error
+    return next
+  }
+
+  // Intencao pendente = { intent, data, asked[], awaiting, at }.
+  async function getPending(conversationId) {
+    const context = await getContext(conversationId)
+    return context.pending || null
+  }
+
+  async function setPending(conversationId, pending) {
+    return setContext(conversationId, { pending: pending || null })
+  }
+
+  async function clearPending(conversationId) {
+    return setContext(conversationId, { pending: null })
+  }
+
   async function history(conversationId, limit = MAX_HISTORY) {
     if (!conversationId) return []
     if (!isSupabaseConfigured) {
@@ -67,17 +120,29 @@ export function createConversationMemory() {
         .filter((m) => m.conversation_id === conversationId)
         .slice(-limit)
     }
+    // Ordena DESC + limit para pegar as mensagens MAIS RECENTES (com
+    // ascending:true o limit devolvia o inicio da conversa) e reinverte.
     const { data, error } = await supabase
       .from('ai_messages')
       .select('role, content, created_at')
       .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(limit)
     if (error) throw error
-    return data
+    return (data || []).slice().reverse()
   }
 
-  return { startConversation, append, history, MAX_HISTORY }
+  return {
+    startConversation,
+    append,
+    history,
+    getContext,
+    setContext,
+    getPending,
+    setPending,
+    clearPending,
+    MAX_HISTORY,
+  }
 }
 
 export const conversationMemory = createConversationMemory()

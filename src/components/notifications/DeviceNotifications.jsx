@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Bell, BellRing, BellOff, ShieldAlert, Smartphone } from 'lucide-react'
+import { Bell, BellRing, BellOff, ShieldAlert, Smartphone, Settings2 } from 'lucide-react'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
-import { pushService } from '../../services/pushService'
+import { pushService, isPushConfigured } from '../../services/pushService'
 import { describeDeviceNotifications } from '../../lib/device'
 import { cx } from '../../lib/utils'
 
@@ -44,6 +44,7 @@ export default function DeviceNotifications({ variant = 'card', onOpenInstall })
   }, [status])
 
   const enable = async () => {
+    if (!isPushConfigured()) return // botao nem e renderizado; guarda extra
     const result = await pushService.subscribe(user?.id)
     if (result.ok) {
       setStatus('granted')
@@ -64,6 +65,8 @@ export default function DeviceNotifications({ variant = 'card', onOpenInstall })
   }
 
   const compact = variant === 'compact'
+  // Avaliado no render (nao e estado): depende so do build/ambiente.
+  const configured = isPushConfigured()
 
   // ----- estados ------------------------------------------------------------
   if (status === 'granted') {
@@ -101,6 +104,17 @@ export default function DeviceNotifications({ variant = 'card', onOpenInstall })
       <Shell compact={compact} tone="muted" icon={ShieldAlert}
         title="Notificacoes indisponiveis"
         text="Este navegador nao suporta notificacoes de dispositivo." />
+    )
+  }
+
+  // Ambiente sem Web Push configurado (sem Supabase ou sem chave VAPID no
+  // build): NAO oferece o botao. Tentar aqui so produziria o mesmo erro
+  // repetidamente — estado informativo e melhor que um toque inutil.
+  if (!configured) {
+    return (
+      <Shell compact={compact} tone="muted" icon={Settings2}
+        title="Push indisponivel neste ambiente"
+        text="Este ambiente ainda nao tem as notificacoes push configuradas. Os lembretes continuam aparecendo dentro do app." />
     )
   }
 

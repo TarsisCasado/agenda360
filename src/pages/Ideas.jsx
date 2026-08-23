@@ -9,7 +9,7 @@ import { useData } from '../context/DataContext'
 import { useToast } from '../context/ToastContext'
 import { inboxService } from '../services/inboxService'
 import { ideaTitle, ideaSnippet, sortIdeasByRecent } from '../lib/ideas'
-import { formatShort } from '../lib/date'
+import { formatTimestamp } from '../lib/date'
 
 // ---------------------------------------------------------------------------
 // IDEIAS — lista enxuta (estilo Apple Notes). Reutiliza inbox_items (title +
@@ -83,7 +83,8 @@ export default function Ideas() {
           {ideas.map((note) => {
             const title = ideaTitle(note)
             const sub = ideaSnippet(note)
-            const date = note.updated_at || note.created_at
+            // updated_at/created_at sao TIMESTAMPS, nao datas puras.
+            const stamp = formatTimestamp(note.updated_at || note.created_at)
             return (
               <li key={note.id}>
                 <button
@@ -92,7 +93,7 @@ export default function Ideas() {
                 >
                   <p className="truncate text-[15px] font-bold text-slate-800 dark:text-slate-100">{title}</p>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
-                    {date && <span className="shrink-0">{formatShort(date)}</span>}
+                    {stamp && <span className="shrink-0">{stamp}</span>}
                     {sub && <span className="truncate text-slate-500 dark:text-slate-400">{sub}</span>}
                   </div>
                 </button>

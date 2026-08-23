@@ -82,8 +82,9 @@ export default function Reports() {
     const dayCount = {}
     const dayMiss = {}
     for (const t of tasks) {
-      if (!t.date) continue
-      const dow = fromISODate(t.date).getDay()
+      const day = fromISODate(t.date)
+      if (!day) continue
+      const dow = day.getDay()
       dayCount[dow] = (dayCount[dow] || 0) + 1
       if (t.status === STATUS.MISSED) dayMiss[dow] = (dayMiss[dow] || 0) + 1
     }

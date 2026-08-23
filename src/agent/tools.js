@@ -16,6 +16,7 @@
 // `services` e injetado (testes usam mocks). `identity` vem SEMPRE da sessao.
 // ---------------------------------------------------------------------------
 import { AgentError, ErrorCodes } from './errors'
+import { norm } from './nlu/normalize'
 import { FLAGS } from './featureFlags'
 import { STATUS } from '../lib/constants'
 
@@ -193,10 +194,13 @@ export function createTools(services) {
           start: data.start,
           end: data.end,
         })
-        const q = (data.query || '').toLowerCase()
+        // Busca INSENSIVEL A ACENTO: o usuario escreve "reuniao" ou "reunião"
+        // e precisa achar a mesma tarefa (senao "conclui a reunião" nao
+        // encontra "Reuniao com gerentes").
+        const q = norm(data.query || '')
         return list.filter(
           (t) =>
-            (!q || t.title?.toLowerCase().includes(q)) &&
+            (!q || norm(t.title).includes(q)) &&
             (!data.status || t.status === data.status),
         )
       },
