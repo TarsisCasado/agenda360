@@ -45,26 +45,30 @@ export default function Ideas() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <header className="mb-5 flex items-end justify-between gap-3">
+      <header className="mb-5 flex items-end justify-between gap-3 px-2">
         <div>
-          <div className="flex items-center gap-2 text-amber-500">
-            <Lightbulb size={18} />
-            <span className="text-sm font-semibold">Escreva sem fricção</span>
-          </div>
-          <h1 className="mt-0.5 text-2xl font-extrabold text-slate-800 dark:text-slate-100">Ideias</h1>
+          <h1 className="text-display">Ideias</h1>
+          <p className="text-caption mt-1">
+            {ideas.length > 0 ? `${ideas.length} anotação${ideas.length > 1 ? 'ões' : ''}` : 'Escreva sem fricção'}
+          </p>
         </div>
-        <button onClick={novaIdeia} disabled={creating} className="btn-primary press shrink-0">
-          {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-          Nova ideia
+        {/* Acao contextual, nao botao permanente com rotulo longo. */}
+        <button
+          onClick={novaIdeia}
+          disabled={creating}
+          aria-label="Nova ideia"
+          className="press flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white"
+        >
+          {creating ? <Loader2 size={17} className="animate-spin" /> : <Plus size={19} />}
         </button>
       </header>
 
       {error ? (
         <ErrorState onRetry={reload} />
       ) : loading && ideas.length === 0 ? (
-        <div className="space-y-2">
+        <div className="space-y-2 px-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800/60" />
+            <div key={i} className="skeleton h-16" />
           ))}
         </div>
       ) : ideas.length === 0 ? (
@@ -73,13 +77,14 @@ export default function Ideas() {
           title="Nenhuma ideia ainda"
           description="Capture um pensamento, um rascunho, uma lista — sem formulário. Toque em Nova ideia e comece a escrever."
           action={
-            <button onClick={novaIdeia} className="btn-primary press">
-              <Plus size={16} /> Nova ideia
+            <button onClick={novaIdeia} className="btn-secondary press">
+              <Plus size={15} /> Nova ideia
             </button>
           }
         />
       ) : (
-        <ul className="space-y-2">
+        // Lista estilo Notes: o conteudo manda, a moldura some.
+        <ul className="list">
           {ideas.map((note) => {
             const title = ideaTitle(note)
             const sub = ideaSnippet(note)
@@ -89,12 +94,12 @@ export default function Ideas() {
               <li key={note.id}>
                 <button
                   onClick={() => navigate(`/ideias/${note.id}`, { state: { note } })}
-                  className="interactive card block w-full px-4 py-3.5 text-left hover:-translate-y-0.5 hover:shadow-md"
+                  className="block w-full bg-surface px-3 py-3 text-left transition-colors active:bg-surface-2"
                 >
-                  <p className="truncate text-[15px] font-bold text-slate-800 dark:text-slate-100">{title}</p>
-                  <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
-                    {stamp && <span className="shrink-0">{stamp}</span>}
-                    {sub && <span className="truncate text-slate-500 dark:text-slate-400">{sub}</span>}
+                  <p className="truncate text-[15px] font-semibold text-primary">{title}</p>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    {stamp && <span className="text-caption shrink-0 tabular-nums">{stamp}</span>}
+                    {sub && <span className="truncate text-[13px] text-muted">{sub}</span>}
                   </div>
                 </button>
               </li>

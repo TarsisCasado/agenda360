@@ -89,14 +89,14 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className="card flex flex-col items-center justify-center gap-3 px-6 py-14 text-center"
+      className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center"
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500 dark:bg-red-950/40">
-        <AlertTriangle size={22} />
+      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-danger">
+        <AlertTriangle size={20} />
       </div>
       <div>
-        <p className="font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+        <p className="text-[15px] font-semibold text-primary">{title}</p>
+        {description && <p className="mx-auto mt-1 max-w-[19rem] text-[13px] leading-relaxed text-muted">{description}</p>}
       </div>
       {onRetry && (
         <button onClick={onRetry} className="btn-secondary press">
@@ -107,21 +107,22 @@ export function ErrorState({
   )
 }
 
+// Estado vazio: SEM caixa. Ar + um icone discreto + uma frase util.
 export function EmptyState({ icon: Icon, title, description, action }) {
   return (
-    <div className="card flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+    <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
       {Icon && (
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800">
-          <Icon size={22} />
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-muted">
+          <Icon size={20} strokeWidth={1.8} />
         </div>
       )}
       <div>
-        <p className="font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+        <p className="text-[15px] font-semibold text-primary">{title}</p>
         {description && (
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
+          <p className="mx-auto mt-1 max-w-[19rem] text-[13px] leading-relaxed text-muted">{description}</p>
         )}
       </div>
-      {action}
+      {action && <div className="mt-1">{action}</div>}
     </div>
   )
 }

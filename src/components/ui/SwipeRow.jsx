@@ -45,11 +45,11 @@ export default function SwipeRow({ children, onSwipeRight, onSwipeLeft, disabled
   return (
     <div className="relative overflow-hidden">
       {/* ação à esquerda (concluir) */}
-      <div className={cx('absolute inset-y-0 left-0 flex items-center gap-1.5 bg-emerald-500 px-4 text-sm font-semibold text-white', dx > 4 ? 'opacity-100' : 'opacity-0')}>
+      <div className={cx('absolute inset-y-0 left-0 flex items-center gap-1.5 bg-positive px-4 text-[13px] font-semibold text-white transition-opacity', dx > 4 ? 'opacity-100' : 'opacity-0')}>
         <Check size={18} /> {dx >= THRESHOLD ? 'Concluir' : ''}
       </div>
       {/* ação à direita (reagendar) */}
-      <div className={cx('absolute inset-y-0 right-0 flex items-center gap-1.5 bg-amber-500 px-4 text-sm font-semibold text-white', dx < -4 ? 'opacity-100' : 'opacity-0')}>
+      <div className={cx('absolute inset-y-0 right-0 flex items-center gap-1.5 bg-warning px-4 text-[13px] font-semibold text-white transition-opacity', dx < -4 ? 'opacity-100' : 'opacity-0')}>
         {dx <= -THRESHOLD ? 'Reagendar' : ''} <CalendarClock size={18} />
       </div>
       <div
@@ -57,7 +57,7 @@ export default function SwipeRow({ children, onSwipeRight, onSwipeLeft, disabled
         onTouchMove={onMove}
         onTouchEnd={onEnd}
         style={{ transform: `translateX(${dx}px)`, transition: revealing ? 'none' : 'transform 0.2s ease-out' }}
-        className="relative bg-white dark:bg-slate-900"
+        className="relative bg-surface"
       >
         {children}
       </div>

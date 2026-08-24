@@ -2,8 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================================
+   DESIGN SYSTEM V3 — Agenda 360
+   ---------------------------------------------------------------------------
+   Um unico lugar define o tema. As telas usam tokens semanticos
+   (bg-surface, text-secondary, border-hairline) e NAO cores cruas + `dark:`
+   duplicado — que era a origem da inconsistencia entre telas.
+
+   Principios: menos caixas, menos bordas, mais hierarquia e respiro.
+   Separacao por COR e ESPACO; sombra so onde algo realmente flutua.
+   =========================================================================== */
+
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+
+  /* Superficies em camadas (canvas -> surface -> surface-2 -> surface-3) */
+  --c-canvas: 247 248 250;
+  --c-surface: 255 255 255;
+  --c-surface-2: 242 244 247;
+  --c-surface-3: 232 235 240;
+  --c-hairline: 226 230 237;
+
+  /* Texto: 4 niveis, sempre nesta ordem de importancia */
+  --c-text: 16 22 34;
+  --c-text-2: 88 98 116;
+  --c-text-3: 137 147 164;
+  --c-text-4: 170 179 193;
+
+  /* Acento e semanticas */
+  --c-accent: 79 70 229;
+  --c-accent-soft: 238 240 255;
+  --c-accent-text: 67 56 202;
+  --c-positive: 16 152 106;
+  --c-warning: 197 128 12;
+  --c-danger: 220 62 62;
+
+  /* Movimento */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 130ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+}
+
+/* Dark elegante: grafite azulado, NAO preto puro. Hairlines por luz (branco
+   com baixa opacidade), nunca por linha cinza dura. */
+.dark {
+  color-scheme: dark;
+
+  --c-canvas: 11 13 18;
+  --c-surface: 20 23 30;
+  --c-surface-2: 27 31 40;
+  --c-surface-3: 36 41 52;
+  --c-hairline: 44 50 62;
+
+  --c-text: 240 243 248;
+  --c-text-2: 160 170 187;
+  --c-text-3: 116 126 143;
+  --c-text-4: 92 101 117;
+
+  --c-accent: 129 140 248;
+  --c-accent-soft: 33 36 62;
+  --c-accent-text: 165 180 252;
+  --c-positive: 52 199 145;
+  --c-warning: 234 179 8;
+  --c-danger: 248 113 113;
 }
 
 html,
@@ -13,11 +75,9 @@ body,
 }
 
 body {
-  @apply bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-100;
+  @apply bg-canvas text-primary antialiased;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
-  /* Evita realce azul ao tocar em elementos no celular */
   -webkit-tap-highlight-color: transparent;
-  /* Trava o "puxa para atualizar" e overscroll no mobile */
   overscroll-behavior-y: none;
 }
 
@@ -28,8 +88,10 @@ body {
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }
+.pb-safe-nav {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 5.5rem);
+}
 
-/* Esconde a scrollbar mantendo o scroll (usado no Kanban mobile) */
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -38,13 +100,12 @@ body {
   display: none;
 }
 
-/* Scrollbar discreta */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-slate-300 dark:bg-slate-700;
+  @apply rounded-full bg-surface-3;
 }
 ::-webkit-scrollbar-track {
   @apply bg-transparent;
@@ -52,104 +113,195 @@ body {
 
 @layer components {
   /* -------------------------------------------------------------------------
-     DESIGN SYSTEM V2 — superficies em CAMADAS (fundo -> superficie -> elevado)
-     por cor + espaco, com MENOS borda/sombra. Marca (indigo) e acento, nao
-     plano de fundo. Neutro = slate (dark mode ja calibrado).
+     SUPERFICIES — 3 niveis, so isso.
      ------------------------------------------------------------------------- */
 
-  /* Superficie base: sem borda, sem sombra. Separa por cor do fundo do app. */
+  /* Painel: separado do canvas por COR. Sem borda, sem sombra. */
   .surface {
-    @apply rounded-2xl bg-white dark:bg-slate-900;
+    @apply rounded-surface bg-surface;
   }
-  /* Superficie com contorno hairline (quando precisa de leve definicao). */
-  .surface-outline {
-    @apply rounded-2xl bg-white ring-1 ring-slate-200/70 dark:bg-slate-900 dark:ring-slate-800/80;
+  /* Painel com definicao minima (quando encosta em outra superficie clara). */
+  .surface-line {
+    @apply rounded-surface bg-surface ring-1 ring-hairline/70;
   }
-  /* Elevado de verdade (sheets, menus, popovers): a UNICA sombra forte. */
-  .elevated {
-    @apply rounded-2xl bg-white shadow-xl shadow-slate-900/10 ring-1 ring-slate-200/60 dark:bg-slate-900 dark:shadow-black/40 dark:ring-slate-800;
+  /* Bloco secundario dentro de conteudo (previa, citacao, resumo). */
+  .surface-sunken {
+    @apply rounded-row bg-surface-2;
+  }
+  /* Flutuante REAL: folhas, menus, popovers. A unica sombra forte do sistema. */
+  .floating {
+    @apply rounded-surface bg-surface shadow-float ring-1 ring-hairline/60;
   }
 
-  /* .card mantido para compatibilidade, porem MAIS LEVE (menos admin). */
-  .card {
-    @apply rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm shadow-slate-900/[0.03] dark:bg-slate-900 dark:ring-slate-800/80 dark:shadow-none;
-  }
-
-  /* Linha de lista compacta (operacional, densa). */
-  .list-row {
-    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors;
-  }
-  .list-row-hover {
-    @apply list-row hover:bg-slate-50 dark:hover:bg-slate-800/50;
-  }
-  /* Divisor hairline discreto. */
+  /* Divisor hairline (usar em divide-y / border-t). */
   .hair {
-    @apply border-slate-100 dark:border-slate-800/70;
+    @apply border-hairline/70;
+  }
+  .divide-hair > * + * {
+    @apply border-t border-hairline/60;
   }
 
-  /* Escala tipografica clara (evita font-bold indiscriminado). */
+  /* -------------------------------------------------------------------------
+     LISTAS — a estrutura dominante do produto. Linha, nao card.
+     ------------------------------------------------------------------------- */
+
+  /* Lista: vive sobre o canvas, separada por hairline. O canto arredondado
+     fecha o bloco sem precisar de borda — e o que faz a lista parecer
+     acabada em vez de uma tabela cortada na margem. */
+  .list {
+    @apply overflow-hidden rounded-surface divide-y divide-hairline/60;
+  }
+  /* Lista em painel (quando o agrupamento precisa de fundo proprio). */
+  .list-panel {
+    @apply surface overflow-hidden divide-y divide-hairline/60;
+  }
+
+  .row {
+    @apply flex items-center gap-3 rounded-row px-2 py-2.5 transition-colors;
+  }
+  .row-tap {
+    @apply row cursor-pointer select-none active:bg-surface-2;
+  }
+  @media (hover: hover) {
+    .row-tap:hover {
+      @apply bg-surface-2/70;
+    }
+  }
+
+  /* -------------------------------------------------------------------------
+     TIPOGRAFIA — hierarquia forte, poucos tamanhos.
+     ------------------------------------------------------------------------- */
+  .text-hero {
+    @apply text-[30px] font-bold leading-[1.1] tracking-[-0.02em] text-primary;
+  }
   .text-display {
-    @apply text-[27px] font-extrabold leading-[1.15] tracking-tight text-slate-900 dark:text-white;
+    @apply text-[26px] font-bold leading-[1.15] tracking-[-0.02em] text-primary;
   }
   .text-page {
-    @apply text-[22px] font-bold tracking-tight text-slate-900 dark:text-slate-50;
+    @apply text-[21px] font-bold tracking-[-0.015em] text-primary;
+  }
+  .text-title {
+    @apply text-[17px] font-semibold tracking-[-0.01em] text-primary;
+  }
+  .text-item {
+    @apply text-[15px] font-medium leading-snug text-primary;
   }
   .text-section {
-    @apply text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500;
+    @apply text-[12px] font-semibold uppercase tracking-[0.06em] text-muted;
   }
   .text-body {
-    @apply text-[15px] leading-snug text-slate-700 dark:text-slate-200;
+    @apply text-[15px] leading-relaxed text-secondary;
   }
-  .text-secondary {
-    @apply text-sm text-slate-500 dark:text-slate-400;
+  .text-secondary-sm {
+    @apply text-[13px] leading-snug text-secondary;
   }
   .text-caption {
-    @apply text-xs text-slate-400 dark:text-slate-500;
+    @apply text-[12px] leading-snug text-muted;
   }
 
+  /* -------------------------------------------------------------------------
+     CONTROLES
+     ------------------------------------------------------------------------- */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-control px-4 text-[14px] font-semibold transition-all;
+    min-height: 40px;
+  }
+  .btn:focus-visible {
+    @apply outline-none ring-2 ring-accent/45;
+  }
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-45;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700;
+    @apply btn bg-accent text-white active:brightness-95;
   }
   .btn-secondary {
-    @apply btn border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700;
+    @apply btn bg-surface-2 text-primary active:bg-surface-3;
   }
   .btn-ghost {
-    @apply btn text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800;
+    @apply btn text-secondary active:bg-surface-2;
   }
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700;
+    @apply btn bg-danger text-white active:brightness-95;
+  }
+  @media (hover: hover) {
+    .btn-primary:hover:not(:disabled) {
+      filter: brightness(1.07);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      @apply bg-surface-3;
+    }
+    .btn-ghost:hover:not(:disabled) {
+      @apply bg-surface-2;
+    }
+  }
+
+  /* Botao-icone: alvo de toque de 40px sem peso visual. */
+  .icon-btn {
+    @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-secondary transition-colors active:bg-surface-2;
+  }
+  @media (hover: hover) {
+    .icon-btn:hover {
+      @apply bg-surface-2 text-primary;
+    }
   }
 
   .input {
-    /* text-base (16px) evita zoom automatico do iOS ao focar campos */
-    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-800 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 sm:text-sm;
+    /* 16px evita o zoom automatico do iOS ao focar. */
+    @apply w-full rounded-control bg-surface-2 px-3.5 py-2.5 text-base text-primary transition-shadow placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/40 sm:text-[15px];
   }
-  /* Botao flutuante (mobile) */
-  .fab {
-    @apply fixed bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition-transform active:scale-95 lg:bottom-6;
+  .field {
+    @apply w-full border-0 bg-transparent p-0 text-primary placeholder:text-muted focus:outline-none focus:ring-0;
   }
   .label {
-    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400;
+    @apply mb-1.5 block text-[12px] font-semibold text-secondary;
   }
+
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] font-medium;
   }
-  /* Pilulas de filtro (segmented-like) — mobile-first. */
+  /* Segmented control (filtros) */
   .pill {
-    @apply shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors;
+    @apply shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors;
   }
   .pill-on {
-    @apply pill bg-slate-900 text-white dark:bg-white dark:text-slate-900;
+    @apply pill bg-primary text-canvas;
   }
   .pill-off {
-    @apply pill bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700;
+    @apply pill bg-surface-2 text-secondary active:bg-surface-3;
+  }
+
+  /* -------------------------------------------------------------------------
+     COMPATIBILIDADE — telas secundarias (Links, Relatorios, Calendario,
+     Configuracoes, Caixa de Entrada) ainda usam os nomes da V2. Aqui eles
+     apontam para os TOKENS novos, entao o app inteiro herda o tema sem
+     reescrita. Estes aliases saem quando essas telas forem migradas.
+     ------------------------------------------------------------------------- */
+  .card {
+    @apply rounded-surface bg-surface ring-1 ring-hairline/60;
+  }
+  .surface-outline {
+    @apply surface-line;
+  }
+  .elevated {
+    @apply floating;
+  }
+  .list-row {
+    @apply row;
+  }
+  .list-row-hover {
+    @apply row-tap;
+  }
+
+  /* Acao flutuante */
+  .fab {
+    @apply fixed bottom-24 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-float transition-transform active:scale-95 lg:bottom-6;
   }
 }
 
-/* Animacoes leves */
+/* ===========================================================================
+   MOVIMENTO — poucas animacoes, todas curtas e com a mesma curva.
+   =========================================================================== */
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -161,10 +313,9 @@ body {
   }
 }
 .animate-in {
-  animation: fade-in 0.18s ease-out;
+  animation: fade-in var(--dur-base) var(--ease-out);
 }
 
-/* Entrada de mensagem (chat premium) — slide + fade, GPU-friendly (60fps) */
 @keyframes msg-in {
   from {
     opacity: 0;
@@ -176,12 +327,40 @@ body {
   }
 }
 .msg-in {
-  animation: msg-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: msg-in 220ms var(--ease-out);
 }
 
-/* Indicador "digitando" (tres pontos) */
+/* Folha subindo (bottom sheet) */
+@keyframes sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-sheet {
+  animation: sheet-up 260ms var(--ease-out);
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-backdrop {
+  animation: backdrop-in 200ms ease-out;
+}
+
 @keyframes typing-dot {
-  0%, 60%, 100% {
+  0%,
+  60%,
+  100% {
     opacity: 0.25;
     transform: translateY(0);
   }
@@ -205,64 +384,10 @@ body {
   }
 }
 .animate-scale-in {
-  animation: scale-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: scale-in 160ms var(--ease-out);
 }
 
-.drag-over {
-  @apply border-brand-400 bg-brand-50/60 dark:border-brand-500 dark:bg-brand-900/20;
-}
-.dragging {
-  @apply opacity-40;
-}
-
-/* ---------------------------------------------------------------------------
-   Design System — tokens de movimento, elevacao e loaders (premium)
-   --------------------------------------------------------------------------- */
-
-/* Skeleton com shimmer suave */
-@keyframes shimmer {
-  100% {
-    transform: translateX(100%);
-  }
-}
-.skeleton {
-  @apply relative overflow-hidden rounded-md bg-slate-200/70 dark:bg-slate-700/50;
-}
-.skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.35),
-    transparent
-  );
-  animation: shimmer 1.4s infinite;
-}
-.dark .skeleton::after {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.06),
-    transparent
-  );
-}
-
-/* Elevacao consistente ao passar o mouse / pressionar */
-.interactive {
-  @apply transition-all duration-150 ease-out;
-}
-.press {
-  @apply transition-transform duration-100 active:scale-[0.97];
-}
-/* Elevacao sutil no hover (cards clicaveis) */
-.lift {
-  @apply transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md;
-}
-
-/* Pop de sucesso (ex.: item concluido) — leve e discreto */
+/* Confirmacao visual ao concluir/criar */
 @keyframes pop {
   0% {
     transform: scale(0.85);
@@ -277,10 +402,42 @@ body {
   }
 }
 .animate-pop {
-  animation: pop 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: pop 240ms var(--ease-out);
 }
 
-/* Respeita quem prefere menos movimento (acessibilidade) */
+/* Feedback de toque — o gesto responde ao dedo. */
+.press {
+  @apply transition-transform duration-100 active:scale-[0.97];
+}
+.interactive {
+  @apply transition-all duration-150 ease-out;
+}
+
+.drag-over {
+  @apply bg-accent-soft ring-2 ring-accent/40;
+}
+.dragging {
+  @apply opacity-40;
+}
+
+/* Loading elegante: shimmer discreto, sem bloco cinza pulsante. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  @apply relative overflow-hidden rounded-control bg-surface-2;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--c-surface-3) / 0.9), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

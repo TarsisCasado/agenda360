@@ -50,7 +50,7 @@ export default function Layout() {
   }, [])
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-[100dvh] overflow-hidden bg-canvas">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -59,7 +59,7 @@ export default function Layout() {
           onNewTask={() => setFullTaskOpen(true)}
           onOpenPalette={() => setPaletteOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-10">
+        <main className="flex-1 overflow-y-auto px-3 pb-safe-nav pt-4 sm:px-6 lg:px-10 lg:pb-10">
           {/* Portao de workspace: sem workspace -> estado de recuperacao (nunca
               loading eterno nem excecao). 'loading'/'ready' seguem para as rotas. */}
           {/* Boundary POR-ROTA: uma falha de render de uma pagina NAO derruba o

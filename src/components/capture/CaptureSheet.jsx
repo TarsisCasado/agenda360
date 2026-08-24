@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Sparkles, CornerDownLeft, Loader2, Check, SlidersHorizontal, Calendar, Tag, Bell } from 'lucide-react'
+import { Sparkles, Loader2, Check, SlidersHorizontal, Calendar, Tag, Bell, ArrowUp } from 'lucide-react'
 import Sheet from '../ui/Sheet'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -8,15 +8,23 @@ import { useToast } from '../../context/ToastContext'
 import { agentKernel } from '../../agent/kernel'
 import { toISODate, addDays, formatShort } from '../../lib/date'
 
-// CAPTURA UNIVERSAL — a entrada principal do Agenda 360. Escreva em linguagem
-// natural; o interpretador REAL (agentKernel) entende e devolve uma previa
-// simples para confirmar. Sem formulario de selects na frente. Baixa confianca
-// -> pergunta so o necessario. "Editar detalhes" abre o editor completo.
+// ---------------------------------------------------------------------------
+// CAPTURA UNIVERSAL — uma conversa, nao um formulario.
+//
+// Fluxo visual: voce escreve -> o que voce disse fica na tela como uma fala ->
+// o assistente responde com o que entendeu -> voce confirma. Quando falta um
+// dado, a pergunta aparece como fala dele e o campo continua ali, no mesmo
+// lugar: nada de trocar de tela ou reabrir formulario.
+//
+// A interpretacao e o multi-turno vem do agente local (CP2) — aqui so muda a
+// apresentacao.
+// ---------------------------------------------------------------------------
 function whenLabel(payload) {
   if (!payload?.date) return null
   const today = toISODate(new Date())
   const tomorrow = toISODate(addDays(new Date(), 1))
-  const d = payload.date === today ? 'Hoje' : payload.date === tomorrow ? 'Amanhã' : formatShort(payload.date)
+  const d =
+    payload.date === today ? 'Hoje' : payload.date === tomorrow ? 'Amanhã' : formatShort(payload.date)
   const t = payload.start_time ? ` · ${String(payload.start_time).slice(0, 5)}` : ''
   return d + t
 }
@@ -31,29 +39,52 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
   const convRef = useRef(null)
 
   const [text, setText] = useState('')
-  const [phase, setPhase] = useState('input') // input | thinking | proposal | clarify | busy
+  const [phase, setPhase] = useState('input') // input | thinking | proposal | busy
   const [proposal, setProposal] = useState(null)
-  const [question, setQuestion] = useState('')
+  const [turns, setTurns] = useState([]) // [{ role:'user'|'agent', text }]
 
   useEffect(() => {
     if (open) {
-      setText(''); setPhase('input'); setProposal(null); setQuestion(''); convRef.current = null
-      setTimeout(() => inputRef.current?.focus(), 120)
+      setText('')
+      setPhase('input')
+      setProposal(null)
+      setTurns([])
+      convRef.current = null
+      setTimeout(() => inputRef.current?.focus(), 140)
     }
   }, [open])
 
   const interpret = async (content) => {
     const t = content.trim()
     if (!t) return
+    setTurns((prev) => [...prev, { role: 'user', text: t }])
+    setText('')
     setPhase('thinking')
     try {
-      const res = await agentKernel.assistant.ask({ text: t, identity, categories, conversationId: convRef.current })
+      const res = await agentKernel.assistant.ask({
+        text: t,
+        identity,
+        categories,
+        conversationId: convRef.current,
+      })
       convRef.current = res.conversationId || convRef.current
-      if (res.kind === 'proposal') { setProposal(res.proposal); setPhase('proposal') }
-      else if (res.kind === 'clarification') { setQuestion(res.message); setText(''); setPhase('clarify') }
-      else if (res.kind === 'result') { toast('Busca concluída'); onClose?.() }
-      else if (res.kind === 'selection') { setQuestion(res.message); setPhase('clarify') }
-      else { setQuestion('Não entendi bem. Pode reescrever com mais detalhes?'); setPhase('clarify') }
+      if (res.kind === 'proposal') {
+        setProposal(res.proposal)
+        setPhase('proposal')
+      } else if (res.kind === 'clarification' || res.kind === 'selection') {
+        setTurns((prev) => [...prev, { role: 'agent', text: res.message }])
+        setPhase('input')
+        setTimeout(() => inputRef.current?.focus(), 60)
+      } else if (res.kind === 'result') {
+        toast('Busca concluída')
+        onClose?.()
+      } else {
+        setTurns((prev) => [
+          ...prev,
+          { role: 'agent', text: 'Não entendi bem. Pode escrever de outro jeito?' },
+        ])
+        setPhase('input')
+      }
     } catch (err) {
       toast('Não consegui interpretar agora: ' + err.message, 'error')
       setPhase('input')
@@ -82,84 +113,177 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
 
   const category = categories.find((c) => c.id === proposal?.payload?.category_id)
   const isTask = proposal && proposal.intent !== 'create_link'
+  const writing = phase === 'input' || phase === 'thinking'
 
   return (
     <Sheet open={open} onClose={onClose} maxWidth="max-w-xl">
-      {/* INPUT / CLARIFY */}
-      {(phase === 'input' || phase === 'clarify' || phase === 'thinking') && (
-        <div>
-          <div className="flex items-center gap-2 text-brand-600 dark:text-brand-400">
-            <Sparkles size={16} />
-            <span className="text-sm font-semibold">Captura</span>
-          </div>
-          <h2 className="text-display mt-1 !text-[22px]">
-            {phase === 'clarify' ? question : 'O que você precisa organizar?'}
-          </h2>
-          <textarea
-            ref={inputRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); interpret(text) } }}
-            placeholder={phase === 'clarify' ? 'Responda aqui…' : 'Ex: Reunião com Rafael amanhã às 8h'}
-            rows={3}
-            className="mt-3 w-full resize-none bg-transparent text-[17px] leading-relaxed text-slate-800 placeholder:text-slate-300 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-600"
-          />
-          <div className="mt-2 flex items-center justify-between">
-            <p className="text-caption">Enter para interpretar · linguagem natural</p>
-            <button
-              onClick={() => interpret(text)}
-              disabled={!text.trim() || phase === 'thinking'}
-              className="btn-primary press"
-            >
-              {phase === 'thinking' ? <Loader2 size={16} className="animate-spin" /> : <CornerDownLeft size={16} />}
-              Interpretar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* PROPOSAL — previa simples */}
-      {(phase === 'proposal' || phase === 'busy') && proposal && (
-        <div>
-          <div className="flex items-center gap-2 text-brand-600 dark:text-brand-400">
-            <Sparkles size={16} /> <span className="text-sm font-semibold">Entendi</span>
-          </div>
-          <div className="surface-outline mt-3 p-4">
-            <p className="text-[17px] font-bold text-slate-800 dark:text-slate-100">
-              {proposal.payload?.title || proposal.payload?.url || 'Nova captura'}
-            </p>
-            <div className="mt-2 space-y-1.5 text-sm text-slate-500 dark:text-slate-400">
-              {whenLabel(proposal.payload) && (
-                <p className="flex items-center gap-2"><Calendar size={14} /> {whenLabel(proposal.payload)}</p>
-              )}
-              {category && (
-                <p className="flex items-center gap-2">
-                  <Tag size={14} /> <span className="h-2 w-2 rounded-full" style={{ backgroundColor: category.color }} /> {category.name}
+      <div className="pb-1">
+        {/* Conversa ate aqui */}
+        {turns.length > 0 && (
+          <div className="mb-4 space-y-2.5">
+            {turns.map((turn, i) => (
+              <div
+                key={i}
+                className={turn.role === 'user' ? 'flex justify-end' : 'flex items-start gap-2'}
+              >
+                {turn.role === 'agent' && (
+                  <Sparkles size={15} className="mt-1 shrink-0 text-accent" />
+                )}
+                <p
+                  className={
+                    turn.role === 'user'
+                      ? 'msg-in max-w-[85%] rounded-[16px] rounded-br-[6px] bg-surface-2 px-3.5 py-2 text-[15px] text-primary'
+                      : 'msg-in max-w-[85%] text-[15px] leading-relaxed text-secondary'
+                  }
+                >
+                  {turn.text}
                 </p>
-              )}
-              {proposal.payload?.alert_minutes_before != null && (
-                <p className="flex items-center gap-2"><Bell size={14} /> lembrete {proposal.payload.alert_minutes_before} min antes</p>
-              )}
-            </div>
+              </div>
+            ))}
+            {phase === 'thinking' && (
+              <div className="flex items-center gap-2 pl-[22px]">
+                <span className="typing-dot h-1.5 w-1.5 rounded-full bg-muted" />
+                <span
+                  className="typing-dot h-1.5 w-1.5 rounded-full bg-muted"
+                  style={{ animationDelay: '0.2s' }}
+                />
+                <span
+                  className="typing-dot h-1.5 w-1.5 rounded-full bg-muted"
+                  style={{ animationDelay: '0.4s' }}
+                />
+              </div>
+            )}
           </div>
+        )}
 
-          <div className="mt-4 flex flex-col gap-2">
-            <button onClick={confirm} disabled={phase === 'busy'} className="btn-primary press w-full py-3 text-base">
-              {phase === 'busy' ? <Loader2 size={16} className="animate-spin" /> : <Check size={18} />} Confirmar
-            </button>
-            <div className="flex gap-2">
-              {isTask && (
-                <button onClick={editDetails} disabled={phase === 'busy'} className="btn-secondary press flex-1">
-                  <SlidersHorizontal size={15} /> Editar detalhes
-                </button>
-              )}
-              <button onClick={() => { setPhase('input'); setProposal(null); setText('') }} disabled={phase === 'busy'} className="btn-ghost press flex-1">
-                Recomeçar
+        {/* Escrita */}
+        {writing && (
+          <div>
+            {turns.length === 0 && (
+              <>
+                <div className="flex items-center gap-2 text-accent">
+                  <Sparkles size={15} />
+                  <span className="text-[12px] font-semibold uppercase tracking-[0.06em]">
+                    Captura
+                  </span>
+                </div>
+                <h2 className="text-page mt-1.5">O que você precisa organizar?</h2>
+              </>
+            )}
+            <textarea
+              ref={inputRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  interpret(text)
+                }
+              }}
+              placeholder={
+                turns.length ? 'Responda aqui…' : 'Ex: Reunião com gerentes amanhã às 8:30'
+              }
+              rows={turns.length ? 2 : 3}
+              className="field mt-3 w-full resize-none text-[17px] leading-relaxed"
+            />
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <p className="text-caption">Escreva do seu jeito — eu interpreto.</p>
+              <button
+                onClick={() => interpret(text)}
+                disabled={!text.trim() || phase === 'thinking'}
+                aria-label="Interpretar"
+                className="press flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
+              >
+                {phase === 'thinking' ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : (
+                  <ArrowUp size={19} strokeWidth={2.5} />
+                )}
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Confirmacao — o que ele entendeu */}
+        {(phase === 'proposal' || phase === 'busy') && proposal && (
+          <div className="animate-in">
+            <div className="flex items-center gap-2 text-accent">
+              <Sparkles size={15} />
+              <span className="text-[12px] font-semibold uppercase tracking-[0.06em]">Entendi</span>
+            </div>
+
+            <p className="mt-3 text-[19px] font-semibold leading-snug tracking-[-0.01em] text-primary">
+              {proposal.payload?.title || proposal.payload?.url || 'Nova captura'}
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+              {whenLabel(proposal.payload) && (
+                <span className="text-secondary-sm flex items-center gap-1.5">
+                  <Calendar size={14} className="text-muted" /> {whenLabel(proposal.payload)}
+                </span>
+              )}
+              {category && (
+                <span className="text-secondary-sm flex items-center gap-1.5">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: category.color }}
+                  />
+                  {category.name}
+                </span>
+              )}
+              {proposal.payload?.notes && (
+                <span className="text-secondary-sm flex items-center gap-1.5">
+                  <Tag size={14} className="text-muted" /> {proposal.payload.notes}
+                </span>
+              )}
+              {proposal.payload?.alert_minutes_before != null && (
+                <span className="text-secondary-sm flex items-center gap-1.5">
+                  <Bell size={14} className="text-muted" /> {proposal.payload.alert_minutes_before} min antes
+                </span>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                onClick={confirm}
+                disabled={phase === 'busy'}
+                className="btn-primary press w-full !min-h-[46px] text-[15px]"
+              >
+                {phase === 'busy' ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : (
+                  <Check size={18} />
+                )}
+                Confirmar
+              </button>
+              <div className="flex gap-2">
+                {isTask && (
+                  <button
+                    onClick={editDetails}
+                    disabled={phase === 'busy'}
+                    className="btn-ghost press flex-1"
+                  >
+                    <SlidersHorizontal size={15} /> Ajustar
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setPhase('input')
+                    setProposal(null)
+                    setText('')
+                    setTurns([])
+                    setTimeout(() => inputRef.current?.focus(), 60)
+                  }}
+                  disabled={phase === 'busy'}
+                  className="btn-ghost press flex-1"
+                >
+                  Recomeçar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </Sheet>
   )
 }

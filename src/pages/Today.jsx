@@ -1,58 +1,74 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Clock, Lightbulb, Sun, CalendarDays, Sparkles } from 'lucide-react'
+import { ArrowRight, Lightbulb, Sun, Sparkles, Check } from 'lucide-react'
 import TaskRow from '../components/tasks/TaskRow'
 import TaskModal from '../components/tasks/TaskModal'
-import SectionHeader from '../components/ui/SectionHeader'
+import Section, { SectionAction } from '../components/ui/Section'
 import { EmptyState } from '../components/ui/Common'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
 import { useTasks, useUndatedTasks } from '../hooks/useTasks'
 import { useInbox } from '../hooks/useInbox'
 import { useAuth } from '../context/AuthContext'
-import { toISODate, addDays, formatLong, isTaskOverdue, byTime, nowTimeString } from '../lib/date'
+import {
+  toISODate,
+  addDays,
+  formatLong,
+  isTaskOverdue,
+  byTime,
+  nowTimeString,
+} from '../lib/date'
 import { STATUS, PRIORITY } from '../lib/constants'
 import { percent, cx } from '../lib/utils'
 import { greetingFor, todayPhrase } from '../lib/todayContext'
 import { ideaTitle, sortIdeasByRecent } from '../lib/ideas'
 
-// Pulso do dia — faixa editorial (nao um painel BI): progresso + numeros-chave.
-function DayPulse({ progress, total, done, overdue }) {
+// ---------------------------------------------------------------------------
+// HOJE — tela executiva pessoal, nao dashboard.
+//
+// Mudanca estrutural desta fase: saiu o "pulso do dia" (anel de progresso + 3
+// contadores), que era um painel de BI. No lugar:
+//   1. saudacao + a frase de contexto (o que esta acontecendo);
+//   2. AGORA — a proxima atividade em destaque de verdade (o unico bloco com
+//      peso visual da tela);
+//   3. PRECISA DE VOCE — atrasadas e prioridades numa lista so, sem repetir
+//      grupos;
+//   4. o resto do dia, discreto;
+//   5. no maximo UMA sugestao contextual, em linha (nunca um card de alerta).
+//
+// O progresso vira uma barra de 3px no cabecalho: informa sem virar metrica.
+// ---------------------------------------------------------------------------
+function NextUp({ task, onOpen }) {
+  const start = task.start_time?.slice(0, 5)
+  const end = task.end_time?.slice(0, 5)
   return (
-    <div className="surface flex items-center gap-5 px-5 py-4 ring-1 ring-slate-100 dark:ring-slate-800/70">
-      <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
-        <svg viewBox="0 0 36 36" className="h-14 w-14 -rotate-90">
-          <circle cx="18" cy="18" r="15.5" fill="none" strokeWidth="3.5" className="stroke-slate-100 dark:stroke-slate-800" />
-          <circle
-            cx="18" cy="18" r="15.5" fill="none" strokeWidth="3.5" strokeLinecap="round"
-            className="stroke-brand-500 transition-[stroke-dashoffset] duration-700"
-            strokeDasharray={`${(2 * Math.PI * 15.5)}`}
-            strokeDashoffset={`${(2 * Math.PI * 15.5) * (1 - progress / 100)}`}
-          />
-        </svg>
-        <span className="absolute text-sm font-extrabold text-slate-800 dark:text-slate-100">{progress}%</span>
+    <button
+      onClick={() => onOpen(task)}
+      className="press interactive block w-full rounded-surface bg-surface p-4 text-left"
+    >
+      <div className="flex items-center gap-2">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+        <span className="text-[12px] font-semibold uppercase tracking-[0.06em] text-accent-text">
+          Agora
+        </span>
       </div>
-      <div className="grid flex-1 grid-cols-3 gap-2 text-center">
-        <div>
-          <p className="text-xl font-extrabold text-slate-800 dark:text-slate-100">{total}</p>
-          <p className="text-caption">hoje</p>
-        </div>
-        <div>
-          <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{done}</p>
-          <p className="text-caption">feitas</p>
-        </div>
-        <div>
-          <p className={cx('text-xl font-extrabold', overdue ? 'text-red-500' : 'text-slate-800 dark:text-slate-100')}>{overdue}</p>
-          <p className="text-caption">atrasadas</p>
-        </div>
-      </div>
-    </div>
+      <p className="mt-2 text-[19px] font-semibold leading-snug tracking-[-0.01em] text-primary">
+        {task.title}
+      </p>
+      <p className="text-secondary-sm mt-1 tabular-nums">
+        {start}
+        {end ? ` – ${end}` : ''}
+      </p>
+    </button>
   )
 }
 
 export default function Today() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const range = useMemo(() => ({ start: toISODate(addDays(new Date(), -30)), end: toISODate(new Date()) }), [])
+  const range = useMemo(
+    () => ({ start: toISODate(addDays(new Date(), -30)), end: toISODate(new Date()) }),
+    [],
+  )
   const { tasks, loading } = useTasks(range)
   const { tasks: undated } = useUndatedTasks()
   const { notes } = useInbox()
@@ -64,19 +80,48 @@ export default function Today() {
   const firstName = user?.full_name?.split(' ')[0] || 'você'
   const nowDate = new Date()
 
-  const overdue = useMemo(() => tasks.filter(isTaskOverdue).sort((a, b) => (a.date < b.date ? -1 : 1)), [tasks])
-  const todayTasks = useMemo(() => tasks.filter((t) => t.date === today).sort(byTime), [tasks, today])
-  const pendingToday = todayTasks.filter((t) => [STATUS.TODO, STATUS.IN_PROGRESS].includes(t.status))
-  const priorities = useMemo(
-    () => pendingToday.filter((t) => [PRIORITY.HIGH, PRIORITY.URGENT].includes(t.priority)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [todayTasks],
+  const overdue = useMemo(
+    () => tasks.filter(isTaskOverdue).sort((a, b) => (a.date < b.date ? -1 : 1)),
+    [tasks],
   )
+  const todayTasks = useMemo(
+    () => tasks.filter((t) => t.date === today).sort(byTime),
+    [tasks, today],
+  )
+  const pendingToday = todayTasks.filter((t) => [STATUS.TODO, STATUS.IN_PROGRESS].includes(t.status))
+
   const next = useMemo(
     () => pendingToday.find((t) => t.start_time && t.start_time.slice(0, 5) >= now) || null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [todayTasks, now],
   )
+
+  // "Precisa de voce": atrasadas + prioridades altas, SEM duplicar itens e sem
+  // criar dois grupos que dizem quase a mesma coisa.
+  const needsAttention = useMemo(() => {
+    const seen = new Set()
+    const out = []
+    for (const t of overdue.slice(0, 4)) {
+      seen.add(t.id)
+      out.push(t)
+    }
+    for (const t of pendingToday) {
+      if (seen.has(t.id) || t.id === next?.id) continue
+      if ([PRIORITY.HIGH, PRIORITY.URGENT].includes(t.priority)) out.push(t)
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overdue, todayTasks, next])
+
+  // O resto do dia: o que ainda esta ABERTO e nao aparece acima. Concluidas
+  // ficam de fora — ja estao representadas na barra de progresso, e uma lista
+  // de itens riscados nao e "o que voce ainda tem hoje".
+  const restOfDay = useMemo(() => {
+    const shown = new Set([...needsAttention.map((t) => t.id), next?.id].filter(Boolean))
+    return todayTasks.filter(
+      (t) => !shown.has(t.id) && [STATUS.TODO, STATUS.IN_PROGRESS].includes(t.status),
+    )
+  }, [todayTasks, needsAttention, next])
 
   const doneCount = todayTasks.filter((t) => t.status === STATUS.DONE).length
   const progress = percent(doneCount, todayTasks.length)
@@ -91,164 +136,140 @@ export default function Today() {
     now: nowDate,
   })
 
-  // UMA sugestao contextual (regras locais, sem IA).
   const suggestion =
     overdue.length > 0
-      ? { text: `Reorganizar ${overdue.length} atrasada${overdue.length > 1 ? 's' : ''}?`, to: '/tarefas' }
+      ? { text: `Reorganizar ${overdue.length} atrasada${overdue.length > 1 ? 's' : ''}`, to: '/tarefas' }
       : undated.length > 0
-        ? { text: `Você tem ${undated.length} tarefa${undated.length > 1 ? 's' : ''} sem data para organizar.`, to: '/tarefas' }
+        ? { text: `${undated.length} tarefa${undated.length > 1 ? 's' : ''} sem data para organizar`, to: '/tarefas' }
         : null
 
   const openTask = (t) => setEditing(t)
-
-  // Agenda de hoje (compacta) — no desktop vira rail lateral; no mobile, secao.
-  const agendaToday = (
-    <section>
-      <SectionHeader
-        label="Agenda de hoje"
-        action={
-          <button onClick={() => navigate('/dia')} className="flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
-            Abrir <ArrowRight size={14} />
-          </button>
-        }
-      />
-      {todayTasks.length === 0 ? (
-        <p className="rounded-2xl border border-dashed hair px-4 py-8 text-center text-sm text-slate-400">
-          Nada agendado para hoje.
-        </p>
-      ) : (
-        <div className="surface divide-y hair overflow-hidden ring-1 ring-slate-100 dark:ring-slate-800/70">
-          {todayTasks.map((t) => <TaskRow key={t.id} task={t} onOpen={openTask} onChanged={() => {}} />)}
-        </div>
-      )}
-    </section>
-  )
+  const isClear = todayTasks.length === 0 && overdue.length === 0
 
   return (
-    <div className="mx-auto max-w-5xl">
-      {/* Saudacao / contexto do momento */}
-      <header className="animate-in mb-6">
-        <p className="text-sm font-semibold text-brand-600 dark:text-brand-400">{greetingFor(nowDate)},</p>
-        <h1 className="text-display mt-0.5">{firstName}</h1>
-        <p className="mt-1 text-sm capitalize text-slate-400">{formatLong(nowDate)}</p>
-        <p className="mt-3 text-body font-medium text-slate-700 dark:text-slate-200">{phrase}</p>
+    <div className="mx-auto max-w-2xl">
+      <header className="animate-in mb-7 px-2">
+        <p className="text-caption first-letter:uppercase">{formatLong(nowDate)}</p>
+        <h1 className="text-hero mt-1.5">
+          {greetingFor(nowDate)}, {firstName}
+        </h1>
+        <p className="text-body mt-2">{phrase}</p>
+
+        {/* Progresso do dia: informacao, nao metrica. */}
+        {todayTasks.length > 0 && (
+          <div className="mt-4 flex items-center gap-2.5">
+            <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-surface-2">
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-700 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="text-caption shrink-0 tabular-nums">
+              {doneCount}/{todayTasks.length}
+            </span>
+          </div>
+        )}
       </header>
 
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
-        {/* Coluna principal */}
-        <div className="space-y-6">
-          <DayPulse progress={progress} total={todayTasks.length} done={doneCount} overdue={overdue.length} />
+      {loading && tasks.length === 0 ? (
+        <TaskListSkeleton count={4} />
+      ) : (
+        <div className="space-y-7">
+          {next && <NextUp task={next} onOpen={openTask} />}
 
+          <Section label="Precisa de você" count={needsAttention.length} tone="!text-danger">
+            {needsAttention.map((t) => (
+              <TaskRow
+                key={t.id}
+                task={t}
+                onOpen={openTask}
+                onChanged={() => {}}
+                showDate={overdue.some((o) => o.id === t.id)}
+              />
+            ))}
+          </Section>
+
+          <Section
+            label={next || needsAttention.length ? 'Também hoje' : 'Hoje'}
+            count={restOfDay.length}
+            action={
+              restOfDay.length > 0 ? (
+                <SectionAction onClick={() => navigate('/dia')}>Agenda</SectionAction>
+              ) : null
+            }
+          >
+            {restOfDay.map((t) => (
+              <TaskRow key={t.id} task={t} onOpen={openTask} onChanged={() => {}} />
+            ))}
+          </Section>
+
+          {/* Uma sugestao, em linha. Nunca um card de alerta. */}
           {suggestion && (
             <button
               onClick={() => navigate(suggestion.to)}
-              className="interactive flex w-full items-center gap-3 rounded-2xl bg-brand-50 p-3.5 text-left dark:bg-brand-900/20"
+              className="press flex w-full items-center gap-2.5 px-2 py-1 text-left"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/70 text-brand-600 dark:bg-slate-900/40 dark:text-brand-300">
-                <Sparkles size={17} />
-              </span>
-              <p className="min-w-0 flex-1 text-sm font-medium text-slate-700 dark:text-slate-200">{suggestion.text}</p>
-              <ArrowRight size={16} className="shrink-0 text-brand-500" />
+              <Sparkles size={15} className="shrink-0 text-accent" />
+              <span className="text-secondary-sm min-w-0 flex-1 truncate">{suggestion.text}</span>
+              <ArrowRight size={15} className="shrink-0 text-muted" />
             </button>
           )}
 
-          {loading && tasks.length === 0 ? (
-            <TaskListSkeleton count={4} />
-          ) : (
-            <>
-              {priorities.length > 0 && (
-                <section>
-                  <SectionHeader label="Prioridades" tone="text-amber-500" />
-                  <div className="surface divide-y hair overflow-hidden ring-1 ring-slate-100 dark:ring-slate-800/70">
-                    {priorities.map((t) => <TaskRow key={t.id} task={t} onOpen={openTask} onChanged={() => {}} />)}
-                  </div>
-                </section>
-              )}
+          {/* Fecho do dia: reconhece o que foi feito sem virar painel de metrica. */}
+          {!isClear && restOfDay.length === 0 && doneCount > 0 && (
+            <p className="text-caption px-2">
+              {doneCount === todayTasks.length
+                ? 'Tudo o que havia para hoje está concluído.'
+                : `${doneCount} concluída${doneCount > 1 ? 's' : ''} hoje.`}
+            </p>
+          )}
 
-              {next && (
-                <section>
-                  <SectionHeader label="Próximo" />
-                  <button onClick={() => openTask(next)} className="interactive surface flex w-full items-center gap-4 p-4 text-left ring-1 ring-slate-100 dark:ring-slate-800/70">
-                    <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300">
-                      <Clock size={16} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-bold text-slate-800 dark:text-slate-100">{next.title}</p>
-                      <p className="mt-0.5 text-secondary">{next.start_time.slice(0, 5)}{next.end_time ? ` – ${next.end_time.slice(0, 5)}` : ''}</p>
-                    </div>
-                  </button>
-                </section>
-              )}
+          {isClear && (
+            <EmptyState
+              icon={doneCount > 0 ? Check : Sun}
+              title={doneCount > 0 ? 'Dia concluído' : 'Dia em branco'}
+              description={
+                doneCount > 0
+                  ? 'Você fechou tudo que tinha para hoje.'
+                  : 'Nada puxando sua atenção agora. Capture algo pelo + ou aproveite a folga.'
+              }
+              action={
+                <button onClick={() => setCreating(true)} className="btn-secondary press">
+                  Capturar algo
+                </button>
+              }
+            />
+          )}
 
-              {overdue.length > 0 && (
-                <section>
-                  <SectionHeader
-                    label={`Atrasadas · ${overdue.length}`}
-                    tone="text-red-500"
-                    action={overdue.length > 3 ? (
-                      <button onClick={() => navigate('/tarefas')} className="flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
-                        Ver todas <ArrowRight size={14} />
-                      </button>
-                    ) : null}
-                  />
-                  <div className="surface divide-y hair overflow-hidden ring-1 ring-slate-100 dark:ring-slate-800/70">
-                    {overdue.slice(0, 3).map((t) => <TaskRow key={t.id} task={t} onOpen={openTask} showDate onChanged={() => {}} />)}
-                  </div>
-                </section>
-              )}
-
-              {/* Agenda de hoje: no mobile aparece aqui; no desktop, no rail. */}
-              <div className="lg:hidden">{agendaToday}</div>
-
-              {todayTasks.length === 0 && overdue.length === 0 && priorities.length === 0 && (
-                <EmptyState
-                  icon={Sun}
-                  title="Dia em branco"
-                  description="Nada puxando sua atenção agora. Capture algo pelo + ou aproveite a folga."
-                  action={<button onClick={() => setCreating(true)} className="btn-primary press">Capturar</button>}
-                />
-              )}
-
-              {recentIdeas.length > 0 && (
-                <section>
-                  <SectionHeader
-                    label="Ideias recentes"
-                    tone="text-amber-500"
-                    action={
-                      <button onClick={() => navigate('/ideias')} className="flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
-                        Ver Ideias <ArrowRight size={14} />
-                      </button>
-                    }
-                  />
-                  <div className="surface divide-y hair overflow-hidden ring-1 ring-slate-100 dark:ring-slate-800/70">
-                    {recentIdeas.map((n) => (
-                      <button key={n.id} onClick={() => navigate(`/ideias/${n.id}`, { state: { note: n } })} className="list-row-hover w-full text-left">
-                        <Lightbulb size={16} className="shrink-0 text-amber-400" />
-                        <span className="truncate text-[15px] font-semibold text-slate-700 dark:text-slate-200">{ideaTitle(n)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              )}
-            </>
+          {recentIdeas.length > 0 && (
+            <Section
+              label="Ideias recentes"
+              action={<SectionAction onClick={() => navigate('/ideias')}>Ver todas</SectionAction>}
+            >
+              {recentIdeas.map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => navigate(`/ideias/${n.id}`, { state: { note: n } })}
+                  className={cx(
+                    'flex w-full items-center gap-3 bg-surface px-3 py-2.5 text-left transition-colors active:bg-surface-2',
+                  )}
+                >
+                  <Lightbulb size={15} className="shrink-0 text-warning" />
+                  <span className="truncate text-[15px] text-primary">{ideaTitle(n)}</span>
+                </button>
+              ))}
+            </Section>
           )}
         </div>
-
-        {/* Rail lateral (desktop) — base para o futuro painel de detalhe */}
-        <aside className="hidden lg:block">
-          <div className="sticky top-4 space-y-6">
-            {agendaToday}
-            <button onClick={() => navigate('/dia')} className="interactive surface flex w-full items-center gap-3 p-4 text-left ring-1 ring-slate-100 dark:ring-slate-800/70">
-              <CalendarDays size={18} className="text-slate-400" />
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">Ver semana e calendário</span>
-              <ArrowRight size={15} className="ml-auto text-slate-300" />
-            </button>
-          </div>
-        </aside>
-      </div>
+      )}
 
       <TaskModal open={Boolean(editing)} task={editing} onClose={() => setEditing(null)} />
-      <TaskModal open={creating} task={null} defaults={{ date: today }} onClose={() => setCreating(false)} />
+      <TaskModal
+        open={creating}
+        task={null}
+        defaults={{ date: today }}
+        onClose={() => setCreating(false)}
+      />
     </div>
   )
 }

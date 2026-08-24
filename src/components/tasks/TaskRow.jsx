@@ -8,16 +8,25 @@ import { STATUS, PRIORITY } from '../../lib/constants'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { cx } from '../../lib/utils'
 
-// Linha de tarefa COMPACTA (Design System V2). Substitui o card grande dentro
-// do Hoje: circulo para concluir em 1 toque, titulo forte, 1 linha secundaria
-// discreta (horario · categoria · lembrete) e um menu "..." para acoes.
-// Toque na linha abre o comportamento existente (onOpen -> TaskModal).
-export default function TaskRow({ task, onOpen, onChanged, showDate = false }) {
+// ---------------------------------------------------------------------------
+// TASK ROW — a unidade dominante do produto.
+//
+// Regras de ruido (o que MUDOU nesta fase):
+//   - a linha secundaria so aparece quando ha informacao real; nada de meta
+//     vazia ocupando altura;
+//   - prioridade alta e uma BARRA fina na borda esquerda, nao um bullet no
+//     meio do titulo;
+//   - o "..." aparece no hover (desktop) ou no toque longo — no celular a
+//     acao e o swipe, entao o botao nao fica competindo com o titulo;
+//   - concluir da feedback imediato (animate-pop) antes da rede responder.
+// ---------------------------------------------------------------------------
+export default function TaskRow({ task, onOpen, onChanged, showDate = false, compact = false }) {
   const { user } = useAuth()
   const { categoryById } = useData()
   const { toast } = useToast()
   const [menu, setMenu] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [justDone, setJustDone] = useState(false)
   useEscapeKey(menu, () => setMenu(false))
 
   const done = task.status === STATUS.DONE
@@ -28,6 +37,7 @@ export default function TaskRow({ task, onOpen, onChanged, showDate = false }) {
     e?.stopPropagation?.()
     if (busy) return
     setBusy(true)
+    if (!done) setJustDone(true)
     try {
       await taskService.changeStatus(user.id, task, done ? STATUS.TODO : STATUS.DONE)
       onChanged?.()
@@ -35,12 +45,13 @@ export default function TaskRow({ task, onOpen, onChanged, showDate = false }) {
       toast('Erro ao atualizar: ' + err.message, 'error')
     } finally {
       setBusy(false)
+      setTimeout(() => setJustDone(false), 260)
     }
   }
 
   const meta = [
     task.start_time ? task.start_time.slice(0, 5) : null,
-    showDate && task.date ? task.date : null,
+    showDate && task.date ? task.date.slice(8, 10) + '/' + task.date.slice(5, 7) : null,
     category?.name || null,
   ].filter(Boolean)
 
@@ -50,50 +61,81 @@ export default function TaskRow({ task, onOpen, onChanged, showDate = false }) {
       tabIndex={0}
       onClick={() => onOpen?.(task)}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen?.(task)}
-      className="list-row-hover group cursor-pointer select-none"
+      className={cx(
+        'group relative flex cursor-pointer select-none items-center gap-3 bg-surface px-3 transition-colors active:bg-surface-2',
+        compact ? 'py-2' : 'py-2.5',
+      )}
     >
-      {/* Concluir (1 toque) */}
+      {/* Prioridade: barra fina, sem poluir o titulo */}
+      {highPriority && !done && (
+        <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-warning" aria-hidden />
+      )}
+
+      {/* Concluir em 1 toque */}
       <button
         onClick={toggle}
         disabled={busy}
         aria-label={done ? 'Reabrir' : 'Concluir'}
-        className={cx('press shrink-0 transition-colors', done ? 'text-emerald-500' : 'text-slate-300 hover:text-emerald-500 dark:text-slate-600')}
+        className={cx(
+          'press -m-2 shrink-0 p-2 transition-colors',
+          done ? 'text-positive' : 'text-faint',
+          justDone && 'animate-pop',
+        )}
       >
-        {done ? <CheckCircle2 size={22} /> : <Circle size={22} />}
+        {done ? <CheckCircle2 size={21} /> : <Circle size={21} strokeWidth={1.7} />}
       </button>
 
-      {/* Titulo + meta */}
       <div className="min-w-0 flex-1">
-        <p className={cx('truncate text-[15px] font-semibold', done ? 'text-slate-400 line-through dark:text-slate-600' : 'text-slate-800 dark:text-slate-100')}>
-          {highPriority && !done && <span className="mr-1 text-amber-500">•</span>}
+        <p
+          className={cx(
+            'truncate text-[15px] leading-snug',
+            done ? 'font-normal text-muted line-through' : 'font-medium text-primary',
+          )}
+        >
           {task.title}
         </p>
-        {meta.length > 0 && (
-          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-            {category && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: category.color }} />}
-            <span className="truncate">{meta.join(' · ')}</span>
-            {task.alert_enabled && <Bell size={12} className="shrink-0 text-slate-300 dark:text-slate-600" />}
+        {meta.length > 0 && !done && (
+          <div className="mt-0.5 flex items-center gap-1.5">
+            {category && (
+              <span
+                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: category.color }}
+              />
+            )}
+            <span className="text-caption truncate tabular-nums">{meta.join(' · ')}</span>
+            {task.alert_enabled && <Bell size={11} className="shrink-0 text-faint" />}
           </div>
         )}
       </div>
 
-      {/* Menu "..." */}
       <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => setMenu((v) => !v)}
-          aria-label="Acoes"
-          className="press rounded-lg p-1.5 text-slate-300 opacity-0 transition-opacity hover:bg-slate-100 hover:text-slate-500 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-slate-800 sm:opacity-100"
+          aria-label="Ações"
+          className="press hidden h-8 w-8 items-center justify-center rounded-full text-faint opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100 hover:bg-surface-2 hover:text-secondary sm:flex"
         >
-          <MoreHorizontal size={18} />
+          <MoreHorizontal size={17} />
         </button>
         {menu && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-            <div className="elevated absolute right-0 z-20 mt-1 w-40 p-1 text-sm">
-              <button onClick={() => { setMenu(false); onOpen?.(task) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
+            <div className="floating animate-scale-in absolute right-0 z-20 mt-1 w-40 p-1 text-[14px]">
+              <button
+                onClick={() => {
+                  setMenu(false)
+                  onOpen?.(task)
+                }}
+                className="flex w-full items-center gap-2 rounded-control px-3 py-2 text-secondary transition-colors hover:bg-surface-2"
+              >
                 <Pencil size={15} /> Editar
               </button>
-              <button onClick={() => { setMenu(false); toggle() }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
+              <button
+                onClick={() => {
+                  setMenu(false)
+                  toggle()
+                }}
+                className="flex w-full items-center gap-2 rounded-control px-3 py-2 text-secondary transition-colors hover:bg-surface-2"
+              >
                 <Check size={15} /> {done ? 'Reabrir' : 'Concluir'}
               </button>
             </div>

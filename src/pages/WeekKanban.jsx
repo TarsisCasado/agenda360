@@ -48,7 +48,7 @@ export default function WeekKanban() {
       <header className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-display !text-[22px]">Semana</h1>
-          <p className="text-secondary">{weekLabel}</p>
+          <p className="text-secondary-sm">{weekLabel}</p>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => go(-1)} className="btn-secondary press !px-2.5"><ChevronLeft size={16} /></button>

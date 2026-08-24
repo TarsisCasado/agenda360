@@ -2,15 +2,19 @@ import { NavLink } from 'react-router-dom'
 import { Sun, Calendar, ListTodo, Lightbulb, Plus } from 'lucide-react'
 import { cx } from '../../lib/utils'
 
-// Bottom nav V2 — 4 areas + Captura central. A IA e transversal (nao ocupa
-// aba). O "+" central e o gesto mais usado: destaque visual (circulo de marca
-// elevado). Nesta fase o "+" abre a criacao rapida existente (onCreate);
-// a Captura Universal com IA vira depois.
-const ITEMS = [
+// ---------------------------------------------------------------------------
+// BOTTOM NAV — 4 areas + Captura central.
+//
+// Refinamentos: barra translucida com blur (o conteudo passa por baixo em vez
+// de bater numa faixa opaca), item ativo marcado por um ponto discreto acima
+// do rotulo, e o "+" central com anel do proprio canvas (parece recortado na
+// barra, nao colado por cima).
+// ---------------------------------------------------------------------------
+const LEFT = [
   { to: '/', label: 'Hoje', icon: Sun, end: true },
   { to: '/dia', label: 'Agenda', icon: Calendar },
 ]
-const ITEMS_RIGHT = [
+const RIGHT = [
   { to: '/tarefas', label: 'Tarefas', icon: ListTodo },
   { to: '/ideias', label: 'Ideias', icon: Lightbulb },
 ]
@@ -22,15 +26,21 @@ function Item({ to, label, icon: Icon, end }) {
       end={end}
       className={({ isActive }) =>
         cx(
-          'flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium transition-colors',
-          isActive ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400 dark:text-slate-500',
+          'press relative flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] transition-colors',
+          isActive ? 'font-semibold text-accent' : 'font-medium text-muted',
         )
       }
     >
       {({ isActive }) => (
         <>
-          <Icon size={22} strokeWidth={isActive ? 2.4 : 2} />
+          <Icon size={21} strokeWidth={isActive ? 2.4 : 1.9} />
           {label}
+          <span
+            className={cx(
+              'absolute -top-px h-[3px] w-6 rounded-full transition-opacity',
+              isActive ? 'bg-accent opacity-100' : 'opacity-0',
+            )}
+          />
         </>
       )}
     </NavLink>
@@ -39,22 +49,25 @@ function Item({ to, label, icon: Icon, end }) {
 
 export default function BottomNav({ onCreate }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/80 bg-white/90 pb-safe backdrop-blur-lg dark:border-slate-800/80 dark:bg-slate-950/85 lg:hidden">
-      <div className="mx-auto flex max-w-lg items-end justify-around px-2">
-        {ITEMS.map((it) => <Item key={it.to} {...it} />)}
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t hair bg-surface/85 pb-safe backdrop-blur-xl lg:hidden">
+      <div className="mx-auto flex max-w-lg items-end justify-around px-1">
+        {LEFT.map((it) => (
+          <Item key={it.to} {...it} />
+        ))}
 
-        {/* Captura central elevada */}
         <div className="flex flex-1 justify-center">
           <button
             onClick={onCreate}
             aria-label="Capturar"
-            className="press -mt-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 ring-4 ring-white transition-transform dark:ring-slate-950"
+            className="press -mt-6 flex h-[52px] w-[52px] items-center justify-center rounded-[18px] bg-accent text-white shadow-float ring-[5px] ring-canvas"
           >
-            <Plus size={26} />
+            <Plus size={25} strokeWidth={2.4} />
           </button>
         </div>
 
-        {ITEMS_RIGHT.map((it) => <Item key={it.to} {...it} />)}
+        {RIGHT.map((it) => (
+          <Item key={it.to} {...it} />
+        ))}
       </div>
     </nav>
   )

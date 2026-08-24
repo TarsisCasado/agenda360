@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Plus, ListTodo, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, ListTodo, Loader2, ChevronRight } from 'lucide-react'
 import TaskRow from '../components/tasks/TaskRow'
 import TaskModal from '../components/tasks/TaskModal'
 import RescheduleModal from '../components/tasks/RescheduleModal'
 import SwipeRow from '../components/ui/SwipeRow'
+import Section from '../components/ui/Section'
 import { EmptyState, ErrorState } from '../components/ui/Common'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
 import { useTasks } from '../hooks/useTasks'
@@ -14,15 +15,24 @@ import { useToast } from '../context/ToastContext'
 import { taskService } from '../services/taskService'
 import { STATUS } from '../lib/constants'
 import { toISODate, isTaskOverdue, byTime } from '../lib/date'
+import { cx } from '../lib/utils'
 
 const OPEN = [STATUS.TODO, STATUS.IN_PROGRESS, STATUS.RESCHEDULED, STATUS.DELEGATED]
 
+// ---------------------------------------------------------------------------
+// TAREFAS — gestor premium.
+//
+// O que mudou: as listas deixaram de morar dentro de caixas com anel e passaram
+// a viver sobre o canvas, separadas por hairline e por RITMO (rotulo discreto +
+// contagem). O campo de captura rapida perdeu a moldura: e uma linha de texto
+// que so revela o botao quando ha o que salvar.
+// ---------------------------------------------------------------------------
 export default function Tasks() {
   const { user } = useAuth()
   const { workspaceId } = useWorkspace()
   const { reload: reloadData } = useData()
   const { toast } = useToast()
-  const { tasks, loading, error, reload } = useTasks({}) // todas (inclui sem data)
+  const { tasks, loading, error, reload } = useTasks({})
   const [editing, setEditing] = useState(null)
   const [rescheduling, setRescheduling] = useState(null)
   const [quick, setQuick] = useState('')
@@ -36,13 +46,16 @@ export default function Tasks() {
     const overdue = open.filter((t) => isTaskOverdue(t)).sort(byTime)
     const isOverdue = new Set(overdue.map((t) => t.id))
     const todayG = open.filter((t) => !isOverdue.has(t.id) && t.date === today).sort(byTime)
-    const upcoming = open.filter((t) => !isOverdue.has(t.id) && t.date && t.date > today).sort((a, b) => (a.date < b.date ? -1 : 1))
+    const upcoming = open
+      .filter((t) => !isOverdue.has(t.id) && t.date && t.date > today)
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
     const undated = open.filter((t) => !t.date)
     const done = tasks.filter((t) => t.status === STATUS.DONE).sort((a, b) => (a.date > b.date ? -1 : 1))
     return { overdue, todayG, upcoming, undated, done }
   }, [tasks, today])
 
-  const totalOpen = groups.overdue.length + groups.todayG.length + groups.upcoming.length + groups.undated.length
+  const totalOpen =
+    groups.overdue.length + groups.todayG.length + groups.upcoming.length + groups.undated.length
 
   const quickAdd = async (e) => {
     e?.preventDefault?.()
@@ -51,56 +64,69 @@ export default function Tasks() {
     setAdding(true)
     try {
       await taskService.create(workspaceId, user.id, { title, date: null, status: STATUS.TODO })
-      setQuick(''); reload(); reloadData()
-    } catch (err) { toast('Erro ao criar tarefa: ' + err.message, 'error') }
-    finally { setAdding(false) }
+      setQuick('')
+      reload()
+      reloadData()
+    } catch (err) {
+      toast('Erro ao criar tarefa: ' + err.message, 'error')
+    } finally {
+      setAdding(false)
+    }
   }
 
   const complete = async (task) => {
     try {
-      await taskService.changeStatus(user.id, task, task.status === STATUS.DONE ? STATUS.TODO : STATUS.DONE)
-      reload(); reloadData()
-    } catch (err) { toast('Erro ao atualizar: ' + err.message, 'error') }
+      await taskService.changeStatus(
+        user.id,
+        task,
+        task.status === STATUS.DONE ? STATUS.TODO : STATUS.DONE,
+      )
+      reload()
+      reloadData()
+    } catch (err) {
+      toast('Erro ao atualizar: ' + err.message, 'error')
+    }
+  }
+
+  const refresh = () => {
+    reload()
+    reloadData()
   }
 
   const Row = (t, opts = {}) => (
     <SwipeRow key={t.id} onSwipeRight={() => complete(t)} onSwipeLeft={() => setRescheduling(t)}>
-      <TaskRow task={t} onOpen={setEditing} onChanged={() => { reload(); reloadData() }} showDate={opts.showDate} />
+      <TaskRow task={t} onOpen={setEditing} onChanged={refresh} showDate={opts.showDate} />
     </SwipeRow>
   )
 
-  const Group = ({ label, items, tone, showDate }) =>
-    items.length === 0 ? null : (
-      <section>
-        <h2 className={`mb-1.5 flex items-center gap-2 text-section ${tone || ''}`}>
-          {label}
-          <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-400 dark:bg-slate-800">{items.length}</span>
-        </h2>
-        <div className="surface divide-y hair overflow-hidden ring-1 ring-slate-100 dark:ring-slate-800/70">
-          {items.map((t) => Row(t, { showDate }))}
-        </div>
-      </section>
-    )
-
   return (
     <div className="mx-auto max-w-2xl">
-      <header className="mb-5">
+      <header className="mb-5 px-2">
         <h1 className="text-display">Tarefas</h1>
-        <p className="text-secondary mt-0.5">{totalOpen > 0 ? `${totalOpen} em aberto` : 'Tudo em dia'}</p>
+        <p className="text-caption mt-1">
+          {totalOpen > 0 ? `${totalOpen} em aberto` : 'Tudo em dia'}
+        </p>
       </header>
 
-      {/* Captura rápida — 1 campo, sem exigir data */}
-      <form onSubmit={quickAdd} className="surface-outline mb-6 flex items-center gap-2 px-3 py-1.5">
-        <Plus size={18} className="shrink-0 text-slate-400" />
+      {/* Captura rapida: uma linha, sem moldura de formulario. */}
+      <form
+        onSubmit={quickAdd}
+        className="mb-6 flex items-center gap-2.5 rounded-row bg-surface px-3 py-1"
+      >
+        <Plus size={18} className="shrink-0 text-muted" />
         <input
-          className="flex-1 bg-transparent py-2 text-[15px] text-slate-800 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
+          className="field flex-1 py-2.5 text-[15px]"
           placeholder="Adicionar tarefa…"
           value={quick}
           onChange={(e) => setQuick(e.target.value)}
         />
         {quick.trim() && (
-          <button type="submit" disabled={adding} className="btn-primary press shrink-0 !px-3 !py-1.5">
-            {adding ? <Loader2 size={15} className="animate-spin" /> : 'Add'}
+          <button
+            type="submit"
+            disabled={adding}
+            className="press shrink-0 rounded-full bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-white"
+          >
+            {adding ? <Loader2 size={14} className="animate-spin" /> : 'Salvar'}
           </button>
         )}
       </form>
@@ -110,24 +136,43 @@ export default function Tasks() {
       ) : loading && tasks.length === 0 ? (
         <TaskListSkeleton count={5} />
       ) : totalOpen === 0 && groups.done.length === 0 ? (
-        <EmptyState icon={ListTodo} title="Nada pendente." description="Capture algo pelo + ou adicione uma tarefa acima." />
+        <EmptyState
+          icon={ListTodo}
+          title="Nada pendente"
+          description="Capture algo pelo + ou escreva na linha acima."
+        />
       ) : (
-        <div className="space-y-6">
-          <Group label="Atrasadas" items={groups.overdue} tone="!text-red-500" showDate />
-          <Group label="Hoje" items={groups.todayG} />
-          <Group label="Próximas" items={groups.upcoming} showDate />
-          <Group label="Sem data" items={groups.undated} />
+        <div className="space-y-7">
+          <Section label="Atrasadas" count={groups.overdue.length} tone="!text-danger">
+            {groups.overdue.map((t) => Row(t, { showDate: true }))}
+          </Section>
+          <Section label="Hoje" count={groups.todayG.length}>
+            {groups.todayG.map((t) => Row(t))}
+          </Section>
+          <Section label="Próximas" count={groups.upcoming.length}>
+            {groups.upcoming.map((t) => Row(t, { showDate: true }))}
+          </Section>
+          <Section label="Sem data" count={groups.undated.length}>
+            {groups.undated.map((t) => Row(t))}
+          </Section>
 
           {groups.done.length > 0 && (
             <section>
-              <button onClick={() => setShowDone((v) => !v)} className="mb-1.5 flex items-center gap-1.5 text-section">
-                {showDone ? <ChevronDown size={13} /> : <ChevronRight size={13} />} Concluídas
-                <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-400 dark:bg-slate-800">{groups.done.length}</span>
+              <button
+                onClick={() => setShowDone((v) => !v)}
+                className="press flex w-full items-center gap-1.5 px-2 py-1"
+              >
+                <ChevronRight
+                  size={13}
+                  className={cx('text-muted transition-transform', showDone && 'rotate-90')}
+                />
+                <span className="text-section">Concluídas</span>
+                <span className="text-[11px] font-semibold text-faint">{groups.done.length}</span>
               </button>
               {showDone && (
-                <div className="surface divide-y hair overflow-hidden opacity-70 ring-1 ring-slate-100 dark:ring-slate-800/70">
+                <div className="list mt-1 opacity-70">
                   {groups.done.slice(0, 20).map((t) => (
-                    <TaskRow key={t.id} task={t} onOpen={setEditing} onChanged={() => { reload(); reloadData() }} showDate />
+                    <TaskRow key={t.id} task={t} onOpen={setEditing} onChanged={refresh} showDate compact />
                   ))}
                 </div>
               )}
@@ -136,8 +181,21 @@ export default function Tasks() {
         </div>
       )}
 
-      <TaskModal open={Boolean(editing)} task={editing} onClose={() => setEditing(null)} onSaved={() => { reload(); reloadData() }} />
-      <RescheduleModal open={Boolean(rescheduling)} task={rescheduling} onClose={() => setRescheduling(null)} onDone={() => { setRescheduling(null); reload(); reloadData() }} />
+      <TaskModal
+        open={Boolean(editing)}
+        task={editing}
+        onClose={() => setEditing(null)}
+        onSaved={refresh}
+      />
+      <RescheduleModal
+        open={Boolean(rescheduling)}
+        task={rescheduling}
+        onClose={() => setRescheduling(null)}
+        onDone={() => {
+          setRescheduling(null)
+          refresh()
+        }}
+      />
     </div>
   )
 }
