@@ -11,6 +11,7 @@ import {
   isToday,
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { capitalizeFirst } from './utils'
 
 // Data no formato do banco (YYYY-MM-DD), sempre em horario local.
 export function toISODate(date) {
@@ -54,7 +55,8 @@ export function toDate(value) {
 export function formatLong(date) {
   const d = typeof date === 'string' ? fromISODate(date) : date
   if (!d) return 'sem data'
-  return format(d, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })
+  // Ja sai pronto para uso como rotulo: "Segunda-feira, 24 de agosto de 2026".
+  return capitalizeFirst(format(d, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR }))
 }
 
 // DATA PURA (tasks.date = YYYY-MM-DD). Nao aceita timestamp de propósito:
@@ -85,8 +87,9 @@ export function formatTimestampLong(value) {
   return format(d, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
 }
 
+// "Agosto de 2026" — nunca "Agosto De 2026".
 export function formatMonthTitle(date) {
-  return format(date, "MMMM 'de' yyyy", { locale: ptBR })
+  return capitalizeFirst(format(date, "MMMM 'de' yyyy", { locale: ptBR }))
 }
 
 // Semana comeca na segunda-feira (padrao brasileiro / requisito do Kanban).

@@ -319,6 +319,29 @@ export function resolveTemporal(text, { today, now } = {}) {
   }
 }
 
+// RECUSA DELIBERADA DE DATA. Diferente de `skip` (que e sobre HORARIO), aqui o
+// usuario esta dizendo que a atividade NAO tem dia: ela nasce na lista de
+// tarefas a fazer, com `date` nulo. Sao padroes, nao frases inteiras — a
+// resposta real costuma vir com contexto ("Sem data definida, coloque em
+// tarefas a fazer"), entao nada aqui e ancorado no inicio/fim do texto.
+//
+// Casam sobre o texto NORMALIZADO (minusculo, sem acento), por isso "nao".
+const NO_DATE_PATTERNS = [
+  /\bsem\s+(uma\s+)?(data|prazo|dia\s+certo|dia\s+definido)\b/,
+  /\bnao\s+(tem|ha|possui|existe)\s+(uma\s+)?(data|prazo|dia)\b/,
+  /\bnao\s+precisa\s+(de\s+|ter\s+|d[ae]\s+)?(data|prazo|dia)\b/,
+  /\bnao\s+e\s+(pra|para)\s+(uma\s+)?(data|dia)\b/,
+  /\bdata\s+(ainda\s+)?(indefinida|nao\s+definida|a\s+definir)\b/,
+  /\bainda\s+nao\s+(sei|defini|decidi|tenho)\b/,
+  /\b(em|n[oa]s?)\s+tarefas?(\s+a\s+fazer)?\b/,
+  /\blista\s+de\s+tarefas\b/,
+  /\bpara\s+depois\b/,
+]
+
+function isNoDateAnswer(normalizedText) {
+  return NO_DATE_PATTERNS.some((re) => re.test(normalizedText))
+}
+
 // Interpretacao de uma RESPOSTA CURTA ("8:30", "de manha", "amanha", "sexta",
 // "sem horario"). Usada pelo slot-filling: aqui o texto e uma resposta a uma
 // pergunta, entao "8:30" e horario mesmo sem preposicao.
@@ -331,7 +354,13 @@ export function resolveTemporalAnswer(text, { today, now } = {}) {
   }
 
   const temporal = resolveTemporal(raw, { today, now })
-  if (temporal.time || temporal.daypart || temporal.date || temporal.range) return temporal
+  // Data explicita SEMPRE vence a recusa ("nao sei... pode ser sexta").
+  if (temporal.date || temporal.range) return temporal
+  // Sem data no texto: uma recusa deliberada e uma resposta VALIDA.
+  if (isNoDateAnswer(normalized.text)) {
+    return { ...temporal, noDate: true, hasTemporal: false }
+  }
+  if (temporal.time || temporal.daypart) return temporal
 
   // Hora nua sem preposicao ("8:30", "9", "08:30hs") — valido como RESPOSTA.
   const bare = /^(\d{1,2})(?:\s*[:h]\s*(\d{2}))?\s*(?:horas?|hrs|hs|h)?$/.exec(normalized.text.trim())
@@ -352,4 +381,4 @@ export function resolveTemporalAnswer(text, { today, now } = {}) {
   return temporal
 }
 
-export const __test__ = { resolveDatePart, resolveTimePart, detectDaypart, resolveRelativeHours }
+export const __test__ = { resolveDatePart, resolveTimePart, detectDaypart, resolveRelativeHours, isNoDateAnswer }

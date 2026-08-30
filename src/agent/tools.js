@@ -45,7 +45,11 @@ export function createTools(services) {
       schema: {
         title: { type: 'string', required: true, max: 300 },
         description: { type: 'string', max: 2000 },
-        date: { type: 'date', required: true },
+        // Sem `required`: a atividade PODE nascer sem data ("sem data",
+        // "coloque em tarefas a fazer"). Quem garante que a data e sempre
+        // PERGUNTADA — e so dispensada quando o usuario dispensa — e a camada
+        // de slots, que vale para qualquer provider.
+        date: { type: 'date' },
         start_time: { type: 'time' },
         end_time: { type: 'time' },
         category_id: { type: 'id' },

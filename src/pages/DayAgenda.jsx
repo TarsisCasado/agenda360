@@ -132,8 +132,8 @@ export default function DayAgenda() {
     <div className="mx-auto max-w-2xl">
       <header className="mb-5 flex items-end justify-between gap-3 px-2">
         <div className="min-w-0">
-          <h1 className="text-display first-letter:uppercase">{today ? 'Hoje' : formatLong(date).split(',')[0]}</h1>
-          <p className="text-caption mt-1 first-letter:uppercase">{formatLong(date)}</p>
+          <h1 className="text-display">{today ? 'Hoje' : formatLong(date).split(',')[0]}</h1>
+          <p className="text-caption mt-1">{formatLong(date)}</p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <button onClick={() => go(-1)} className="icon-btn" aria-label="Dia anterior">

@@ -34,11 +34,12 @@ export function missingSlots(intent, data = {}, { asked = [] } = {}) {
   if (intent === 'create_task') {
     if (!data.title) missing.push('titulo')
     if (data.date_range && !data.date) missing.push('dia_da_semana')
-    else if (!data.date) missing.push('data')
+    else if (!data.date && !data.date_skipped) missing.push('data')
     if (data.time_ambiguous) missing.push('periodo')
     else if (
       !data.start_time &&
       !data.daypart &&
+      !data.date_skipped && // sem dia, nao faz sentido perguntar horario
       isMeetingLike(data.title) &&
       !asked.includes('horario')
     ) {
@@ -103,6 +104,20 @@ export function applyAnswer({ slot, data, text, context = {} }) {
   }
 
   if (slot === 'data' || slot === 'dia_da_semana') {
+    // Recusa deliberada de data ("sem data", "coloque em tarefas a fazer"):
+    // e uma RESPOSTA valida, nao um erro de entendimento. A atividade nasce
+    // sem data, na lista de tarefas a fazer — e a pergunta nao se repete.
+    if (answer.noDate) {
+      // Excecao: compromisso com hora marcada precisa de dia. Hora sem data
+      // nao existe na agenda, entao aqui a resposta nao serve.
+      if (next.start_time) {
+        return { data: next, resolved: false, reason: 'needs_date_for_time' }
+      }
+      next.date = null
+      next.date_skipped = true
+      delete next.date_range
+      return { data: next, resolved: true, skipped: true }
+    }
     // "semana que vem" como resposta: vira intervalo e a proxima pergunta
     // passa a ser o DIA da semana (nunca escolhemos um dia por conta propria).
     if (!answer.date && answer.range) {
@@ -208,6 +223,7 @@ export function mergeTurn({ pending, interp, text, context = {} }) {
       asked: pending.asked || [],
       continued: true,
       unresolvedSlot: slot,
+      unresolvedReason: applied.reason || null,
     }
   }
   return {
@@ -223,6 +239,7 @@ export function stripInternal(data = {}) {
   const clean = { ...data }
   delete clean.time_ambiguous
   delete clean.date_range
+  delete clean.date_skipped
   delete clean.daypart
   delete clean.category
   return clean

@@ -42,6 +42,15 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
   const [phase, setPhase] = useState('input') // input | thinking | proposal | busy
   const [proposal, setProposal] = useState(null)
   const [turns, setTurns] = useState([]) // [{ role:'user'|'agent', text }]
+  const endRef = useRef(null)
+
+  // A folha cresce com a conversa ate o teto; passando disso o scroll e
+  // interno — entao a ultima fala precisa ser trazida a vista.
+  useEffect(() => {
+    if (!open || turns.length === 0) return
+    const id = setTimeout(() => endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }), 80)
+    return () => clearTimeout(id)
+  }, [open, turns, phase])
 
   useEffect(() => {
     if (open) {
@@ -153,6 +162,7 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
                 />
               </div>
             )}
+            <div ref={endRef} />
           </div>
         )}
 

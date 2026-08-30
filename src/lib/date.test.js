@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatShort, formatTimestamp, fromISODate, toDate, isDateOnly, isTaskOverdue, byTime } from './date'
+import { formatShort, formatTimestamp, fromISODate, toDate, isDateOnly, isTaskOverdue, byTime, formatLong, formatMonthTitle } from './date'
 
 // Estabilizacao T1.2A: helpers de data nao podem quebrar com atividades sem
 // data (date NULL). Nada de Invalid Date, nada de "atrasada" sem data.
@@ -77,5 +77,26 @@ describe('date — timestamp x data pura (regressao "Invalid time value")', () =
       expect(() => formatShort(value)).not.toThrow()
       expect(() => formatTimestamp(value)).not.toThrow()
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// CAPITALIZACAO PT-BR (CP4.1) — a inicial maiuscula sai da FONTE, nao do CSS.
+// `text-transform: capitalize` capitalizava toda palavra e produzia
+// "Agosto De 2026" / "24 De Agosto De 2026".
+// ---------------------------------------------------------------------------
+describe('capitalizacao pt-BR dos rotulos de data', () => {
+  it('formatMonthTitle: "Agosto de 2026", nunca "Agosto De 2026"', () => {
+    expect(formatMonthTitle(new Date(2026, 7, 15))).toBe('Agosto de 2026')
+  })
+
+  it('formatLong: so a inicial em maiuscula', () => {
+    const out = formatLong('2026-08-24')
+    expect(out).toBe('Segunda-feira, 24 de agosto de 2026')
+    expect(out).not.toMatch(/\sDe\s/)
+  })
+
+  it('formatLong preserva o rotulo neutro de "sem data"', () => {
+    expect(formatLong(null)).toBe('sem data')
   })
 })

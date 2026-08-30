@@ -106,7 +106,14 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     // A resposta curta nao serviu para o slot aberto: repete a pergunta (sem
     // reiniciar a conversa e sem perder o que ja foi entendido).
     if (turn.unresolvedSlot) {
-      const msg = `Não consegui entender essa parte. ${slotQuestion(turn.unresolvedSlot, turn.data)}`
+      // A razao vem da camada de slots: quando ha um motivo de DOMINIO
+      // (compromisso com hora precisa de dia), o usuario merece ouvi-lo em vez
+      // de um generico "nao entendi".
+      const reason =
+        turn.unresolvedReason === 'needs_date_for_time'
+          ? 'Como já tem horário marcado, esse compromisso precisa de um dia.'
+          : 'Não consegui entender essa parte.'
+      const msg = `${reason} ${slotQuestion(turn.unresolvedSlot, turn.data)}`
       await savePending(convId, turn, turn.unresolvedSlot)
       await memory.append(convId, 'assistant', msg, { slot: turn.unresolvedSlot })
       return { conversationId: convId, ...clarify(msg, { slot: turn.unresolvedSlot, intent: turn.intent }) }
@@ -246,6 +253,9 @@ function previewMessage(intent, payload = {}, data = {}) {
     create_link: 'salvar um link',
   }
   const base = `Entendi que voce deseja ${map[intent] || 'executar uma acao'}${payload.title ? `: "${payload.title}"` : ''}.`
+  if (intent === 'create_task' && data.date_skipped) {
+    return `${base} Sem data — vai para a lista de tarefas a fazer.`
+  }
   if (intent === 'create_task' && !payload.start_time && data.daypart) {
     return `${base} Deixei sem horario exato.`
   }

@@ -10,6 +10,7 @@ import { useToast } from '../context/ToastContext'
 import { inboxService } from '../services/inboxService'
 import { ideaTitle, ideaSnippet, sortIdeasByRecent } from '../lib/ideas'
 import { formatTimestamp } from '../lib/date'
+import { pluralize } from '../lib/plural'
 
 // ---------------------------------------------------------------------------
 // IDEIAS — lista enxuta (estilo Apple Notes). Reutiliza inbox_items (title +
@@ -49,7 +50,7 @@ export default function Ideas() {
         <div>
           <h1 className="text-display">Ideias</h1>
           <p className="text-caption mt-1">
-            {ideas.length > 0 ? `${ideas.length} anotação${ideas.length > 1 ? 'ões' : ''}` : 'Escreva sem fricção'}
+            {ideas.length > 0 ? pluralize(ideas.length, 'anotação', 'anotações') : 'Escreva sem fricção'}
           </p>
         </div>
         {/* Acao contextual, nao botao permanente com rotulo longo. */}

@@ -19,6 +19,7 @@ import {
 } from '../lib/date'
 import { STATUS, PRIORITY } from '../lib/constants'
 import { percent, cx } from '../lib/utils'
+import { pluralize } from '../lib/plural'
 import { greetingFor, todayPhrase } from '../lib/todayContext'
 import { ideaTitle, sortIdeasByRecent } from '../lib/ideas'
 
@@ -138,9 +139,9 @@ export default function Today() {
 
   const suggestion =
     overdue.length > 0
-      ? { text: `Reorganizar ${overdue.length} atrasada${overdue.length > 1 ? 's' : ''}`, to: '/tarefas' }
+      ? { text: `Reorganizar ${pluralize(overdue.length, 'atrasada', 'atrasadas')}`, to: '/tarefas' }
       : undated.length > 0
-        ? { text: `${undated.length} tarefa${undated.length > 1 ? 's' : ''} sem data para organizar`, to: '/tarefas' }
+        ? { text: `${pluralize(undated.length, 'tarefa', 'tarefas')} sem data para organizar`, to: '/tarefas' }
         : null
 
   const openTask = (t) => setEditing(t)
@@ -149,7 +150,7 @@ export default function Today() {
   return (
     <div className="mx-auto max-w-2xl">
       <header className="animate-in mb-7 px-2">
-        <p className="text-caption first-letter:uppercase">{formatLong(nowDate)}</p>
+        <p className="text-caption">{formatLong(nowDate)}</p>
         <h1 className="text-hero mt-1.5">
           {greetingFor(nowDate)}, {firstName}
         </h1>
@@ -220,7 +221,7 @@ export default function Today() {
             <p className="text-caption px-2">
               {doneCount === todayTasks.length
                 ? 'Tudo o que havia para hoje está concluído.'
-                : `${doneCount} concluída${doneCount > 1 ? 's' : ''} hoje.`}
+                : `${pluralize(doneCount, 'concluída', 'concluídas')} hoje.`}
             </p>
           )}
 

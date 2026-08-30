@@ -110,7 +110,11 @@ function ActionCard({ pending, categories, busy, onConfirm, onCancel }) {
 
         {!editing ? (
           <div className="divide-y divide-hairline/50">
-            {has('date') && <FieldRow icon={Calendar} label="Data">{formatShort(form.date)}</FieldRow>}
+            {/* Em create_task a linha de data aparece SEMPRE: uma tarefa sem
+                data precisa mostrar "sem data" na confirmacao, nao sumir. */}
+            {(has('date') || p.intent === 'create_task') && (
+              <FieldRow icon={Calendar} label="Data">{formatShort(form.date)}</FieldRow>
+            )}
             {has('start_time') && <FieldRow icon={Clock} label="Horário">{form.start_time}</FieldRow>}
             {prio && <FieldRow icon={Flag} label="Prioridade"><span style={{ color: prio.color }}>{prio.label}</span></FieldRow>}
             {catName && <FieldRow icon={Tag} label="Categoria">{catName}</FieldRow>}

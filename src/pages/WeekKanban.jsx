@@ -11,7 +11,7 @@ import { taskService } from '../services/taskService'
 import { getWeekDays, toISODate, addDays, isToday, formatShort, isTaskOverdue } from '../lib/date'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { cx } from '../lib/utils'
+import { cx, capitalizeFirst } from '../lib/utils'
 
 export default function WeekKanban() {
   const { user } = useAuth()
@@ -88,7 +88,7 @@ export default function WeekKanban() {
         </div>
 
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-section capitalize">{format(new Date(activeIso + 'T12:00'), "EEEE, d 'de' MMM", { locale: ptBR })}</h2>
+          <h2 className="text-section">{capitalizeFirst(format(new Date(activeIso + 'T12:00'), "EEEE, d 'de' MMM", { locale: ptBR }))}</h2>
           <button onClick={() => setModal({ open: true, task: null, defaults: { date: activeIso } })} className="press flex items-center gap-1 text-sm font-semibold text-brand-600">
             <Plus size={15} /> Nova
           </button>
@@ -124,8 +124,8 @@ export default function WeekKanban() {
               >
                 <div className="mb-2 flex items-center justify-between px-1">
                   <div>
-                    <p className={cx('text-sm font-bold capitalize', todayCol ? 'text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-200')}>
-                      {format(day, 'EEEE', { locale: ptBR })}
+                    <p className={cx('text-sm font-bold', todayCol ? 'text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-200')}>
+                      {capitalizeFirst(format(day, 'EEEE', { locale: ptBR }))}
                     </p>
                     <p className="text-[11px] text-slate-400">{format(day, 'dd/MM')}{dayTasks.length > 0 && ` · ${dayTasks.length}`}</p>
                   </div>
