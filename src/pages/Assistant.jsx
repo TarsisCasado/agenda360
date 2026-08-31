@@ -222,7 +222,9 @@ export default function Assistant() {
     convRef.current = res.conversationId || convRef.current
     if (res.kind === 'clarification') {
       push({ role: 'assistant', text: res.message })
-      setPending(null)
+      // Uma pergunta pode chegar COM o rascunho ainda vivo ("isso e sobre a
+      // atividade que preparei?"): nesse caso o card continua na tela.
+      setPending(res.proposal ? { kind: 'proposal', proposal: res.proposal } : null)
     } else if (res.kind === 'result') {
       const n = Array.isArray(res.result) ? res.result.length : 0
       push({ role: 'assistant', text: n ? `Encontrei ${n} ${n === 1 ? 'item' : 'itens'}:` : 'Não encontrei nada por aqui.', result: res.result || [] })
@@ -231,10 +233,21 @@ export default function Assistant() {
       push({ role: 'assistant', text: res.message })
       setPending({ kind: 'selection', intent: res.intent, data: res.data, options: res.options })
     } else if (res.kind === 'proposal') {
-      push({ role: 'assistant', text: INTRO[res.proposal.intent] || 'Preparei isso para você:' })
+      // `revised` = o usuario ajustou o rascunho por texto (CP5.1): a fala do
+      // agente ja explica o que mudou, entao nao repetimos a introducao.
+      push({ role: 'assistant', text: res.revised ? res.message : (INTRO[res.proposal.intent] || 'Preparei isso para você:') })
       setPending({ kind: 'proposal', proposal: res.proposal, confidence: res.confidence, ambiguities: res.ambiguities })
+    } else if (res.kind === 'confirmed') {
+      // Confirmacao POR TEXTO ("pode salvar"), nao pelo botao.
+      push({ role: 'assistant', text: res.message || 'Feito! ✨', activity: { intent: res.intent } })
+      setPending(null)
+      toast('Ação executada')
+      reload()
+    } else if (res.kind === 'cancelled') {
+      push({ role: 'assistant', text: res.message || 'Tudo bem, descartei.' })
+      setPending(null)
     }
-  }, [])
+  }, [reload, toast])
 
   const send = async (text) => {
     const content = (text ?? input).trim()

@@ -55,15 +55,25 @@ const TARGET_VERBS = [
 
 const MASS_ACTION = /\b(todas|todos|tudo)\b/
 
+// Tabela unica de prioridade: o NLU usa para interpretar a frase inteira e o
+// extrator de delta (CP5.1) usa para achar o TRECHO, com o mesmo lexico.
+// Ordem importa — o primeiro padrao que casar vence.
+export const PRIORITY_PATTERNS = [
+  [/\burgent\w*/, 'urgent'],
+  [/prioridade\s+alta|\bmuito\s+importante\b|\bimportante\b/, 'high'],
+  [/prioridade\s+baixa|\bsem\s+pressa\b|\bquando\s+der\b/, 'low'],
+  [/prioridade\s+(media|normal)/, 'medium'],
+]
+
 function detectPriority(normalized) {
   const t = normalized.text
-  if (/\burgent/.test(t)) return 'urgent'
-  if (/prioridade\s+alta|\bmuito\s+importante\b|\bimportante\b/.test(t)) return 'high'
-  if (/prioridade\s+baixa|\bsem\s+pressa\b|\bquando\s+der\b/.test(t)) return 'low'
+  for (const [re, value] of PRIORITY_PATTERNS) {
+    if (re.test(t)) return value
+  }
   return undefined
 }
 
-function detectCategory(normalized, categories = []) {
+export function detectCategory(normalized, categories = []) {
   for (const c of categories) {
     const name = (c?.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     if (!name) continue

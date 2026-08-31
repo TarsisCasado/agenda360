@@ -15,6 +15,17 @@
 // Regras: toda ESCRITA exige confirmacao; LEITURA executa e mostra resultado;
 // pergunta-se SO o slot que falta; nunca se inventa data ou horario; acao em
 // massa bloqueada.
+//
+// CP5.1 — RASCUNHO VIVO. A conversa tem duas fases, ambas guardadas em
+// ai_conversations.context (jsonb livre, SEM migration):
+//
+//   awaiting_slot         falta informacao -> mergeTurn/slots respondem.
+//   awaiting_confirmation a atividade esta pronta na tela -> turnClassifier
+//                         decide se o proximo turno ALTERA, CONFIRMA, CANCELA
+//                         ou SUBSTITUI o rascunho.
+//
+// A proposta renderizada NAO encerra o contexto. O rascunho so morre por
+// confirmacao, cancelamento ou substituicao inequivoca por outra intencao.
 // ---------------------------------------------------------------------------
 import {
   mergeTurn,
@@ -22,8 +33,10 @@ import {
   slotQuestion,
   withDaypartNote,
   stripInternal,
+  applyPatch,
   FILLABLE_INTENTS,
 } from './slots'
+import { classifyTurn, TURN } from './turnClassifier'
 
 const READ_INTENTS = new Set(['search_tasks', 'list_schedule'])
 const TARGET_INTENTS = new Set([
@@ -87,9 +100,43 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     const context = await contextEngine.build(identity, { categories, history: historyRows, pending })
     const interp = await providerManager.interpret(text, context)
 
+    // ------------------------------------------------------------------
+    // FASE "aguardando confirmacao": ha um rascunho VIVO na tela. Antes de
+    // tratar o turno como frase nova, ele e avaliado CONTRA esse rascunho.
+    // ------------------------------------------------------------------
+    let draft = pending
+    if (draft?.phase === 'awaiting_confirmation' && draft.proposal) {
+      const decision = classifyTurn({ interp, text, context })
+
+      if (decision.kind === TURN.CONFIRM) {
+        return await confirmDraft(convId, draft, identity)
+      }
+      if (decision.kind === TURN.CANCEL) {
+        return await cancelDraft(convId, draft)
+      }
+      if (decision.kind === TURN.MODIFY) {
+        return await reviseDraft(convId, draft, decision, identity, interp)
+      }
+      if (decision.kind === TURN.AMBIGUOUS) {
+        // Perguntar e melhor que adivinhar: o rascunho continua vivo.
+        const msg = `Isso é sobre "${draft.data?.title || 'a atividade'}" que preparei, ou algo novo?`
+        await memory.append(convId, 'assistant', msg, { phase: 'awaiting_confirmation' })
+        return {
+          conversationId: convId,
+          ...clarify(msg, { intent: draft.intent, data: draft.data }),
+          proposal: draft.proposal,
+        }
+      }
+      // TURN.NEW_INTENT: substituicao inequivoca — o rascunho e descartado
+      // (com registro) e o turno segue o fluxo normal, do zero.
+      await runtime.cancel(draft.proposal).catch(() => {})
+      await memory.clearPending?.(convId)
+      draft = null
+    }
+
     // Continuidade de conversa (deterministico): este turno completa a intencao
     // anterior ou abre uma nova?
-    const turn = mergeTurn({ pending, interp, text, context })
+    const turn = mergeTurn({ pending: draft, interp, text, context })
 
     // Nao entendeu nem como frase nova nem como resposta ao slot aberto.
     const unusable =
@@ -183,8 +230,13 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
       return { conversationId: convId, ...clarify(msg) }
     }
 
-    // Chegou a uma proposta/resultado: a intencao deixou de estar pendente.
-    await memory.clearPending?.(convId)
+    // CP5.1 — a proposta NAO encerra o contexto. Uma escrita aguardando
+    // confirmacao vira rascunho VIVO; uma leitura (que ja executou) encerra.
+    if (outcome.kind === 'proposal') {
+      await saveDraft(convId, { intent: turn.intent, data, asked: turn.asked }, outcome.proposal)
+    } else {
+      await memory.clearPending?.(convId)
+    }
 
     const assistantMsg =
       outcome.kind === 'result'
@@ -205,6 +257,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     if (!memory.setPending) return
     await memory
       .setPending(conversationId, {
+        phase: 'awaiting_slot',
         intent: turn.intent,
         data: turn.data,
         asked: turn.asked || [],
@@ -212,6 +265,102 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
         at: new Date().toISOString(),
       })
       .catch(() => {})
+  }
+
+  // ------------------------------------------------------------------------
+  // RASCUNHO VIVO (CP5.1)
+  //
+  // Tudo cabe no jsonb de ai_conversations.context que ja existia — nenhuma
+  // coluna nova, nenhuma migration. `proposal` e JSON puro (intent, payload,
+  // actionId), entao sobrevive a um reload da pagina e a troca de dispositivo.
+  // ------------------------------------------------------------------------
+  async function saveDraft(conversationId, turn, proposal, revision = 0) {
+    if (!memory.setPending) return
+    await memory
+      .setPending(conversationId, {
+        phase: 'awaiting_confirmation',
+        intent: turn.intent,
+        data: turn.data,
+        asked: turn.asked || [],
+        awaiting: null,
+        proposal,
+        revision,
+        at: new Date().toISOString(),
+      })
+      .catch(() => {})
+  }
+
+  async function confirmDraft(conversationId, draft, identity) {
+    const result = await runtime.confirm(draft.proposal, identity)
+    await memory.clearPending?.(conversationId)
+    const msg = 'Pronto, salvei.'
+    await memory.append(conversationId, 'assistant', msg)
+    return { conversationId, kind: 'confirmed', message: msg, intent: draft.intent, result }
+  }
+
+  async function cancelDraft(conversationId, draft) {
+    await runtime.cancel(draft.proposal).catch(() => {})
+    await memory.clearPending?.(conversationId)
+    const msg = 'Tudo bem, descartei.'
+    await memory.append(conversationId, 'assistant', msg)
+    return { conversationId, kind: 'cancelled', message: msg, intent: draft.intent }
+  }
+
+  // ALTERACAO: aplica o patch, REVALIDA e repropoe. Se o patch fizer faltar um
+  // slot obrigatorio (ex.: tirar a data de um compromisso com hora), a conversa
+  // volta a fase de pergunta em vez de propor algo invalido.
+  async function reviseDraft(conversationId, draft, decision, identity, interp) {
+    const data = applyPatch(draft.data, decision.patch)
+
+    // Dispensar um slot OPCIONAL por ajuste vale como te-lo respondido: quem
+    // diz "sem horario" nao pode ouvir "qual horario?" no turno seguinte.
+    const asked = [...(draft.asked || [])]
+    if (decision.patch?.start_time === null && !asked.includes('horario')) asked.push('horario')
+
+    const missing = missingSlots(draft.intent, data, { asked })
+    if (missing.length) {
+      const slot = missing[0]
+      const question = slotQuestion(slot, data)
+      await runtime.cancel(draft.proposal).catch(() => {})
+      await savePending(conversationId, { intent: draft.intent, data, asked }, slot)
+      await memory.append(conversationId, 'assistant', question, { slot })
+      return {
+        conversationId,
+        ...clarify(question, { slot, intent: draft.intent, data }),
+      }
+    }
+
+    const payload = draft.intent === 'create_task' ? withDaypartNote(data) : stripInternal(data)
+    let outcome
+    try {
+      outcome = await toProposalOrResult(draft.intent, payload, identity, conversationId)
+    } catch (err) {
+      // O ajuste deixou o rascunho invalido: nao perde nada, so avisa.
+      const msg = `Não consegui aplicar esse ajuste (${err?.message || 'dado inválido'}). O que preparei continua aqui.`
+      await memory.append(conversationId, 'assistant', msg)
+      return { conversationId, ...clarify(msg), proposal: draft.proposal }
+    }
+
+    // A proposta anterior deixa de valer: registra o descarte antes de trocar.
+    await runtime.cancel(draft.proposal).catch(() => {})
+    await saveDraft(
+      conversationId,
+      { intent: draft.intent, data, asked },
+      outcome.proposal,
+      (draft.revision || 0) + 1,
+    )
+
+    const what = decision.fields?.length ? listar(decision.fields) : 'a atividade'
+    const msg = `Ajustei ${what}. Confira e confirme. 👇`
+    await memory.append(conversationId, 'assistant', msg)
+    return {
+      conversationId,
+      confidence: interp?.confidence,
+      continued: true,
+      revised: true,
+      message: msg,
+      ...outcome,
+    }
   }
 
   // Continua apos o usuario SELECIONAR uma tarefa (fluxo de multiplas).
@@ -241,6 +390,14 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
 
 // Previa em linguagem humana: diz o que entendeu, incluindo quando o horario
 // ficou em aberto de proposito.
+// "a data", "a data e o horário", "a data, o horário e a prioridade".
+const ARTICLE = { data: 'a', horário: 'o', período: 'o', prioridade: 'a', categoria: 'a', lembrete: 'o' }
+function listar(fields = []) {
+  const unique = [...new Set(fields)].map((f) => `${ARTICLE[f] || 'o'} ${f}`)
+  if (unique.length === 1) return unique[0]
+  return `${unique.slice(0, -1).join(', ')} e ${unique[unique.length - 1]}`
+}
+
 function previewMessage(intent, payload = {}, data = {}) {
   const map = {
     create_task: 'criar uma atividade',

@@ -336,10 +336,24 @@ const NO_DATE_PATTERNS = [
   /\b(em|n[oa]s?)\s+tarefas?(\s+a\s+fazer)?\b/,
   /\blista\s+de\s+tarefas\b/,
   /\bpara\s+depois\b/,
+  // "deixa so no kanban", "manda pro backlog": nomear o QUADRO e nomear o lugar
+  // das atividades sem dia. Nao e uma frase decorada — e o mesmo conceito de
+  // "tarefas a fazer" acima, dito pelo nome da tela.
+  /\b(n[oa]|para\s+o|pro|em|no)\s+(kanban|quadro|board|backlog)(\s+semanal?)?\b/,
+  /\b(kanban|backlog)(\s+semanal?)?\b/,
 ]
 
+// Devolve o intervalo (no texto normalizado) da recusa encontrada, ou null.
+function findNoDate(normalizedText) {
+  for (const re of NO_DATE_PATTERNS) {
+    const m = re.exec(normalizedText)
+    if (m) return [m.index, m.index + m[0].length]
+  }
+  return null
+}
+
 function isNoDateAnswer(normalizedText) {
-  return NO_DATE_PATTERNS.some((re) => re.test(normalizedText))
+  return findNoDate(normalizedText) !== null
 }
 
 // Interpretacao de uma RESPOSTA CURTA ("8:30", "de manha", "amanha", "sexta",
@@ -350,15 +364,23 @@ export function resolveTemporalAnswer(text, { today, now } = {}) {
   const normalized = normalizeWithMap(raw)
 
   if (/^(sem hor[aá]rio|sem hora|nao sei|n[aã]o sei|tanto faz|qualquer hor[aá]rio|deixa sem|sem)$/i.test(raw.trim())) {
-    return { skip: true }
+    // `spans` cobre a frase inteira: quem precisa saber o que do texto ja foi
+    // consumido (o classificador de turno do CP5.1) nao pode ficar sem isso.
+    return { skip: true, spans: raw ? [[0, raw.length]] : [] }
   }
 
   const temporal = resolveTemporal(raw, { today, now })
   // Data explicita SEMPRE vence a recusa ("nao sei... pode ser sexta").
   if (temporal.date || temporal.range) return temporal
   // Sem data no texto: uma recusa deliberada e uma resposta VALIDA.
-  if (isNoDateAnswer(normalized.text)) {
-    return { ...temporal, noDate: true, hasTemporal: false }
+  const noDateRange = findNoDate(normalized.text)
+  if (noDateRange) {
+    return {
+      ...temporal,
+      noDate: true,
+      hasTemporal: false,
+      spans: [...temporal.spans, spanToSource(normalized, noDateRange[0], noDateRange[1])],
+    }
   }
   if (temporal.time || temporal.daypart) return temporal
 
@@ -381,4 +403,4 @@ export function resolveTemporalAnswer(text, { today, now } = {}) {
   return temporal
 }
 
-export const __test__ = { resolveDatePart, resolveTimePart, detectDaypart, resolveRelativeHours, isNoDateAnswer }
+export const __test__ = { resolveDatePart, resolveTimePart, detectDaypart, resolveRelativeHours, isNoDateAnswer, findNoDate }

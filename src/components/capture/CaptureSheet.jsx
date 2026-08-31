@@ -20,7 +20,10 @@ import { toISODate, addDays, formatShort } from '../../lib/date'
 // apresentacao.
 // ---------------------------------------------------------------------------
 function whenLabel(payload) {
-  if (!payload?.date) return null
+  // Sem data e uma informacao, nao a ausencia dela: quem confirma precisa ver
+  // que a atividade vai para a lista de tarefas a fazer (mesma decisao do
+  // cartao do Copiloto, no CP4.1).
+  if (!payload?.date) return 'Sem data'
   const today = toISODate(new Date())
   const tomorrow = toISODate(addDays(new Date(), 1))
   const d =
@@ -78,12 +81,27 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
       })
       convRef.current = res.conversationId || convRef.current
       if (res.kind === 'proposal') {
+        // Pode ser a primeira proposta OU o rascunho revisado por texto
+        // ("muda para sexta"): nos dois casos o cartao e substituido.
+        if (res.revised) setTurns((prev) => [...prev, { role: 'agent', text: res.message }])
         setProposal(res.proposal)
         setPhase('proposal')
-      } else if (res.kind === 'clarification' || res.kind === 'selection') {
-        setTurns((prev) => [...prev, { role: 'agent', text: res.message }])
+      } else if (res.kind === 'confirmed') {
+        // Confirmacao POR TEXTO, sem tocar no botao.
+        reload()
+        toast('Adicionado ✓')
+        onClose?.()
+      } else if (res.kind === 'cancelled') {
+        setProposal(null)
+        setTurns((prev) => [...prev, { role: 'agent', text: res.message || 'Tudo bem, descartei.' }])
         setPhase('input')
         setTimeout(() => inputRef.current?.focus(), 60)
+      } else if (res.kind === 'clarification' || res.kind === 'selection') {
+        setTurns((prev) => [...prev, { role: 'agent', text: res.message }])
+        // Uma pergunta pode chegar com o rascunho ainda vivo: se veio proposta
+        // junto, o cartao continua; senao, volta a escrita.
+        if (res.proposal) { setProposal(res.proposal); setPhase('proposal') }
+        else { setPhase('input'); setTimeout(() => inputRef.current?.focus(), 60) }
       } else if (res.kind === 'result') {
         toast('Busca concluída')
         onClose?.()
@@ -123,6 +141,11 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
   const category = categories.find((c) => c.id === proposal?.payload?.category_id)
   const isTask = proposal && proposal.intent !== 'create_link'
   const writing = phase === 'input' || phase === 'thinking'
+  // CP5.1 — com a proposta na tela o rascunho continua VIVO: o usuario pode
+  // ajusta-lo por texto ("muda para sexta"), confirmar ("pode salvar") ou
+  // descartar ("cancela isso"). Sem um campo aqui, nada disso seria alcancavel
+  // na folha — so na pagina do Copiloto.
+  const canTalk = writing || phase === 'proposal'
 
   return (
     <Sheet open={open} onClose={onClose} maxWidth="max-w-xl">
@@ -166,53 +189,6 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
           </div>
         )}
 
-        {/* Escrita */}
-        {writing && (
-          <div>
-            {turns.length === 0 && (
-              <>
-                <div className="flex items-center gap-2 text-accent">
-                  <Sparkles size={15} />
-                  <span className="text-[12px] font-semibold uppercase tracking-[0.06em]">
-                    Captura
-                  </span>
-                </div>
-                <h2 className="text-page mt-1.5">O que você precisa organizar?</h2>
-              </>
-            )}
-            <textarea
-              ref={inputRef}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  interpret(text)
-                }
-              }}
-              placeholder={
-                turns.length ? 'Responda aqui…' : 'Ex: Reunião com gerentes amanhã às 8:30'
-              }
-              rows={turns.length ? 2 : 3}
-              className="field mt-3 w-full resize-none text-[17px] leading-relaxed"
-            />
-            <div className="mt-1 flex items-center justify-between gap-3">
-              <p className="text-caption">Escreva do seu jeito — eu interpreto.</p>
-              <button
-                onClick={() => interpret(text)}
-                disabled={!text.trim() || phase === 'thinking'}
-                aria-label="Interpretar"
-                className="press flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
-              >
-                {phase === 'thinking' ? (
-                  <Loader2 size={17} className="animate-spin" />
-                ) : (
-                  <ArrowUp size={19} strokeWidth={2.5} />
-                )}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Confirmacao — o que ele entendeu */}
         {(phase === 'proposal' || phase === 'busy') && proposal && (
@@ -290,6 +266,60 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
                   Recomeçar
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Escrita — sempre disponivel enquanto houver conversa aberta */}
+        {canTalk && (
+          <div className={phase === 'proposal' ? 'mt-5 border-t hair pt-3' : undefined}>
+            {turns.length === 0 && (
+              <>
+                <div className="flex items-center gap-2 text-accent">
+                  <Sparkles size={15} />
+                  <span className="text-[12px] font-semibold uppercase tracking-[0.06em]">
+                    Captura
+                  </span>
+                </div>
+                <h2 className="text-page mt-1.5">O que você precisa organizar?</h2>
+              </>
+            )}
+            <textarea
+              ref={inputRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  interpret(text)
+                }
+              }}
+              placeholder={
+                phase === 'proposal'
+                  ? 'Ajuste por aqui: "muda para sexta", "sem horário"…'
+                  : turns.length
+                    ? 'Responda aqui…'
+                    : 'Ex: Reunião com gerentes amanhã às 8:30'
+              }
+              rows={phase === 'proposal' ? 1 : turns.length ? 2 : 3}
+              className="field mt-3 w-full resize-none text-[17px] leading-relaxed"
+            />
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <p className="text-caption">
+                {phase === 'proposal' ? 'Ou confirme acima.' : 'Escreva do seu jeito — eu interpreto.'}
+              </p>
+              <button
+                onClick={() => interpret(text)}
+                disabled={!text.trim() || phase === 'thinking'}
+                aria-label="Interpretar"
+                className="press flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
+              >
+                {phase === 'thinking' ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : (
+                  <ArrowUp size={19} strokeWidth={2.5} />
+                )}
+              </button>
             </div>
           </div>
         )}

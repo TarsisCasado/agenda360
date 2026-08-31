@@ -125,8 +125,12 @@ describe('A) "Preciso falar com Francisco amanhã" -> "Qual horário?" -> "8:30"
       date: AMANHA,
       start_time: '08:30',
     })
-    // Pendencia encerrada apos virar proposta.
-    expect(await memory.getPending('conv-1')).toBeNull()
+    // CP5.1: a proposta NAO encerra o contexto — ela vira RASCUNHO VIVO.
+    // (Ate o CP4.1 esta linha exigia `toBeNull()`, que era exatamente a causa
+    // do P0: o rascunho sumia no instante em que aparecia na tela.)
+    const draft = await memory.getPending('conv-1')
+    expect(draft.phase).toBe('awaiting_confirmation')
+    expect(draft.proposal.payload.title).toBe('Falar com Francisco')
   })
 
   it('"8:30" sozinho, SEM conversa anterior, nao vira tarefa nenhuma', async () => {

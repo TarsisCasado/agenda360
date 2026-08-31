@@ -33,8 +33,12 @@ export function missingSlots(intent, data = {}, { asked = [] } = {}) {
   const missing = []
   if (intent === 'create_task') {
     if (!data.title) missing.push('titulo')
+    // A dispensa de data NAO vale para compromisso com hora marcada: hora sem
+    // dia nao existe na agenda. A regra mora AQUI, num lugar so, para valer
+    // venha o dado de onde vier — resposta de slot ou patch do rascunho vivo.
+    const dateWaived = data.date_skipped && !data.start_time
     if (data.date_range && !data.date) missing.push('dia_da_semana')
-    else if (!data.date && !data.date_skipped) missing.push('data')
+    else if (!data.date && !dateWaived) missing.push('data')
     if (data.time_ambiguous) missing.push('periodo')
     else if (
       !data.start_time &&
@@ -232,6 +236,42 @@ export function mergeTurn({ pending, interp, text, context = {} }) {
     asked: [...(pending.asked || []), slot],
     continued: true,
   }
+}
+
+// ---------------------------------------------------------------------------
+// 4) PATCH — aplica um delta de campos sobre o rascunho vivo (CP5.1).
+//
+// O patch usa `null` para LIMPAR um campo. As interacoes de dominio ficam aqui,
+// num lugar so, para valerem venha o delta de onde vier: data explicita anula
+// "sem data" e intervalo; tirar o horario tira tambem periodo e ambiguidade.
+// ---------------------------------------------------------------------------
+export function applyPatch(data = {}, patch = {}) {
+  const next = { ...data }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null || value === undefined) delete next[key]
+    else next[key] = value
+  }
+
+  if (patch.date === null) {
+    // Recusa deliberada de data: vai para a lista de tarefas a fazer.
+    next.date_skipped = true
+    delete next.date_range
+  }
+  if (patch.date) {
+    delete next.date_skipped
+    delete next.date_range
+  }
+  if (patch.date_range) {
+    delete next.date
+    delete next.date_skipped
+  }
+  if (patch.start_time === null) {
+    delete next.time_ambiguous
+    delete next.daypart
+  }
+  if (patch.start_time) delete next.daypart
+
+  return next
 }
 
 // Campos internos de slot que NAO podem chegar ao payload da ferramenta.

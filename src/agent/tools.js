@@ -57,6 +57,10 @@ export function createTools(services) {
         status: { type: 'enum', values: STATUSES, default: 'todo' },
         link: { type: 'string', max: 2000 },
         notes: { type: 'string', max: 2000 },
+        // Lembrete: o dominio ja tem o campo (TASK_DEFAULTS do taskService) e o
+        // CP5.1 passou a entender "nao quero lembrete" como ALTERACAO do
+        // rascunho. Sem isto, a frase nao teria onde pousar.
+        alert_enabled: { type: 'boolean' },
       },
       execute: (data, identity) =>
         services.tasks.create(identity.workspaceId, identity.userId, data),

@@ -233,7 +233,10 @@ describe('QA: "Criar tarefa revisar contrato" -> "Sem data definida, coloque em 
     // A pergunta de data foi feita UMA vez e nao voltou.
     expect(dateQuestions(memory)).toHaveLength(1)
     expect(second.message).not.toMatch(/não consegui entender/i)
-    expect(await memory.getPending('conv-1')).toBeNull()
+    // CP5.1: o rascunho permanece vivo aguardando confirmacao (antes era null).
+    const draft = await memory.getPending('conv-1')
+    expect(draft.phase).toBe('awaiting_confirmation')
+    expect(draft.data.date_skipped).toBe(true)
   })
 
   it('a tarefa criada fica com date null', async () => {
