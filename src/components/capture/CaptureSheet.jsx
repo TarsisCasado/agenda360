@@ -91,6 +91,11 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
         reload()
         toast('Adicionado ✓')
         onClose?.()
+      } else if (res.kind === 'answer') {
+        // CP5.1.1 — o agente respondeu sobre o rascunho. Nada muda no cartao.
+        setTurns((prev) => [...prev, { role: 'agent', text: res.message }])
+        if (res.proposal) { setProposal(res.proposal); setPhase('proposal') }
+        else { setPhase('input'); setTimeout(() => inputRef.current?.focus(), 60) }
       } else if (res.kind === 'cancelled') {
         setProposal(null)
         setTurns((prev) => [...prev, { role: 'agent', text: res.message || 'Tudo bem, descartei.' }])

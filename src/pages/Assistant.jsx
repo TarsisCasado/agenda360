@@ -246,6 +246,11 @@ export default function Assistant() {
     } else if (res.kind === 'cancelled') {
       push({ role: 'assistant', text: res.message || 'Tudo bem, descartei.' })
       setPending(null)
+    } else if (res.kind === 'answer') {
+      // CP5.1.1 — resposta sobre o rascunho ativo. O cartao permanece na tela
+      // exatamente como estava: consultar nao altera nada.
+      push({ role: 'assistant', text: res.message })
+      if (res.proposal) setPending({ kind: 'proposal', proposal: res.proposal })
     }
   }, [reload, toast])
 

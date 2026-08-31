@@ -26,6 +26,11 @@
 //
 // A proposta renderizada NAO encerra o contexto. O rascunho so morre por
 // confirmacao, cancelamento ou substituicao inequivoca por outra intencao.
+//
+// CP5.1.1 — CONSULTA. Havendo entidade ativa, ela e tambem o REFERENTE padrao
+// de perguntas e pronomes: "esta sem data?", "como ficou?", "tem lembrete?".
+// Consultar nao altera, nao executa, nao propoe e nao perde o contexto — so le
+// o rascunho e responde com o estado real. Vale nas duas fases.
 // ---------------------------------------------------------------------------
 import {
   mergeTurn,
@@ -36,7 +41,8 @@ import {
   applyPatch,
   FILLABLE_INTENTS,
 } from './slots'
-import { classifyTurn, TURN } from './turnClassifier'
+import { classifyTurn, isDraftQuery, TURN } from './turnClassifier'
+import { describeDraft } from './draftSummary'
 
 const READ_INTENTS = new Set(['search_tasks', 'list_schedule'])
 const TARGET_INTENTS = new Set([
@@ -101,10 +107,19 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     const interp = await providerManager.interpret(text, context)
 
     // ------------------------------------------------------------------
+    // CONSULTA sobre a entidade ativa — vale em QUALQUER fase com rascunho.
+    // Perguntar nao e mandar: nao altera, nao propoe, nao executa, nao
+    // descarta. Responde do estado real e devolve a conversa onde estava.
+    // ------------------------------------------------------------------
+    let draft = pending
+    if (draft?.intent && isDraftQuery({ interp, text }).match) {
+      return await answerAboutDraft(convId, draft, text, context)
+    }
+
+    // ------------------------------------------------------------------
     // FASE "aguardando confirmacao": ha um rascunho VIVO na tela. Antes de
     // tratar o turno como frase nova, ele e avaliado CONTRA esse rascunho.
     // ------------------------------------------------------------------
-    let draft = pending
     if (draft?.phase === 'awaiting_confirmation' && draft.proposal) {
       const decision = classifyTurn({ interp, text, context })
 
@@ -288,6 +303,40 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
         at: new Date().toISOString(),
       })
       .catch(() => {})
+  }
+
+  // CONSULTA: le o rascunho e responde. O estado da conversa fica INTACTO —
+  // mesma fase, mesmos dados, mesma proposta — para que o turno seguinte
+  // ("entao coloca sexta", "pode salvar") continue sobre a MESMA entidade.
+  async function answerAboutDraft(conversationId, draft, text, context) {
+    const { fields } = isDraftQuery({ interp: {}, text, providerAgrees: false })
+    const answer = describeDraft(draft.data, {
+      categories: context?.categories || [],
+      today: context?.today,
+      fields,
+    })
+
+    // Fecho: com a proposta pronta, convida a confirmar; com slot aberto,
+    // repete a pergunta que estava de pe, para a conversa nao travar.
+    const openSlot =
+      draft.phase === 'awaiting_confirmation'
+        ? null
+        : draft.awaiting || missingSlots(draft.intent, draft.data, { asked: draft.asked })[0]
+    const tail = openSlot
+      ? slotQuestion(openSlot, draft.data)
+      : 'Se estiver certo, é só confirmar.'
+
+    const msg = `${answer} ${tail}`
+    await memory.append(conversationId, 'assistant', msg, { inspect: true })
+    return {
+      conversationId,
+      kind: 'answer',
+      message: msg,
+      intent: draft.intent,
+      data: draft.data,
+      ...(draft.proposal ? { proposal: draft.proposal } : {}),
+      ...(openSlot ? { slot: openSlot } : {}),
+    }
   }
 
   async function confirmDraft(conversationId, draft, identity) {
