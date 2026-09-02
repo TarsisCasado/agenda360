@@ -16,8 +16,23 @@ import { clientsClaim } from 'workbox-core'
 
 precacheAndRoute(self.__WB_MANIFEST)
 
-// registerType:'autoUpdate' -> o app pede a ativacao imediata do SW novo.
-self.skipWaiting()
+// ---------------------------------------------------------------------------
+// ATUALIZACAO — por que NAO ha skipWaiting() aqui.
+//
+// Ate o CP5.1.1 este arquivo chamava self.skipWaiting() + clientsClaim(): o SW
+// novo assumia NA HORA as abas ja abertas. Como o precache novo so contem os
+// arquivos do build novo, a aba que continuava rodando o bundle ANTIGO passava
+// a pedir chunks que nem o servidor nem o cache tinham mais — e toda rota lazy
+// (ou seja, todas menos "Hoje") caia no ErrorBoundary. Foi o incidente do QA.
+//
+// Sem skipWaiting o SW novo fica em "waiting": a sessao aberta continua sendo
+// servida pelo precache que combina com o codigo que ela esta executando, e a
+// troca acontece quando o app e fechado e reaberto. clientsClaim() segue util
+// SO no primeiro registro (quando ainda nao ha SW controlando a pagina).
+//
+// Rede de seguranca independente disto: lib/lazyRoute.js recarrega a pagina
+// uma vez se um chunk sumir mesmo assim (cache despejado, aba sem SW).
+// ---------------------------------------------------------------------------
 clientsClaim()
 
 // DIAGNOSTICO TEMPORARIO (Sprint 2 / Etapa 1D — investigacao "ultima milha"

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import { WorkspaceProvider } from './context/WorkspaceContext'
@@ -6,23 +6,25 @@ import { DataProvider } from './context/DataContext'
 import Layout from './components/layout/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import Spinner from './components/ui/Spinner'
+import { lazyRoute } from './lib/lazyRoute'
 import Login from './pages/Login'
 import Today from './pages/Today'
 
 // Code-splitting por rota: reduz o bundle inicial e acelera o carregamento no
 // celular. A tela "Hoje" (principal) e carregada de imediato; as demais sob
-// demanda.
-const Tasks = lazy(() => import('./pages/Tasks'))
-const Ideas = lazy(() => import('./pages/Ideas'))
-const IdeaEditor = lazy(() => import('./pages/IdeaEditor'))
-const Inbox = lazy(() => import('./pages/Inbox'))
-const DayAgenda = lazy(() => import('./pages/DayAgenda'))
-const WeekKanban = lazy(() => import('./pages/WeekKanban'))
-const MonthCalendar = lazy(() => import('./pages/MonthCalendar'))
-const Links = lazy(() => import('./pages/Links'))
-const Assistant = lazy(() => import('./pages/Assistant'))
-const Reports = lazy(() => import('./pages/Reports'))
-const Settings = lazy(() => import('./pages/Settings'))
+// demanda, via lazyRoute — que recarrega a pagina uma vez quando o chunk
+// pedido nao existe mais (aba aberta durante um deploy). Ver lib/lazyRoute.js.
+const Tasks = lazyRoute(() => import('./pages/Tasks'))
+const Ideas = lazyRoute(() => import('./pages/Ideas'))
+const IdeaEditor = lazyRoute(() => import('./pages/IdeaEditor'))
+const Inbox = lazyRoute(() => import('./pages/Inbox'))
+const DayAgenda = lazyRoute(() => import('./pages/DayAgenda'))
+const WeekKanban = lazyRoute(() => import('./pages/WeekKanban'))
+const MonthCalendar = lazyRoute(() => import('./pages/MonthCalendar'))
+const Links = lazyRoute(() => import('./pages/Links'))
+const Assistant = lazyRoute(() => import('./pages/Assistant'))
+const Reports = lazyRoute(() => import('./pages/Reports'))
+const Settings = lazyRoute(() => import('./pages/Settings'))
 
 function RouteFallback() {
   return (
