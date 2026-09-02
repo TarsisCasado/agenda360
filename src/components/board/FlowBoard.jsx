@@ -3,6 +3,8 @@ import { Archive, ChevronDown } from 'lucide-react'
 import BoardColumn from './BoardColumn'
 import BoardCard from './BoardCard'
 import DatePrompt from './DatePrompt'
+import { useIsDesktop } from '../../hooks/useMediaQuery'
+import { useTouchCardDrag } from '../../hooks/useTouchCardDrag'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
@@ -88,6 +90,7 @@ const COLUNA_UX = {
 }
 
 export default function FlowBoard({ tasks, setTasks, reload, onOpenTask, className }) {
+  const isDesktop = useIsDesktop()
   const { user } = useAuth()
   const { workspaceId } = useWorkspace()
   const { reload: reloadData } = useData()
@@ -164,6 +167,19 @@ export default function FlowBoard({ tasks, setTasks, reload, onOpenTask, classNa
     tabRefs.current[etapa]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
   }, [etapa])
 
+  // Usado pelo arrasto no toque ao encostar na borda. Le a etapa da ref, e nao
+  // do estado, porque durante o gesto o estado pode nao ter chegado ainda.
+  const etapaRef = useRef(0)
+  const irParaEtapaRef = useRef(null)
+  etapaRef.current = etapa
+
+  const avancarEtapa = useCallback((dir) => {
+    const i = Math.min(FLOW_COLUMNS.length - 1, Math.max(0, etapaRef.current + dir))
+    if (i === etapaRef.current) return
+    etapaRef.current = i
+    irParaEtapaRef.current?.(i)
+  }, [])
+
   const irParaEtapa = useCallback((i) => {
     const node = colunaRefs.current[i]
     const el = pagerRef.current
@@ -171,6 +187,7 @@ export default function FlowBoard({ tasks, setTasks, reload, onOpenTask, classNa
     el.scrollTo({ left: node.offsetLeft - (el.clientWidth - node.offsetWidth) / 2, behavior: 'smooth' })
     setEtapa(i)
   }, [])
+  irParaEtapaRef.current = irParaEtapa
 
   // -------------------------------------------------------------------------
   // MOVIMENTACAO. Um caminho so para arrasto, menu, folha e teclado: quem chama
@@ -217,6 +234,23 @@ export default function FlowBoard({ tasks, setTasks, reload, onOpenTask, classNa
     },
     [tasks, mover],
   )
+
+  // ARRASTO NO TOQUE. Nao e uma terceira logica: cai no mesmo `soltar` do
+  // arrasto de desktop, que cai no mesmo `mover`, que cai no mesmo
+  // `patchForColumn`. O hook so diz "solte X em Y".
+  const toqueDrag = useTouchCardDrag({
+    pagerRef,
+    enabled: !isDesktop,
+    onDrop: soltar,
+    onAdvance: avancarEtapa,
+  })
+
+  // Os mesmos dois estados que o arrasto do desktop ja usava para pintar: o
+  // cartao de origem esmaecido e o anel na coluna candidata. Zero componente
+  // novo, zero alteracao no cartao ou na coluna.
+  const idArrastando = draggingId ?? toqueDrag.taskId
+  const colunaAlvo = draggingId != null ? alvo : toqueDrag.alvo
+  const arrastando = idArrastando != null
 
   const criar = useCallback(
     async (titulo, colunaKey, extra) => {
@@ -368,7 +402,11 @@ export default function FlowBoard({ tasks, setTasks, reload, onOpenTask, classNa
         ref={pagerRef}
         data-testid="board-pager"
         className={cx(
-          'no-scrollbar -mx-3 flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain px-3',
+          'no-scrollbar -mx-3 flex gap-2 overflow-x-auto overscroll-x-contain px-3',
+          // O encaixe sai de cena enquanto um cartao esta na mao: com
+          // `snap-mandatory` ligado, o avanco de borda e o encaixe disputam o
+          // mesmo scroll e o quadro fica tremendo entre duas colunas.
+          arrastando ? 'snap-none' : 'snap-x snap-mandatory',
           'lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-3 lg:overflow-visible lg:px-0',
           vazio ? 'flex-none' : 'min-h-0 flex-1',
         )}
@@ -390,8 +428,8 @@ export default function FlowBoard({ tasks, setTasks, reload, onOpenTask, classNa
                 column={{ ...col, ...ux }}
                 tasks={colunas[col.key]}
                 today={hoje}
-                draggingId={draggingId}
-                isDropTarget={alvo === col.key && draggingId != null}
+                draggingId={idArrastando}
+                isDropTarget={colunaAlvo === col.key && arrastando}
                 onOpen={onOpenTask}
                 onMove={mover}
                 onAdd={ux.defaults ? adicionar : undefined}

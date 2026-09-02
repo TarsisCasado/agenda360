@@ -425,6 +425,33 @@ body {
   @apply transition-all duration-150 ease-out;
 }
 
+/* ---------------------------------------------------------------------------
+   ARRASTO DE CARTAO NO TOQUE (CP5.4.1)
+   --------------------------------------------------------------------------- */
+
+/* O cartao segurado e um CLONE em `position: fixed` no body — dentro da coluna
+   o `overflow` o cortaria ao atravessar para a vizinha. Ele nao recebe toque
+   (senao `elementFromPoint` devolveria o proprio clone e nunca a coluna sob o
+   dedo). A elevacao e o unico exagero permitido: no iPhone nao ha API de
+   vibracao para paginas web, entao "peguei o cartao" precisa ser dito com os
+   olhos. */
+.board-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  pointer-events: none;
+  will-change: transform;
+  @apply shadow-float ring-1 ring-accent/40;
+}
+
+/* Segurar o dedo sobre texto abre o menu de selecao do iOS e mata o gesto pela
+   metade. Aqui a supressao e por ATRIBUTO, para o componente do cartao nao
+   precisar saber que existe arrasto. */
+[data-task-id] {
+  -webkit-touch-callout: none;
+}
+
 .drag-over {
   @apply bg-accent-soft ring-2 ring-accent/40;
 }
