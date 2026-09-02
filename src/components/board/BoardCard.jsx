@@ -2,6 +2,8 @@ import { memo, useState } from 'react'
 import { Bell, Repeat2, UserRound, MoreHorizontal, Check } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useIsDesktop } from '../../hooks/useMediaQuery'
+import MoveSheet from './MoveSheet'
 import { boardDateLabel, FLOW_COLUMNS } from '../../lib/board'
 import { STATUS } from '../../lib/constants'
 import { cx } from '../../lib/utils'
@@ -45,8 +47,9 @@ const PRIORITY_DOT = {
 
 function BoardCard({ task, columnKey, today, onOpen, onMove, dragging = false }) {
   const { categoryById } = useData()
+  const isDesktop = useIsDesktop()
   const [menuOpen, setMenuOpen] = useState(false)
-  useEscapeKey(menuOpen, () => setMenuOpen(false))
+  useEscapeKey(menuOpen && isDesktop, () => setMenuOpen(false))
 
   const label = columnKey === 'sem_data' ? null : boardDateLabel(task, today)
   const atrasada = label?.tone === 'danger'
@@ -62,12 +65,12 @@ function BoardCard({ task, columnKey, today, onOpen, onMove, dragging = false })
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
+      draggable={isDesktop}
+      onDragStart={isDesktop ? onDragStart : undefined}
       data-testid="board-card"
       data-task-id={task.id}
       className={cx(
-        'group relative rounded-control bg-board-card ring-1 ring-hairline/45 transition-[opacity,box-shadow] lg:cursor-grab lg:active:cursor-grabbing',
+        'group relative rounded-control bg-board-card ring-1 ring-hairline/45 transition-[opacity,box-shadow] lg:min-h-0 lg:cursor-grab lg:active:cursor-grabbing',
         dragging ? 'opacity-35' : 'hover:shadow-raised',
         // Concluida ja aconteceu: continua legivel, para de competir.
         done && !dragging && 'opacity-60',
@@ -84,7 +87,7 @@ function BoardCard({ task, columnKey, today, onOpen, onMove, dragging = false })
       <button
         type="button"
         onClick={() => onOpen?.(task)}
-        className="block w-full rounded-control px-2.5 py-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="block min-h-[44px] w-full rounded-control py-2 pl-2.5 pr-12 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 lg:min-h-0 lg:pr-2.5"
       >
         <span className="flex items-start gap-1.5">
           {prio && !done && (
@@ -148,15 +151,19 @@ function BoardCard({ task, columnKey, today, onOpen, onMove, dragging = false })
       {/* ALTERNATIVA AO ARRASTO. Nao e um extra de acessibilidade colado no
           fim: e o unico caminho que funciona por teclado, por leitor de tela e
           — no CP5.4 — por toque. O arrasto e o atalho, nao a via. */}
-      <div className="absolute right-0.5 top-0.5">
+      {/* ALVO DE TOQUE: no mobile o botao e uma FAIXA de 44px colada na borda
+          direita, alta como o cartao — o minimo confortavel para o polegar sem
+          engordar o cartao. No desktop volta a ser o disco discreto de 28px que
+          so aparece no hover. */}
+      <div className="absolute bottom-0 right-0 top-0 lg:bottom-auto lg:right-0.5 lg:top-0.5">
         <button
           type="button"
           onClick={() => setMenuOpen((v) => !v)}
           aria-label={`Mover "${task.title}"`}
-          aria-haspopup="menu"
+          aria-haspopup={isDesktop ? 'menu' : 'dialog'}
           aria-expanded={menuOpen}
           className={cx(
-            'flex h-7 w-7 items-center justify-center rounded-full text-muted transition-opacity hover:bg-surface-2 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/50',
+            'flex h-full w-11 items-center justify-center rounded-r-control text-muted transition-opacity active:bg-surface-2 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/50 lg:h-7 lg:w-7 lg:rounded-full lg:hover:bg-surface-2',
             // No toque o botao existe sempre (nao ha hover); no desktop ele so
             // aparece quando o cartao esta sob o cursor ou com foco.
             menuOpen ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover:opacity-100',
@@ -164,7 +171,7 @@ function BoardCard({ task, columnKey, today, onOpen, onMove, dragging = false })
         >
           <MoreHorizontal size={15} />
         </button>
-        {menuOpen && (
+        {menuOpen && isDesktop && (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
             <div
@@ -203,6 +210,18 @@ function BoardCard({ task, columnKey, today, onOpen, onMove, dragging = false })
           </>
         )}
       </div>
+
+      {/* No toque, a mesma acao vira folha inferior: dois toques ate mover. */}
+      {!isDesktop && (
+        <MoveSheet
+          open={menuOpen}
+          task={task}
+          columnKey={columnKey}
+          onClose={() => setMenuOpen(false)}
+          onMove={onMove}
+          onOpenDetails={onOpen}
+        />
+      )}
     </div>
   )
 }

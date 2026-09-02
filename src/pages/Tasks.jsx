@@ -30,10 +30,13 @@ const ABERTAS = [STATUS.TODO, STATUS.IN_PROGRESS, STATUS.RESCHEDULED, STATUS.DEL
 // com 1200px e por isso ele ficava em ~55% da tela ate aqui; quatro colunas
 // ganham tudo. Agora a pagina inteira e o quadro.
 //
-// ALTURA. Em >=1024px a pagina ocupa a altura da viewport e cada coluna rola
-// sozinha. E o que permite uma coluna com trinta itens sem empurrar as outras
-// tres para fora da tela — a diferenca entre um quadro e quatro listas
-// empilhadas. Abaixo disso a pagina volta a rolar inteira, como antes.
+// ALTURA. A pagina ocupa a altura da viewport e cada coluna rola sozinha. E o
+// que permite uma coluna com trinta itens sem empurrar as outras tres para fora
+// da tela — a diferenca entre um quadro e quatro listas empilhadas.
+//
+// CP5.4: no toque o Fluxo deixou de empilhar as quatro colunas e virou um PAGER
+// de uma coluna em foco. A altura fixa passa a valer no mobile tambem: e ela
+// que impede o salto visual ao passar de uma etapa curta para uma longa.
 //
 // SEM DATA != SEMANA: uma tarefa sem data vive na coluna "Sem data" do Fluxo e
 // NAO e inventada em nenhum dia da Semana. A regra vive em lib/board.js.
@@ -71,15 +74,22 @@ export default function Tasks() {
     <div
       className={cx(
         'flex min-h-0 flex-col',
-        // O quadro se ancora na viewport; a Semana continua rolando a pagina.
-        visao === 'fluxo' && 'lg:h-full',
+        // O quadro se ancora na viewport nos DOIS formatos: no desktop para as
+        // quatro colunas terminarem juntas, e no toque porque um pager
+        // horizontal dentro de uma pagina que tambem rola na vertical fica
+        // ambiguo — e porque a altura da area do quadro precisa ser estavel
+        // para trocar de etapa nao dar salto. A Semana continua rolando.
+        visao === 'fluxo' && 'h-full',
       )}
     >
-      <header className="mb-3 shrink-0 px-1">
+      {/* Em altura curta (iPhone deitado) o cabecalho encolhe em vez de comer
+          metade da tela: titulo menor e a contagem sai — ela ja aparece somada
+          nas quatro etapas logo abaixo. */}
+      <header className="mb-3 shrink-0 px-1 short:mb-1.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-display">Tarefas</h1>
-            <p className="text-caption mt-0.5">
+            <h1 className="text-display short:text-page">Tarefas</h1>
+            <p className="text-caption mt-0.5 short:hidden">
               {totalAberto > 0 ? `${totalAberto} em aberto` : 'Tudo em dia'}
             </p>
           </div>

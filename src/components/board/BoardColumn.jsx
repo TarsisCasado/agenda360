@@ -56,10 +56,18 @@ export default function BoardColumn({
 
   return (
     <section
-      className="flex min-h-0 min-w-0 flex-col"
+      // flex-1: a secao precisa PREENCHER o item do pager/grade, senao a
+      // bandeja de dentro nao tem contra o que medir `max-h-full` (mobile) nem
+      // `flex-1` (desktop) — foi assim que o wrapper do pager quebrou, no
+      // CP5.4, o alinhamento das quatro colunas do desktop.
+      className="flex min-h-0 min-w-0 flex-1 flex-col"
       aria-label={`${column.label}, ${tasks.length} ${tasks.length === 1 ? 'tarefa' : 'tarefas'}`}
     >
-      <header className="mb-1.5 flex items-baseline gap-2 px-1.5">
+      {/* No pager (toque) este cabecalho seria a SEGUNDA vez que a tela diz
+          "Sem data 5" — a barra de etapas ja diz, e logo acima. Repetir custa
+          28px de altura na tela mais apertada do produto para nao informar
+          nada. No desktop ele e essencial: la nao ha barra de etapas. */}
+      <header className="mb-1.5 hidden items-baseline gap-2 px-1.5 lg:flex">
         <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-primary">{column.label}</h2>
         <span className="text-[12px] font-semibold tabular-nums text-faint">{tasks.length}</span>
       </header>
@@ -81,7 +89,14 @@ export default function BoardColumn({
           onDropColumn?.(e.dataTransfer.getData('text/task-id'), column.key)
         }}
         className={cx(
-          'flex min-h-0 flex-1 flex-col rounded-row bg-board transition-shadow',
+          // ALTURA. No desktop a bandeja se estica para as quatro terminarem na
+          // mesma linha — e o que faz quatro listas lerem como um quadro.
+          // No toque isso seria o contrario do que se quer: uma coluna com dois
+          // cartoes viraria uma bandeja de meia tela vazia, e o salto de altura
+          // entre etapas seria feio. Entao no mobile a bandeja tem a altura do
+          // CONTEUDO, ate o teto da area do quadro (que e fixa, o que evita o
+          // salto), e a partir dai a lista rola por dentro.
+          'flex min-h-0 max-h-full flex-none flex-col rounded-row bg-board transition-shadow lg:flex-1',
           isDropTarget && 'ring-2 ring-accent/55',
         )}
       >
@@ -126,7 +141,7 @@ export default function BoardColumn({
                 <button
                   type="submit"
                   disabled={!titulo.trim() || saving}
-                  className="press rounded-full bg-accent px-3 py-1 text-[12px] font-semibold text-white disabled:opacity-40"
+                  className="press min-h-[44px] rounded-full bg-accent px-4 text-[12.5px] font-semibold text-white disabled:opacity-40 lg:min-h-[34px]"
                 >
                   {saving ? <Loader2 size={12} className="animate-spin" /> : 'Adicionar'}
                 </button>
@@ -136,7 +151,7 @@ export default function BoardColumn({
                     setComposing(false)
                     setTitulo('')
                   }}
-                  className="rounded-full px-2 py-1 text-[12px] text-muted hover:text-primary"
+                  className="min-h-[44px] rounded-full px-3 text-[12.5px] text-muted hover:text-primary lg:min-h-[34px]"
                 >
                   Cancelar
                 </button>
@@ -149,7 +164,7 @@ export default function BoardColumn({
           <button
             type="button"
             onClick={() => setComposing(true)}
-            className="flex min-h-[36px] items-center gap-1.5 rounded-b-row px-3 text-left text-[12px] font-medium text-muted transition-colors hover:bg-surface-2/60 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-b-row px-3 text-left text-[13px] font-medium text-muted transition-colors hover:bg-surface-2/60 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 lg:min-h-[36px] lg:text-[12px]"
           >
             <Plus size={13} /> Adicionar
           </button>

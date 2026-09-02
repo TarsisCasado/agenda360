@@ -1,3 +1,5 @@
+import plugin from 'tailwindcss/plugin'
+
 /** @type {import('tailwindcss').Config} */
 
 // Cores semanticas vindas de CSS custom properties (ver src/index.css).
@@ -79,5 +81,12 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `short:` = viewport BAIXA, nao estreita. O iPhone deitado tem 844px de
+    // largura e 390px de altura: e "desktop" por largura e apertadissimo por
+    // altura. Sem isto, o cabecalho da pagina + filtros + etapas comiam 215 dos
+    // 390px e sobrava uma faixa de quadro sem uso. Media query de ALTURA e a
+    // unica que separa esse caso.
+    plugin(({ addVariant }) => addVariant('short', '@media (max-height: 520px)')),
+  ],
 }
