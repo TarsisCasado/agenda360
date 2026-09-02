@@ -1,45 +1,28 @@
 import { NavLink } from 'react-router-dom'
-import {
-  Sun,
-  ListTodo,
-  Lightbulb,
-  Inbox,
-  CalendarDays,
-  KanbanSquare,
-  Calendar,
-  Link2,
-  Sparkles,
-  BarChart3,
-  Settings,
-  X,
-} from 'lucide-react'
+import { CalendarDays, X } from 'lucide-react'
 import { cx } from '../../lib/utils'
+import { PRIMARY, SECONDARY } from '../../lib/navigation'
 
 // ---------------------------------------------------------------------------
 // DRAWER / navegacao lateral.
 //
-// Redesenho: as 4 areas do produto ganham peso; o resto vira uma lista
-// secundaria calma. Sem moldura de menu administrativo — o item ativo e
-// marcado por SUPERFICIE + peso do texto, nao por retangulo colorido.
+// As 4 areas do produto ganham peso; o resto vira uma lista secundaria calma.
+// Sem moldura de menu administrativo — o item ativo e marcado por SUPERFICIE +
+// peso do texto, nao por retangulo colorido.
+//
+// CP5.2 — de 11 destinos para 9, e a razao nao e "menu menor": e que dois deles
+// nao eram DESTINOS, eram RECORTES.
+//   "Calendario"      -> visao Mes dentro de Agenda    (mesmo eixo: tempo)
+//   "Kanban semanal"  -> visao Semana dentro de Tarefas (mesma base de tarefas)
+// Trocar de recorte passou a custar um toque no seletor da propria tela, em vez
+// de uma viagem pelo menu. As rotas antigas continuam existindo e redirecionam.
+//
+// "Assistente" virou "Copiloto" e desceu para Mais: ele e capacidade
+// transversal (o + Capturar e a porta principal), nao uma secao administrativa.
 //
 // pt-safe/pb-safe: sem isso o cabecalho fica sob a status bar do iPhone
 // (relogio sobreposto ao logo) — bug visto no QA real.
 // ---------------------------------------------------------------------------
-const PRIMARY = [
-  { to: '/', label: 'Hoje', icon: Sun, end: true },
-  { to: '/dia', label: 'Agenda', icon: CalendarDays },
-  { to: '/tarefas', label: 'Tarefas', icon: ListTodo },
-  { to: '/ideias', label: 'Ideias', icon: Lightbulb },
-]
-const SECONDARY = [
-  { to: '/assistente', label: 'Assistente', icon: Sparkles },
-  { to: '/caixa', label: 'Caixa de entrada', icon: Inbox },
-  { to: '/semana', label: 'Kanban semanal', icon: KanbanSquare },
-  { to: '/mes', label: 'Calendário', icon: Calendar },
-  { to: '/links', label: 'Central de links', icon: Link2 },
-  { to: '/relatorios', label: 'Relatórios', icon: BarChart3 },
-  { to: '/config', label: 'Configurações', icon: Settings },
-]
 
 function NavItem({ to, label, icon: Icon, end, size = 'md', onNavigate }) {
   return (
@@ -83,7 +66,7 @@ export default function Sidebar({ open, onClose }) {
 
       <aside
         className={cx(
-          'fixed inset-y-0 left-0 z-40 flex w-[17rem] flex-col bg-surface pt-safe transition-transform duration-300 ease-out lg:static lg:w-64 lg:translate-x-0 lg:border-r lg:hair',
+          'fixed inset-y-0 left-0 z-40 flex w-[17rem] flex-col bg-surface pt-safe transition-transform duration-300 ease-out lg:static lg:w-56 lg:translate-x-0',
           open ? 'translate-x-0 shadow-float lg:shadow-none' : '-translate-x-full',
         )}
       >

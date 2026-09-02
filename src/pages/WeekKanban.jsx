@@ -13,7 +13,7 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { cx, capitalizeFirst } from '../lib/utils'
 
-export default function WeekKanban() {
+export default function WeekKanban({ embedded = false }) {
   const { user } = useAuth()
   const { toast } = useToast()
   const [reference, setReference] = useState(new Date())
@@ -44,11 +44,13 @@ export default function WeekKanban() {
   const activeIso = selInWeek ? selected : toISODate(days[0])
 
   return (
-    <div className="mx-auto max-w-6xl">
+    // Embutido em Tarefas (visao Semana) quem titula a tela e Tarefas; aqui
+    // sobra a navegacao de semana, que continua sendo deste componente.
+    <div className={embedded ? '' : 'mx-auto max-w-6xl'}>
       <header className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-display !text-[22px]">Semana</h1>
-          <p className="text-secondary-sm">{weekLabel}</p>
+          {!embedded && <h1 className="text-display !text-[22px]">Semana</h1>}
+          <p className={embedded ? 'text-page' : 'text-secondary-sm'}>{weekLabel}</p>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => go(-1)} className="btn-secondary press !px-2.5"><ChevronLeft size={16} /></button>

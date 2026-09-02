@@ -19,8 +19,6 @@ const Ideas = lazyRoute(() => import('./pages/Ideas'))
 const IdeaEditor = lazyRoute(() => import('./pages/IdeaEditor'))
 const Inbox = lazyRoute(() => import('./pages/Inbox'))
 const DayAgenda = lazyRoute(() => import('./pages/DayAgenda'))
-const WeekKanban = lazyRoute(() => import('./pages/WeekKanban'))
-const MonthCalendar = lazyRoute(() => import('./pages/MonthCalendar'))
 const Links = lazyRoute(() => import('./pages/Links'))
 const Assistant = lazyRoute(() => import('./pages/Assistant'))
 const Reports = lazyRoute(() => import('./pages/Reports'))
@@ -74,8 +72,16 @@ export default function App() {
                 <Route path="ideias" element={<Ideas />} />
                 <Route path="caixa" element={<Inbox />} />
                 <Route path="dia" element={<DayAgenda />} />
-                <Route path="semana" element={<WeekKanban />} />
-                <Route path="mes" element={<MonthCalendar />} />
+                {/* CP5.2 — "Semana" e "Mes" deixaram de ser destinos e viraram
+                    VISOES dentro de Tarefas e de Agenda. As rotas antigas
+                    continuam valendo (link salvo, atalho, paleta de comandos) e
+                    redirecionam para o recorte equivalente. Os componentes
+                    WeekKanban e MonthCalendar seguem existindo e sao montados
+                    pelas visoes — servem tambem de rollback. */}
+                <Route path="semana" element={<Navigate to="/tarefas?visao=semana" replace />} />
+                <Route path="mes" element={<Navigate to="/dia?visao=mes" replace />} />
+                <Route path="calendario" element={<Navigate to="/dia?visao=mes" replace />} />
+                <Route path="kanban" element={<Navigate to="/tarefas?visao=semana" replace />} />
                 <Route path="links" element={<Links />} />
                 <Route path="assistente" element={<Assistant />} />
                 <Route path="relatorios" element={<Reports />} />

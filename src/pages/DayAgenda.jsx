@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import MonthCalendar from './MonthCalendar'
+import WeekAgenda from '../components/agenda/WeekAgenda'
+import ViewSwitcher from '../components/ui/ViewSwitcher'
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 import { ErrorState, EmptyState } from '../components/ui/Common'
 import TaskRow from '../components/tasks/TaskRow'
@@ -7,7 +10,9 @@ import TaskModal from '../components/tasks/TaskModal'
 import Section from '../components/ui/Section'
 import { useData } from '../context/DataContext'
 import { useTasks } from '../hooks/useTasks'
-import { toISODate, addDays, formatLong, isToday, fromISODate } from '../lib/date'
+import { toISODate, addDays, formatLong, isToday, fromISODate, getWeekDays } from '../lib/date'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { DAY_START_HOUR, DAY_END_HOUR } from '../lib/constants'
 import { partitionDayTasks, resolveDayDate } from '../lib/dayView'
 import { blockGeometry } from '../lib/agendaTime'
@@ -17,7 +22,19 @@ const HOUR_PX = 60
 const GUTTER = 46
 
 // ---------------------------------------------------------------------------
-// AGENDA — timeline, nao planilha.
+// AGENDA — o eixo TEMPO do produto, em tres recortes: Dia · Semana · Mês.
+//
+// CP5.2: "Calendário" deixou de ser um destino separado no menu. Ver o mês
+// nunca foi outro lugar — e o mesmo eixo com outro zoom, e agora custa um
+// toque no seletor. A rota /mes continua existindo e redireciona para ca.
+//
+// A distincao que a Agenda preserva em todos os recortes:
+//   COMPROMISSO = acontece em horario definido -> ocupa lugar na linha do tempo.
+//   TAREFA      = precisa ser feita, com ou sem data -> aparece como item do
+//                 dia, nunca inventada num horario.
+//
+// ---------------------------------------------------------------------------
+// DIA — timeline, nao planilha.
 //
 // Refinamentos desta fase:
 //   - a grade perdeu a linha continua em toda hora: agora a hora e um rotulo
@@ -62,9 +79,24 @@ function EventBlock({ task, top, height, color, onOpen }) {
   )
 }
 
+const VISOES = [
+  { value: 'dia', label: 'Dia' },
+  { value: 'semana', label: 'Semana' },
+  { value: 'mes', label: 'Mês' },
+]
+
 export default function DayAgenda() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { categoryById } = useData()
+  const visao = VISOES.some((v) => v.value === searchParams.get('visao'))
+    ? searchParams.get('visao')
+    : 'dia'
+  const trocarVisao = (v) => {
+    const next = new URLSearchParams(searchParams)
+    if (v === 'dia') next.delete('visao')
+    else next.set('visao', v)
+    setSearchParams(next, { replace: true })
+  }
   const [date, setDate] = useState(() =>
     resolveDayDate(searchParams.get('date'), toISODate(new Date())),
   )
@@ -108,6 +140,11 @@ export default function DayAgenda() {
       defaults: { date, start_time: hour != null ? `${String(hour).padStart(2, '0')}:00` : '' },
     })
 
+  const semanaLabel = useMemo(() => {
+    const dias = getWeekDays(fromISODate(date) || new Date())
+    return `${format(dias[0], "d 'de' MMM", { locale: ptBR })} – ${format(dias[6], "d 'de' MMM", { locale: ptBR })}`
+  }, [date])
+
   const today = isToday(fromISODate(date) || new Date())
   const nowDate = new Date()
   const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes()
@@ -128,32 +165,59 @@ export default function DayAgenda() {
 
   const emptyDay = timed.length === 0 && untimed.length === 0 && outOfGrid.length === 0
 
+  // Mês e Semana pedem largura; a timeline do Dia, nao — uma linha do tempo
+  // esticada em 1100px vira planilha, que e exatamente o que evitamos.
   return (
-    <div className="mx-auto max-w-2xl">
-      <header className="mb-5 flex items-end justify-between gap-3 px-2">
+    <div className={cx('mx-auto', visao === 'dia' ? 'max-w-2xl' : 'max-w-5xl')}>
+      {/* O cabecalho segue o RECORTE: no Dia titula o dia; na Semana, a semana;
+          no Mes quem titula e o proprio calendario, entao aqui fica so o nome
+          da area — e a navegacao de mes e dele, nao daqui. */}
+      <header className="mb-4 flex items-end justify-between gap-3 px-2">
         <div className="min-w-0">
-          <h1 className="text-display">{today ? 'Hoje' : formatLong(date).split(',')[0]}</h1>
-          <p className="text-caption mt-1">{formatLong(date)}</p>
+          <h1 className="text-display">
+            {visao === 'dia' ? (today ? 'Hoje' : formatLong(date).split(',')[0]) : 'Agenda'}
+          </h1>
+          <p className="text-caption mt-1">
+            {visao === 'dia' ? formatLong(date) : visao === 'semana' ? semanaLabel : 'Mês'}
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          <button onClick={() => go(-1)} className="icon-btn" aria-label="Dia anterior">
-            <ChevronLeft size={19} />
-          </button>
-          {!today && (
+        {visao !== 'mes' && (
+          <div className="flex shrink-0 items-center gap-0.5">
             <button
-              onClick={() => setDate(toISODate(new Date()))}
-              className="press rounded-full px-3 py-1.5 text-[13px] font-semibold text-accent-text"
+              onClick={() => go(visao === 'semana' ? -7 : -1)}
+              className="icon-btn"
+              aria-label={visao === 'semana' ? 'Semana anterior' : 'Dia anterior'}
             >
-              Hoje
+              <ChevronLeft size={19} />
             </button>
-          )}
-          <button onClick={() => go(1)} className="icon-btn" aria-label="Próximo dia">
-            <ChevronRight size={19} />
-          </button>
-        </div>
+            {!today && (
+              <button
+                onClick={() => setDate(toISODate(new Date()))}
+                className="press rounded-full px-3 py-1.5 text-[13px] font-semibold text-accent-text"
+              >
+                Hoje
+              </button>
+            )}
+            <button
+              onClick={() => go(visao === 'semana' ? 7 : 1)}
+              className="icon-btn"
+              aria-label={visao === 'semana' ? 'Próxima semana' : 'Próximo dia'}
+            >
+              <ChevronRight size={19} />
+            </button>
+          </div>
+        )}
       </header>
 
-      {error ? (
+      <div className="mb-5 px-2">
+        <ViewSwitcher value={visao} options={VISOES} onChange={trocarVisao} />
+      </div>
+
+      {visao === 'mes' ? (
+        <MonthCalendar embedded />
+      ) : visao === 'semana' ? (
+        <WeekAgenda date={date} onOpenTask={openTask} onPickDay={(iso) => { setDate(iso); trocarVisao('dia') }} />
+      ) : error ? (
         <ErrorState onRetry={reload} />
       ) : (
         <>

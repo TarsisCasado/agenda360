@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import { NavLink } from 'react-router-dom'
 import { Menu, Moon, Sun, LogOut, Plus, User, Search } from 'lucide-react'
+import { SECONDARY } from '../../lib/navigation'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { ROLE_LABELS } from '../../lib/constants'
+import { cx } from '../../lib/utils'
 import AlertCenter from '../notifications/AlertCenter'
 
 // ---------------------------------------------------------------------------
@@ -44,6 +47,29 @@ export default function Topbar({ onMenu, onNewTask, onOpenPalette }) {
                 </span>
               )}
             </div>
+            {/* MAIS — no mobile os destinos secundarios moram aqui, ao lado da
+                conta. A barra inferior fica so com as 4 areas + Capturar, que e
+                o que faz a navegacao parecer app em vez de menu escondido atras
+                de um hamburger. No desktop eles ja estao na barra lateral. */}
+            <div className="my-1 border-t hair lg:hidden" />
+            <div className="lg:hidden">
+              {SECONDARY.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={() => setUserMenu(false)}
+                  className={({ isActive }) =>
+                    cx(
+                      'flex min-h-[44px] w-full items-center gap-2.5 rounded-control px-3 text-[14px] transition-colors active:bg-surface-2',
+                      isActive ? 'font-semibold text-primary' : 'text-secondary',
+                    )
+                  }
+                >
+                  <Icon size={16} className="text-muted" /> {label}
+                </NavLink>
+              ))}
+            </div>
+
             <div className="my-1 border-t hair" />
             <button
               onClick={() => {

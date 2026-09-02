@@ -19,7 +19,7 @@ import { cx } from '../lib/utils'
 
 const WEEK_HEADERS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 
-export default function MonthCalendar() {
+export default function MonthCalendar({ embedded = false }) {
   const [reference, setReference] = useState(new Date())
   const { categoryById } = useData()
   const grid = useMemo(() => getMonthGrid(reference), [reference])
@@ -57,13 +57,19 @@ export default function MonthCalendar() {
   }, [grid, tasks, reference])
 
   return (
-    <div className="mx-auto max-w-5xl">
-      {/* Cabecalho no mesmo padrao de Hoje/Agenda: titulo forte, mes discreto,
-          navegacao em icones (a mesma de sempre: anterior · Hoje · proximo). */}
+    // Embutido na Agenda (visao Mes) o cabecalho de pagina sai: quem titula a
+    // tela e a Agenda. Sobra a navegacao de mes, que continua sendo daqui.
+    <div className={embedded ? '' : 'mx-auto max-w-5xl'}>
       <header className="mb-5 flex items-end justify-between gap-3 px-2">
         <div className="min-w-0">
-          <h1 className="text-display">Calendário</h1>
-          <p className="text-caption mt-1">{formatMonthTitle(reference)}</p>
+          {embedded ? (
+            <p className="text-page first-letter:uppercase">{formatMonthTitle(reference)}</p>
+          ) : (
+            <>
+              <h1 className="text-display">Calendário</h1>
+              <p className="text-caption mt-1">{formatMonthTitle(reference)}</p>
+            </>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <button onClick={() => go(-1)} className="icon-btn" aria-label="Mês anterior">

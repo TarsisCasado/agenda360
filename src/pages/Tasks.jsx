@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import WeekKanban from './WeekKanban'
+import ViewSwitcher from '../components/ui/ViewSwitcher'
 import { Plus, ListTodo, Loader2, ChevronRight } from 'lucide-react'
 import TaskRow from '../components/tasks/TaskRow'
 import TaskModal from '../components/tasks/TaskModal'
@@ -20,14 +23,39 @@ import { cx } from '../lib/utils'
 const OPEN = [STATUS.TODO, STATUS.IN_PROGRESS, STATUS.RESCHEDULED, STATUS.DELEGATED]
 
 // ---------------------------------------------------------------------------
-// TAREFAS — gestor premium.
+// TAREFAS — o ambiente operacional, em dois recortes: Fluxo · Semana.
+//
+// CP5.2: "Kanban semanal" deixou de ser um destino separado. Nunca foi outro
+// lugar — e a MESMA base de tarefas recortada por data, enquanto o Fluxo
+// recorta por estagio. Dois eixos, uma tela, um seletor. A rota /semana
+// continua existindo e redireciona para ca.
+//
+// SEM DATA != SEMANA: uma tarefa sem data vive na coluna "Sem data" do Fluxo e
+// NAO e inventada em nenhum dia da Semana. A regra que decide isso ja esta
+// escrita e testada em lib/board.js — o quadro de colunas em si e o CP5.3.
+//
+// ---------------------------------------------------------------------------
+// FLUXO (hoje ainda em lista agrupada) — gestor premium.
 //
 // O que mudou: as listas deixaram de morar dentro de caixas com anel e passaram
 // a viver sobre o canvas, separadas por hairline e por RITMO (rotulo discreto +
 // contagem). O campo de captura rapida perdeu a moldura: e uma linha de texto
 // que so revela o botao quando ha o que salvar.
 // ---------------------------------------------------------------------------
+const VISOES = [
+  { value: 'fluxo', label: 'Fluxo' },
+  { value: 'semana', label: 'Semana' },
+]
+
 export default function Tasks() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const visao = searchParams.get('visao') === 'semana' ? 'semana' : 'fluxo'
+  const trocarVisao = (v) => {
+    const next = new URLSearchParams(searchParams)
+    if (v === 'fluxo') next.delete('visao')
+    else next.set('visao', v)
+    setSearchParams(next, { replace: true })
+  }
   const { user } = useAuth()
   const { workspaceId } = useWorkspace()
   const { reload: reloadData } = useData()
@@ -99,14 +127,25 @@ export default function Tasks() {
     </SwipeRow>
   )
 
+  // A Semana usa a largura toda; o Fluxo em lista ainda nao — e no CP5.3, com
+  // as quatro colunas reais, que a largura passa a ser usada de verdade.
   return (
-    <div className="mx-auto max-w-2xl">
-      <header className="mb-5 px-2">
+    <div className={cx('mx-auto', visao === 'semana' ? 'max-w-6xl' : 'max-w-2xl')}>
+      <header className="mb-4 px-2">
         <h1 className="text-display">Tarefas</h1>
         <p className="text-caption mt-1">
           {totalOpen > 0 ? `${totalOpen} em aberto` : 'Tudo em dia'}
         </p>
       </header>
+
+      <div className="mb-5 px-2">
+        <ViewSwitcher value={visao} options={VISOES} onChange={trocarVisao} />
+      </div>
+
+      {visao === 'semana' ? (
+        <WeekKanban embedded />
+      ) : (
+        <>
 
       {/* Captura rapida: uma linha, sem moldura de formulario. */}
       <form
@@ -179,6 +218,8 @@ export default function Tasks() {
             </section>
           )}
         </div>
+      )}
+        </>
       )}
 
       <TaskModal

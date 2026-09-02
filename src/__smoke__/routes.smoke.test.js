@@ -25,18 +25,33 @@ import { chromium } from 'playwright'
 // O teste 1 sozinho ja passava durante o incidente. E o teste 2 que trava a
 // classe de regressao que escapou.
 // ---------------------------------------------------------------------------
+// Destinos do CP5.2: 4 primarios + 5 secundarios. "Semana" e "Mes" sairam
+// daqui de proposito — deixaram de ser destinos e viraram visoes.
 const ROTAS = [
-  { nome: 'Hoje', conteudo: /Bom dia|Boa tarde|Boa noite/i },
-  { nome: 'Agenda', conteudo: /Hoje|Dia livre|Sem horário/i },
-  { nome: 'Tarefas', conteudo: /Tarefas/i },
-  { nome: 'Ideias', conteudo: /Ideias/i },
-  { nome: 'Assistente', conteudo: /Copiloto/i },
+  { nome: 'Hoje', conteudo: /Bom dia|Boa tarde|Boa noite/i, primario: true },
+  { nome: 'Agenda', conteudo: /Dia|Semana|Mês/, primario: true },
+  { nome: 'Tarefas', conteudo: /Fluxo|Semana/, primario: true },
+  { nome: 'Ideias', conteudo: /Ideias/i, primario: true },
+  { nome: 'Copiloto', conteudo: /Copiloto/i },
   { nome: 'Caixa de entrada', conteudo: /Caixa de Entrada/i },
-  { nome: 'Kanban semanal', conteudo: /Semana/i },
-  { nome: 'Calendário', conteudo: /Calendário/i },
   { nome: 'Central de links', conteudo: /[Ll]inks/ },
   { nome: 'Relatórios', conteudo: /Relatórios/i },
   { nome: 'Configurações', conteudo: /Configura/i },
+]
+
+// Recortes que passaram a viver DENTRO de uma tela, e as rotas antigas que
+// precisam continuar levando a algum lugar util.
+const VISOES = [
+  { url: '/dia?visao=semana', conteudo: /Dia livre|segunda|terça|quarta|quinta|sexta|sábado|domingo/i },
+  { url: '/dia?visao=mes', conteudo: /Seg|Ter|Qua|Qui|Sex/ },
+  { url: '/tarefas?visao=semana', conteudo: /Semana|Nova/i },
+]
+
+const REDIRECTS = [
+  { de: '/semana', para: '/tarefas', param: 'visao=semana' },
+  { de: '/mes', para: '/dia', param: 'visao=mes' },
+  { de: '/calendario', para: '/dia', param: 'visao=mes' },
+  { de: '/kanban', para: '/tarefas', param: 'visao=semana' },
 ]
 
 const BOUNDARY = /Não foi possível abrir esta tela/i
@@ -141,6 +156,14 @@ async function abrir(nome, alvo = page) {
   }
 }
 
+// A fonte externa e ruido de AMBIENTE, nao comportamento do produto: como a
+// folha do Google Fonts bloqueia o DOMContentLoaded, cada goto ficava ~12s
+// esperando uma conexao que este sandbox nao tem. Cortar isso deixa o smoke
+// medir o app, nao a rede.
+async function isolar(alvo) {
+  await alvo.route(/fonts\.(googleapis|gstatic)\.com/, (rota) => rota.abort())
+}
+
 async function entrar(alvo) {
   await alvo.goto(`http://127.0.0.1:${porta}/`, { waitUntil: 'domcontentloaded' })
   await alvo.waitForTimeout(1500)
@@ -170,6 +193,7 @@ beforeAll(async () => {
   browser = await chromium.launch(fs.existsSync(exec) ? { executablePath: exec } : {})
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } })
   page = await ctx.newPage()
+  await isolar(page)
   await entrar(page)
 }, 240_000)
 
@@ -188,6 +212,76 @@ describe('smoke — todas as superfícies renderizam', () => {
   }, 40_000)
 })
 
+describe('smoke — os recortes dentro das telas', () => {
+  it.each(VISOES)('$url renderiza sem ErrorBoundary', async ({ url, conteudo }) => {
+    const erros = []
+    const onErr = (e) => erros.push(`exceção: ${(e.message || e).toString().slice(0, 160)}`)
+    page.on('pageerror', onErr)
+    try {
+      await page.goto(`http://127.0.0.1:${porta}${url}`, { waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(2200)
+      const texto = await page.locator('body').innerText()
+      expect(erros, `${url}: ${erros.join(' / ')}`).toEqual([])
+      expect(BOUNDARY.test(texto), `${url} caiu no ErrorBoundary`).toBe(false)
+      expect(texto).toMatch(conteudo)
+    } finally {
+      page.off('pageerror', onErr)
+    }
+  }, 40_000)
+})
+
+describe('smoke — rotas antigas continuam valendo', () => {
+  // Link salvo, atalho e paleta de comandos nao podem quebrar so porque a
+  // arquitetura mudou. Cada rota antiga leva ao recorte equivalente.
+  it.each(REDIRECTS)('$de redireciona para $para ($param)', async ({ de, para, param }) => {
+    await page.goto(`http://127.0.0.1:${porta}${de}`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(2200)
+    const url = new URL(page.url())
+    expect(url.pathname).toBe(para)
+    expect(url.search).toContain(param)
+    expect(BOUNDARY.test(await page.locator('body').innerText())).toBe(false)
+  }, 40_000)
+})
+
+describe('smoke — navegação mobile', () => {
+  it('barra inferior leva às 4 áreas, com Capturar alcançável e sem scroll lateral', async () => {
+    const ctxM = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+    const mob = await ctxM.newPage()
+    try {
+      await isolar(mob)
+      await entrar(mob)
+      const barra = await mob.evaluate(() => {
+        const nav = document.querySelector('nav.fixed')
+        const itens = nav ? [...nav.querySelectorAll('a,button')] : []
+        return {
+          itens: itens.map((e) => {
+            const r = e.getBoundingClientRect()
+            return { rotulo: (e.getAttribute('aria-label') || e.textContent).trim(), w: Math.round(r.width), h: Math.round(r.height) }
+          }),
+          scrollLateral: document.body.scrollWidth > document.body.clientWidth,
+        }
+      })
+      // 4 areas + Capturar
+      expect(barra.itens).toHaveLength(5)
+      expect(barra.itens.some((i) => /Capturar/i.test(i.rotulo))).toBe(true)
+      // alvo de toque: nada abaixo de 44px
+      const pequenos = barra.itens.filter((i) => i.w < 44 || i.h < 44)
+      expect(pequenos, `alvos pequenos: ${pequenos.map((i) => i.rotulo).join(', ')}`).toEqual([])
+      expect(barra.scrollLateral).toBe(false)
+
+      // os secundarios continuam alcancaveis pelo menu de conta
+      await mob.locator('header button[aria-label="Conta"]').first().click()
+      await mob.waitForTimeout(500)
+      const menu = await mob.locator('body').innerText()
+      for (const nome of ['Copiloto', 'Caixa de entrada', 'Relatórios', 'Configurações']) {
+        expect(menu, `"${nome}" não está no menu secundário do mobile`).toContain(nome)
+      }
+    } finally {
+      await ctxM.close()
+    }
+  }, 90_000)
+})
+
 describe('smoke — a aba aberta sobrevive a um deploy novo', () => {
   // ESTA e a regressao do CP5.1.1, e o cenario precisa ser montado com cuidado
   // para nao passar por acidente: a aba tem de ser NOVA (nenhum chunk lazy
@@ -202,6 +296,7 @@ describe('smoke — a aba aberta sobrevive a um deploy novo', () => {
     const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 900 } })
     const aba = await ctx2.newPage()
     try {
+      await isolar(aba)
       await entrar(aba) // carrega SO o bundle principal do deploy A
       await aba.waitForTimeout(2000) // deixa o service worker do deploy A assumir
 

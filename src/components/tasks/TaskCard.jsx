@@ -127,7 +127,7 @@ function TaskCard({
         >
           <p
             className={cx(
-              'break-words text-sm font-semibold text-slate-800 dark:text-slate-100',
+              '[overflow-wrap:anywhere] text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100',
               task.status === STATUS.DONE && 'line-through opacity-60',
             )}
           >
