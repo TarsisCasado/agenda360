@@ -23,6 +23,15 @@
   --c-surface-3: 232 235 240;
   --c-hairline: 226 230 237;
 
+  /* Quadro de fluxo (CP5.3): a coluna e uma bandeja REBAIXADA em relacao ao
+     canvas e o cartao SOBE dela. Precisa de par proprio porque a relacao se
+     inverte entre os temas: no claro o cartao e mais claro que a bandeja; no
+     escuro a bandeja sobe do fundo e o cartao sobe mais ainda. Usar
+     surface/surface-2 direto deixaria o cartao mais ESCURO que a coluna no
+     dark — o cartao afundaria em vez de flutuar. */
+  --c-board: 234 237 243;
+  --c-board-card: 255 255 255;
+
   /* Texto: 4 niveis, sempre nesta ordem de importancia */
   --c-text: 16 22 34;
   --c-text-2: 88 98 116;
@@ -54,6 +63,9 @@
   --c-surface-2: 27 31 40;
   --c-surface-3: 36 41 52;
   --c-hairline: 44 50 62;
+
+  --c-board: 22 26 33;
+  --c-board-card: 34 39 49;
 
   --c-text: 240 243 248;
   --c-text-2: 160 170 187;

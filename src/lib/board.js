@@ -115,3 +115,105 @@ export function patchForColumn(task, key) {
       return {}
   }
 }
+
+// ---------------------------------------------------------------------------
+// CP5.3 — regras que o QUADRO precisa e que continuam sendo dominio puro.
+//
+// Tudo aqui e funcao pura sobre tarefas: rotulo temporal do cartao, janela do
+// "Concluido" e filtros. Fica em lib/ pelo mesmo motivo das colunas — para ser
+// testado com a serie de casos reais antes de virar pixel, e para que o
+// componente nao precise saber a regra, so pintar o resultado.
+// ---------------------------------------------------------------------------
+
+const DIA_MS = 86400000
+
+function isoToUTC(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number)
+  return Date.UTC(y, m - 1, d)
+}
+
+// Diferenca em dias entre duas datas ISO (b - a). Em UTC de proposito: datas
+// sem hora nao devem mudar de valor por causa de fuso ou horario de verao.
+export function daysBetween(a, b) {
+  return Math.round((isoToUTC(b) - isoToUTC(a)) / DIA_MS)
+}
+
+const DIAS_CURTOS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+// ROTULO TEMPORAL DO CARTAO — o unico metadado que sempre vale a pena.
+//
+// Devolve { text, tone } ou null. `tone` diz o SIGNIFICADO, nao a cor: quem
+// pinta e o cartao. Sao tres, e so tres:
+//   'danger'  atraso — precisa ser visto de imediato;
+//   'accent'  hoje — e o presente, merece destaque discreto;
+//   'muted'   qualquer outro dia — silencioso.
+//
+// Sem data devolve null: a coluna "Sem data" ja diz isso, e repetir "Sem data"
+// em cada cartao e ruido puro.
+export function boardDateLabel(task, today, now = new Date()) {
+  if (!task?.date) return null
+
+  // Uma tarefa fechada (concluida, furada, cancelada) nao tem urgencia: a data
+  // dela e historico. Sem esta guarda, "Concluido" pintava metade da coluna de
+  // azul com "Hoje" em destaque e competia com "A fazer" pela atencao.
+  if (!ABERTAS.includes(task.status || STATUS.TODO) && !EM_CURSO.includes(task.status)) {
+    const [, am, ad] = task.date.split('-').map(Number)
+    return { text: `${String(ad).padStart(2, '0')}/${String(am).padStart(2, '0')}`, tone: 'muted' }
+  }
+
+  if (isTaskOverdue(task, now) && task.date < today) {
+    const dias = daysBetween(task.date, today)
+    return { text: dias === 1 ? 'Ontem' : `${dias} dias atrasada`, tone: 'danger' }
+  }
+  if (task.date === today) return { text: 'Hoje', tone: isTaskOverdue(task, now) ? 'danger' : 'accent' }
+
+  const diff = daysBetween(today, task.date)
+  if (diff === 1) return { text: 'Amanhã', tone: 'muted' }
+  if (diff === -1) return { text: 'Ontem', tone: 'muted' }
+
+  const [y, m, d] = task.date.split('-').map(Number)
+  const dow = DIAS_CURTOS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]
+  const curta = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
+  // Dentro da semana o dia da semana orienta melhor que o numero; fora dela o
+  // numero e o unico que orienta.
+  return { text: diff > 1 && diff <= 6 ? `${dow}, ${curta}` : curta, tone: 'muted' }
+}
+
+// JANELA DO CONCLUIDO — a coluna nao pode virar arquivo morto.
+//
+// Mostrar tudo que ja foi feito transforma "Concluido" numa coluna infinita que
+// so atrapalha a leitura das outras tres. Mostramos a janela recente e deixamos
+// o resto a UM toque de distancia — escondido nao e o mesmo que perdido.
+//
+// A referencia de tempo e `updated_at` (quando a tarefa foi de fato concluida)
+// com queda para `date`. Tarefa concluida sem nenhuma das duas fica em
+// `recentes`: some-la seria pior que mostra-la.
+export const DONE_WINDOW_DAYS = 7
+
+export function splitDoneWindow(done = [], { today, days = DONE_WINDOW_DAYS } = {}) {
+  const recentes = []
+  const antigas = []
+  for (const task of done) {
+    const ref = (task.updated_at || task.date || '').slice(0, 10)
+    if (!ref || !today || daysBetween(ref, today) <= days) recentes.push(task)
+    else antigas.push(task)
+  }
+  return { recentes, antigas }
+}
+
+// FILTROS — recorte de LEITURA. Nunca tocam no dominio: nao mudam status, nao
+// mudam data, nao reordenam. Entra lista, sai sublista com as MESMAS
+// referencias de objeto (e o que o teste trava).
+export const BOARD_FILTERS = [
+  { key: 'todas', label: 'Todas' },
+  { key: 'atrasadas', label: 'Atrasadas' },
+  { key: 'alta', label: 'Prioridade alta' },
+]
+
+const ALTA = ['high', 'urgent']
+
+export function filterBoardTasks(tasks = [], filter = 'todas', now = new Date()) {
+  if (filter === 'atrasadas') return tasks.filter((t) => isTaskOverdue(t, now))
+  if (filter === 'alta') return tasks.filter((t) => ALTA.includes(t.priority))
+  return tasks
+}

@@ -19,6 +19,9 @@ export default {
         'surface-2': token('--c-surface-2'),
         'surface-3': token('--c-surface-3'),
         hairline: token('--c-hairline'),
+        // Quadro de fluxo (CP5.3)
+        board: token('--c-board'),
+        'board-card': token('--c-board-card'),
         // Texto
         primary: token('--c-text'),
         secondary: token('--c-text-2'),
