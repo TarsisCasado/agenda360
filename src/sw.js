@@ -1,4 +1,6 @@
-import { precacheAndRoute } from 'workbox-precaching'
+import { precacheAndRoute, cleanupOutdatedCaches, matchPrecache } from 'workbox-precaching'
+import { registerRoute, NavigationRoute } from 'workbox-routing'
+import { NetworkFirst } from 'workbox-strategies'
 import { clientsClaim } from 'workbox-core'
 
 // ---------------------------------------------------------------------------
@@ -13,6 +15,62 @@ import { clientsClaim } from 'workbox-core'
 // (push-delivery-worker) envia um payload JSON cifrado; o navegador decifra
 // ANTES de disparar o evento `push` (o SW so ve o JSON em claro).
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// O DOCUMENTO NUNCA VEM DO PRECACHE (CP5.5.1)
+//
+// O BUG: `precacheAndRoute` nao cobre so os assets. Ele registra uma rota que
+// tambem responde NAVEGACAO: uma ida a "/" e resolvida para o `index.html` do
+// precache (o proprio bundle compilado mostra `directoryIndex: "index.html"`).
+// Junte isso ao que o CP5.1.1 deixou de proposito — sem `skipWaiting`, o SW
+// novo fica em `waiting` enquanto houver UMA aba aberta — e o resultado e uma
+// sessao PRESA no build antigo por tempo indeterminado: o SW velho continua
+// entregando o index.html velho, e com ele o bundle principal velho. Como
+// "Hoje" e importado ESTATICAMENTE (App.jsx), quem manda na versao de Hoje e
+// justamente esse bundle.
+//
+// Reproduzido antes de corrigir: com o deploy B ja publicado, o reload, a
+// navegacao e ate UMA ABA NOVA continuavam renderizando o build A, e
+// `performance.getEntriesByType('navigation')[0].deliveryType` respondia
+// "cache-storage". Nao era hipotese.
+//
+// E a INCOERENCIA A -> B -> A sai daqui: o mesmo documento passa a ter duas
+// origens possiveis (o precache velho e a rede), e qual delas ganha depende de
+// aquele carregamento especifico ter sido ou nao interceptado pelo SW. Nada
+// garantia que a sessao escolhesse uma so.
+//
+// A CORRECAO, e so ela: o documento passa a ser NETWORK-FIRST. Estando online,
+// toda carga de pagina traz o HTML atual — logo o bundle atual, logo a versao
+// atual. Offline, cai para o ultimo HTML visto e, na falta dele, para o
+// `index.html` do precache: o app continua abrindo sem rede.
+//
+// O que NAO foi feito, de proposito: reintroduzir `skipWaiting()`. Ele
+// continua fora, e a garantia do CP5.1.1 continua de pe — um SW novo jamais
+// assume uma aba que esta rodando o bundle antigo. Com o documento sempre
+// fresco, um SW velho ainda ativo passa a ser inofensivo: ele so serve os
+// chunks do build que aquela aba realmente esta executando.
+//
+// A ORDEM IMPORTA: o Workbox tenta as rotas na ordem de registro, entao esta
+// precisa vir ANTES de `precacheAndRoute` para ganhar dele na navegacao.
+// ---------------------------------------------------------------------------
+registerRoute(
+  new NavigationRoute(
+    new NetworkFirst({
+      cacheName: 'agenda360-documento',
+      networkTimeoutSeconds: 4,
+      plugins: [
+        {
+          // Sem rede e sem copia em runtime: o precache ainda salva a abertura.
+          handlerDidError: async () => (await matchPrecache('index.html')) || Response.error(),
+        },
+      ],
+    }),
+  ),
+)
+
+// Precaches de builds anteriores nao tem por que sobreviver: sem isto eles
+// ficam ocupando espaco e podem responder por assets que ninguem mais pede.
+cleanupOutdatedCaches()
 
 precacheAndRoute(self.__WB_MANIFEST)
 
