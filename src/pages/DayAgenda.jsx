@@ -172,7 +172,11 @@ export default function DayAgenda() {
       {/* O cabecalho segue o RECORTE: no Dia titula o dia; na Semana, a semana;
           no Mes quem titula e o proprio calendario, entao aqui fica so o nome
           da area — e a navegacao de mes e dele, nao daqui. */}
-      <header className="mb-4 flex items-end justify-between gap-3 px-2">
+      {/* GRUDADO NO TOPO. O Dia rola sozinho ate a hora atual; sem isto, o
+          titulo e o seletor saiam de cena junto e a tela passava a nao dizer
+          que dia estava sendo visto — pego no QA do CP5.5. */}
+      <div className="sticky top-0 z-20 -mx-3 bg-canvas/90 px-3 pt-1 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+      <header className="mb-3 flex items-end justify-between gap-3 px-2">
         <div className="min-w-0">
           <h1 className="text-display">
             {visao === 'dia' ? (today ? 'Hoje' : formatLong(date).split(',')[0]) : 'Agenda'}
@@ -209,8 +213,9 @@ export default function DayAgenda() {
         )}
       </header>
 
-      <div className="mb-5 px-2">
+      <div className="mb-3 px-2">
         <ViewSwitcher value={visao} options={VISOES} onChange={trocarVisao} />
+      </div>
       </div>
 
       {visao === 'mes' ? (
@@ -221,18 +226,6 @@ export default function DayAgenda() {
         <ErrorState onRetry={reload} />
       ) : (
         <>
-          {untimed.length > 0 && (
-            <Section
-              label="Sem horário"
-              count={untimed.length}
-              className="mb-6"
-            >
-              {untimed.map((t) => (
-                <TaskRow key={t.id} task={t} onOpen={openTask} onChanged={reload} />
-              ))}
-            </Section>
-          )}
-
           {emptyDay ? (
             <EmptyState
               icon={CalendarDays}
@@ -241,8 +234,18 @@ export default function DayAgenda() {
             />
           ) : null}
 
+          {timed.length > 0 && (
+            <div className="mb-1 flex items-baseline gap-1.5 px-2">
+              <h2 className="text-section">Compromissos</h2>
+              <span className="text-[11px] font-semibold tabular-nums text-faint">
+                {timed.length}
+              </span>
+              <span className="text-caption ml-auto">com horário</span>
+            </div>
+          )}
+
           {/* TIMELINE proporcional */}
-          <div className="relative px-2" style={{ height: gridHeight }}>
+          <div className="relative px-2" style={{ height: gridHeight }} data-testid="dia-timeline">
             {hours.map((h, i) => (
               <div
                 key={h}
@@ -303,12 +306,38 @@ export default function DayAgenda() {
             })}
           </div>
 
+          {/* COMPROMISSO fora da faixa 06–23. Continua sendo compromisso: tem
+              hora, so nao cabe na regua. Por isso vem logo depois dela, e nao
+              junto das tarefas. */}
           {outOfGrid.length > 0 && (
             <Section label="Fora da grade" count={outOfGrid.length} className="mt-6">
               {outOfGrid.map((t) => (
                 <TaskRow key={t.id} task={t} onOpen={openTask} onChanged={reload} />
               ))}
             </Section>
+          )}
+
+          {/* TAREFAS DO DIA — depois da regua, e nunca dentro dela.
+              A regua e feita de COMPROMISSOS: coisas que acontecem numa hora.
+              Uma tarefa com data e sem hora precisa ser feita hoje e nao
+              acontece as 14h — coloca-la na regua exigiria inventar um horario,
+              que e a unica coisa que a Agenda nao pode fazer. Entao ela vive
+              abaixo, com rotulo proprio e sem coluna de hora. */}
+          {untimed.length > 0 && (
+            <section className="mt-7" data-testid="dia-tarefas">
+              <div className="mb-1 flex items-baseline gap-1.5 px-2">
+                <h2 className="text-section">Tarefas do dia</h2>
+                <span className="text-[11px] font-semibold tabular-nums text-faint">
+                  {untimed.length}
+                </span>
+                <span className="text-caption ml-auto">sem horário</span>
+              </div>
+              <div className="list">
+                {untimed.map((t) => (
+                  <TaskRow key={t.id} task={t} onOpen={openTask} onChanged={reload} />
+                ))}
+              </div>
+            </section>
           )}
         </>
       )}

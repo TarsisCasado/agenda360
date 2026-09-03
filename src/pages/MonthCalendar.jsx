@@ -116,7 +116,16 @@ export default function MonthCalendar({ embedded = false }) {
                 key={iso}
                 onClick={() => setDayModal({ open: true, iso })}
                 aria-label={`${day.getDate()} — ${dayTasks.length} atividade(s)`}
-                className="group relative flex min-h-[62px] flex-col items-center gap-1 rounded-row px-0.5 py-1.5 transition-colors active:bg-surface-2 sm:min-h-[96px] sm:items-stretch sm:px-1 sm:hover:bg-surface-2/70"
+                data-testid={`mes-dia-${iso}`}
+                className={cx(
+                  'group relative flex min-h-[62px] flex-col items-center gap-1 rounded-row px-0.5 py-1.5 transition-colors active:bg-surface-2 sm:min-h-[96px] sm:items-stretch sm:px-1 sm:hover:bg-surface-2/70',
+                  // Dia COM alguma coisa recebe superficie propria. Sem isto o
+                  // mes so se le caçando pontinho de celula em celula — e a
+                  // pergunta que o Mes responde e "onde esta cheio e onde esta
+                  // livre", que precisa aparecer de relance.
+                  dayTasks.length > 0 && !today && 'bg-surface-2/60',
+                  today && 'ring-1 ring-accent/45',
+                )}
               >
                 <div className="flex w-full items-start justify-center sm:justify-between">
                   <span
@@ -220,17 +229,36 @@ export default function MonthCalendar({ embedded = false }) {
             }
           />
         ) : (
-          <div className="space-y-2">
-            {selectedTasks.map((t) => (
-              <TaskCard
-                key={t.id}
-                task={t}
-                onEdit={(task) =>
-                  setTaskModal({ open: true, task, defaults: null })
-                }
-              />
-            ))}
-          </div>
+          // A MESMA distincao das outras duas visoes: o que ACONTECE numa hora
+          // vem primeiro e com a hora a mostra; o que PRECISA SER FEITO vem
+          // depois, sem hora inventada. Os rotulos so aparecem quando existem
+          // os dois grupos — com um so, seriam ruido.
+          (() => {
+            const comHora = selectedTasks.filter((t) => t.start_time)
+            const semHora = selectedTasks.filter((t) => !t.start_time)
+            const ambos = comHora.length > 0 && semHora.length > 0
+            const grupo = (lista, rotulo) =>
+              lista.length > 0 && (
+                <div>
+                  {ambos && <p className="text-section mb-1.5">{rotulo}</p>}
+                  <div className="space-y-2">
+                    {lista.map((t) => (
+                      <TaskCard
+                        key={t.id}
+                        task={t}
+                        onEdit={(task) => setTaskModal({ open: true, task, defaults: null })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )
+            return (
+              <div className="space-y-4">
+                {grupo(comHora, 'Compromissos')}
+                {grupo(semHora, 'Tarefas do dia')}
+              </div>
+            )
+          })()
         )}
       </Modal>
 

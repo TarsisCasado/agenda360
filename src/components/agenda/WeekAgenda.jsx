@@ -54,7 +54,11 @@ export default function WeekAgenda({ date, onOpenTask, onPickDay }) {
   return (
     <div className="px-1">
       {semana.map(({ iso, day, compromissos, tarefas, hoje }) => (
-        <section key={iso} className="border-t hair first:border-t-0">
+        <section
+          key={iso}
+          data-testid={`semana-dia-${iso}`}
+          className={cx('border-t hair first:border-t-0', hoje && 'bg-accent-soft/40 rounded-row')}
+        >
           <button
             onClick={() => onPickDay?.(iso)}
             className="press flex w-full items-baseline gap-2 px-2 py-3 text-left"
@@ -79,9 +83,25 @@ export default function WeekAgenda({ date, onOpenTask, onPickDay }) {
             <p className="text-caption px-2 pb-3">Dia livre</p>
           ) : (
             <div className="pb-2">
+              {/* Dentro do dia a ordem e a mesma da Agenda inteira: primeiro o
+                  que ACONTECE numa hora, depois o que PRECISA SER FEITO. Ate o
+                  CP5.2 a ordem ja era esta, mas so a ordem — dois itens
+                  seguidos pareciam a mesma coisa. Agora um rotulo minusculo
+                  separa os dois grupos quando os dois existem; com so um deles
+                  o rotulo seria ruido e nao aparece. */}
+              {compromissos.length > 0 && tarefas.length > 0 && (
+                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faint px-2 pb-0.5">
+                  Compromissos
+                </p>
+              )}
               {compromissos.map((t) => (
                 <TaskRow key={t.id} task={t} onOpen={onOpenTask} onChanged={() => {}} />
               ))}
+              {compromissos.length > 0 && tarefas.length > 0 && (
+                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faint px-2 pb-0.5 pt-2">
+                  Tarefas
+                </p>
+              )}
               {tarefas.map((t) => (
                 <TaskRow key={t.id} task={t} onOpen={onOpenTask} onChanged={() => {}} />
               ))}
