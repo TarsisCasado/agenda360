@@ -10,6 +10,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
 import { useToast } from '../context/ToastContext'
 import { agentKernel } from '../agent/kernel'
+import { tipoDaProposta, destinoDaProposta } from '../lib/capture'
 import { PRIORITY_META } from '../lib/constants'
 import { formatShort } from '../lib/date'
 import { cx } from '../lib/utils'
@@ -94,7 +95,15 @@ function ActionCard({ pending, categories, busy, onConfirm, onCancel }) {
   return (
     <div className="msg-in w-full max-w-md rounded-surface bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-section">{CARD_TITLE[p.intent] || 'Ação'}</span>
+        {/* MESMO VOCABULARIO DA CAPTURA: uma coisa nova nasce chamada de
+            Compromisso, Tarefa ou Link nas duas superficies. Nas intencoes que
+            alteram algo que ja existe, o nome da acao informa mais que o tipo
+            do artefato — e por isso a tabela continua valendo la. */}
+        <span className="text-section">
+          {tipoDaProposta(p)?.key === 'alteracao'
+            ? CARD_TITLE[p.intent] || 'Ação'
+            : tipoDaProposta(p)?.label}
+        </span>
         {conf.label && (
           <span className={cx('text-[12px] font-semibold', conf.tone)}>{conf.label}</span>
         )}
@@ -276,7 +285,7 @@ export default function Assistant() {
     try {
       await agentKernel.assistant.confirm({ proposal, identity, conversationId: convRef.current })
       setPending(null)
-      push({ role: 'assistant', text: 'Feito! ✨', activity: { intent: proposal.intent } })
+      push({ role: 'assistant', text: destinoDaProposta(proposal) || 'Feito! ✨', activity: { intent: proposal.intent } })
       toast('Ação executada')
       reload()
     } catch (err) {

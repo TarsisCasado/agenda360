@@ -54,9 +54,14 @@ export default function Layout() {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* UMA PORTA SO: "Nova atividade" (desktop) e o `+` (mobile) abrem a
+            MESMA superficie de captura. Antes o desktop abria o formulario
+            completo — duas gramaticas para dizer a mesma coisa, dependendo do
+            tamanho da tela. O formulario continua alcancavel pelo "Ajustar" da
+            proposta e pela edicao de uma atividade existente. */}
         <Topbar
           onMenu={() => setSidebarOpen(true)}
-          onNewTask={() => setFullTaskOpen(true)}
+          onNewTask={() => setCaptureOpen(true)}
           onOpenPalette={() => setPaletteOpen(true)}
         />
         <main className="flex-1 overflow-y-auto px-3 pb-safe-nav pt-4 sm:px-6 lg:px-10 lg:pb-10">
