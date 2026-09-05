@@ -11,6 +11,7 @@ import { useData } from '../context/DataContext'
 import { useToast } from '../context/ToastContext'
 import { agentKernel } from '../agent/kernel'
 import { tipoDaProposta, destinoDaProposta } from '../lib/capture'
+import { conversaAberta, guardarConversa, esquecerConversa } from '../lib/conversationSession'
 import { PRIORITY_META } from '../lib/constants'
 import { formatShort } from '../lib/date'
 import { cx } from '../lib/utils'
@@ -93,7 +94,7 @@ function ActionCard({ pending, categories, busy, onConfirm, onCancel }) {
   const prio = PRIORITY_META[form.priority]
 
   return (
-    <div className="msg-in w-full max-w-md rounded-surface bg-surface p-4">
+    <div data-testid="copiloto-proposta" className="msg-in w-full max-w-md rounded-surface bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
         {/* MESMO VOCABULARIO DA CAPTURA: uma coisa nova nasce chamada de
             Compromisso, Tarefa ou Link nas duas superficies. Nas intencoes que
@@ -225,10 +226,50 @@ export default function Assistant() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, pending, busy])
 
+  // -------------------------------------------------------------------------
+  // RETOMAR A CONVERSA (CP5.7.1)
+  //
+  // O F5 apagava a conversa da tela. Nao porque o dado se perdesse — ele estava
+  // em `ai_messages` e em `ai_conversations.context.pending`, nos dois modos —
+  // mas porque o ID da conversa vivia so neste componente. Perdido o id,
+  // sumia o caminho de volta E o turno seguinte comecava uma conversa nova.
+  //
+  // Agora o id fica guardado (lib/conversationSession) e, ao montar, a tela
+  // pede ao agente o que ja estava salvo. Duas garantias que isso dá:
+  // a conversa continua legivel, e "muda para sexta" depois do refresh ainda
+  // fala da MESMA atividade.
+  // -------------------------------------------------------------------------
+  const [retomando, setRetomando] = useState(true)
+  useEffect(() => {
+    let vivo = true
+    const id = conversaAberta({ workspaceId })
+    if (!id) { setRetomando(false); return }
+    convRef.current = id
+    agentKernel.assistant
+      .resume({ conversationId: id })
+      .then((r) => {
+        if (!vivo) return
+        const falas = (r.messages || [])
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({ id: ++idRef.current, role: m.role, at: m.created_at || now(), text: m.content }))
+        setMessages(falas)
+        // So a fase de confirmacao devolve o CARTAO. Com um slot em aberto, a
+        // pergunta ja esta na conversa: repetir um cartao ali seria inventar
+        // uma proposta que o agente ainda nao fez.
+        if (r.pending?.phase === 'awaiting_confirmation' && r.pending.proposal) {
+          setPending({ kind: 'proposal', proposal: r.pending.proposal })
+        }
+      })
+      .catch(() => { /* sem historico: a tela abre limpa, nunca quebrada */ })
+      .finally(() => { if (vivo) setRetomando(false) })
+    return () => { vivo = false }
+  }, [workspaceId])
+
   const push = (msg) => setMessages((m) => [...m, { id: ++idRef.current, at: now(), ...msg }])
 
   const handleOutcome = useCallback((res) => {
     convRef.current = res.conversationId || convRef.current
+    if (res.conversationId) guardarConversa(res.conversationId, { workspaceId })
     if (res.kind === 'clarification') {
       push({ role: 'assistant', text: res.message })
       // Uma pergunta pode chegar COM o rascunho ainda vivo ("isso e sobre a
@@ -261,7 +302,7 @@ export default function Assistant() {
       push({ role: 'assistant', text: res.message })
       if (res.proposal) setPending({ kind: 'proposal', proposal: res.proposal })
     }
-  }, [reload, toast])
+  }, [reload, toast, workspaceId])
 
   const send = async (text) => {
     const content = (text ?? input).trim()
@@ -310,7 +351,7 @@ export default function Assistant() {
     } catch (err) { toast('Erro: ' + err.message, 'error') } finally { setBusy(false) }
   }
 
-  const empty = messages.length === 0 && !pending && !busy
+  const empty = messages.length === 0 && !pending && !busy && !retomando
 
 
   return (
@@ -329,7 +370,7 @@ export default function Assistant() {
         </div>
         {messages.length > 0 && (
           <button
-            onClick={() => { setMessages([]); setPending(null); convRef.current = null }}
+            onClick={() => { setMessages([]); setPending(null); convRef.current = null; esquecerConversa() }}
             className="press text-[13px] font-semibold text-muted"
           >
             Limpar

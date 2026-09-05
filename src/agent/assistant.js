@@ -434,7 +434,35 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     return { kind: 'cancelled' }
   }
 
-  return { ask, resolveSelection, confirm, cancel }
+  // ------------------------------------------------------------------------
+  // RETOMAR (CP5.7.1)
+  //
+  // Devolve o que ja estava salvo de uma conversa: as ultimas mensagens e o
+  // rascunho vivo (com a proposta, quando a fase for de confirmacao). Nao
+  // interpreta nada, nao chama provider, nao escreve — e leitura pura.
+  //
+  // Existe porque a persistencia SEMPRE esteve certa: o que faltava era a tela
+  // ter como pedir de volta. `ask` nao serve para isso (ele avanca a conversa);
+  // ler `memory` direto da interface seria furar a camada do agente.
+  // ------------------------------------------------------------------------
+  async function resume({ conversationId }) {
+    if (!conversationId) return { conversationId: null, messages: [], pending: null }
+    let messages = []
+    let pending = null
+    try {
+      messages = (await memory.history(conversationId)) || []
+    } catch {
+      messages = []
+    }
+    try {
+      pending = (await memory.getPending?.(conversationId)) || null
+    } catch {
+      pending = null
+    }
+    return { conversationId, messages, pending }
+  }
+
+  return { ask, resolveSelection, confirm, cancel, resume }
 }
 
 // Previa em linguagem humana: diz o que entendeu, incluindo quando o horario
