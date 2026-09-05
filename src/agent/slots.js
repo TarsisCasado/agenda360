@@ -49,6 +49,14 @@ export function missingSlots(intent, data = {}, { asked = [] } = {}) {
     ) {
       missing.push('horario')
     }
+    // ALERTA (CP5.8.1). Um aviso e uma promessa de interromper a pessoa num
+    // instante: sem instante nao ha promessa. Por isso este slot e
+    // OBRIGATORIO — nao entra em OPTIONAL_SLOTS e nao aceita "sem horario".
+    // E ele NAO transforma a tarefa em compromisso: quem pediu a hora foi o
+    // alerta, nao a natureza da atividade.
+    if (data.alert_enabled && !data.start_time && !data.time_ambiguous) {
+      missing.push('horario_alerta')
+    }
   }
   if (intent === 'reschedule_task' && !data.date) missing.push('data')
   // Slots obrigatorios continuam sendo pedidos ate serem preenchidos; os
@@ -78,6 +86,10 @@ export function slotQuestion(slot, data = {}) {
     }
     case 'horario':
       return `Qual horário? (ou responda "sem horário")`
+    case 'horario_alerta':
+      // A frase e a MESMA dos formularios (lib/alertRules.PEDIR_HORARIO): uma
+      // regra so, dita do mesmo jeito em todas as portas.
+      return 'Para avisar você, preciso saber o horário. Que horas?'
     default:
       return 'Pode detalhar um pouco mais?'
   }
@@ -155,6 +167,20 @@ export function applyAnswer({ slot, data, text, context = {} }) {
     if (answer.time && !answer.timeAmbiguous) {
       next.start_time = answer.time
       next.time_ambiguous = false
+      return { data: next, resolved: true }
+    }
+    return { data: next, resolved: false }
+  }
+
+  // O slot do alerta aceita horario (e so isso). "Sem horario" NAO resolve:
+  // desligaria o aviso sem dizer, que e a falha silenciosa que este
+  // checkpoint veio eliminar. A saida legitima e o usuario dizer que nao quer
+  // mais o lembrete — e isso ja e uma ALTERACAO do rascunho (CP5.1), tratada
+  // antes de chegar aqui.
+  if (slot === 'horario_alerta') {
+    if (answer.time) {
+      next.start_time = answer.time
+      next.time_ambiguous = Boolean(answer.timeAmbiguous)
       return { data: next, resolved: true }
     }
     return { data: next, resolved: false }

@@ -1,3 +1,4 @@
+import { isMeetingLike } from '../agent/slots'
 // ---------------------------------------------------------------------------
 // CAPTURA — a leitura da proposta, isolada da interface.
 //
@@ -14,10 +15,15 @@
 //
 // A REGRA DO TIPO:
 //   - link                 intencao de salvar um link;
-//   - compromisso          tem hora de inicio. Hora marcada e um encontro com
-//                          o relogio: ou voce esta lá, ou perdeu;
-//   - tarefa               nao tem hora. Trabalho a fazer, inclusive sem data
-//                          nenhuma ("sem data" e informacao, nao falta dela);
+//   - compromisso          tem hora de inicio E se parece com um encontro
+//                          ("reuniao", "consulta", "almoco com..."). Hora
+//                          marcada e um encontro com o relogio: ou voce esta
+//                          la, ou perdeu;
+//   - tarefa               nao tem hora — OU tem hora so porque pediu um AVISO
+//                          ("me lembra de pagar a conta amanha as 9h"). Aqui a
+//                          hora e do lembrete, nao do compromisso: continua
+//                          sendo trabalho a fazer, inclusive sem data nenhuma
+//                          ("sem data" e informacao, nao falta dela);
 //   - ideia                nota que entrou na Caixa sem virar atividade;
 //   - alteracao            a proposta mexe em algo que JA existe (editar,
 //                          reagendar, concluir, cancelar, excluir). Nao e um
@@ -52,7 +58,15 @@ export function tipoDaProposta(proposal) {
   if (intent === 'create_link') return TIPOS.link
   if (intent === 'create_note' || intent === 'create_idea') return TIPOS.ideia
   if (INTENCOES_DE_ALTERACAO.includes(intent)) return TIPOS.alteracao
-  return payload?.start_time ? TIPOS.compromisso : TIPOS.tarefa
+  if (!payload?.start_time) return TIPOS.tarefa
+  // CP5.8.1 — HORA NAO E, SOZINHA, COMPROMISSO. Desde que um alerta passou a
+  // exigir horario, "me lembra de pagar a conta amanha as 9h" tem hora e
+  // continua sendo uma tarefa: as 9h sao do AVISO, nao de um encontro. Quem
+  // desempata e a mesma heuristica que o agente ja usa para decidir se vale a
+  // pena perguntar horario (agent/slots.isMeetingLike) — sem campo novo, sem
+  // migration.
+  if (payload.alert_enabled && !isMeetingLike(payload.title || '')) return TIPOS.tarefa
+  return TIPOS.compromisso
 }
 
 // Onde o artefato vai cair, dito no idioma do produto — o retorno curto depois

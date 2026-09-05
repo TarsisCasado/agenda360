@@ -29,8 +29,15 @@ const BASE = {
 // --- sinais de intencao ------------------------------------------------------
 // Verbo de comando explicito ("agende", "marca").
 const COMMAND_VERBS = /\b(agend[ae]r?|agende|marc[ae]r?|marque|cri[ae]r?|crie|adicion[ae]r?|adicione|anot[ae]r?|anote|coloc[ae]r?|coloque|bot[ae]r?)\b/
-// Lembrete ("me lembra de", "nao posso esquecer").
+// Lembrete ("me lembra de", "nao posso esquecer"). Serve para elevar a
+// confianca de que ha uma intencao de registrar algo.
 const REMINDER_CUES = /\b(lembr(a|e|ar|ete)|nao\s+posso\s+esquecer|nao\s+esque[cç]a|nao\s+deixar\s+de)\b/
+// PEDIDO EXPLICITO DE AVISO — subconjunto estrito do anterior (CP5.8.1).
+// "me lembra de pagar" pede um alerta; "nao posso esquecer disso" e enfase,
+// nao um pedido para o telefone tocar. A diferenca importa porque um alerta
+// passou a EXIGIR horario: tratar enfase como alerta faria o produto
+// interrogar sobre hora quem so estava enfatizando — atrito onde havia fluxo.
+const ALERT_CUES = /\b(me\s+lembr(a|e|ar)|lembr(a|e|ar)\s+de|lembrete|coloca?r?\s+um\s+lembrete|p[oõ]e\s+um\s+lembrete)\b/
 // Intencao pessoal ("preciso", "tenho que", "quero", "vou ter").
 const INTENT_CUES = /\b(preciso|precisamos|tenho\s+que|tenho\s+de|tenho\s+uma|tenho\s+um|tenho\s+reuniao|quero|queria|devo|vou\s+ter|vou\s+precisar|falta|tem\s+que)\b/
 // Substantivos de compromisso.
@@ -196,6 +203,11 @@ export function interpretLocal(text, context = {}) {
       priority: priority || 'medium',
       ...(category.category_id ? { category_id: category.category_id } : {}),
       ...(link ? { link } : {}),
+      // CP5.8.1 — "me lembra de...", "nao posso esquecer" pedem um AVISO, nao
+      // so um registro. O sinal ja era calculado (REMINDER_CUES) e so servia
+      // para elevar a confianca; agora ele pousa no payload. Quem cobra o
+      // horario e a camada de slots — nunca inventamos um.
+      ...(ALERT_CUES.test(normalized.text) ? { alert_enabled: true } : {}),
     }
 
     const ambiguities = []

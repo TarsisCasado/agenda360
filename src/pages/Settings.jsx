@@ -3,6 +3,8 @@ import { Plus, Trash2, Smartphone, Sparkles, ChevronRight } from 'lucide-react'
 import { Page, PageHeader } from '../components/layout/Page'
 import { TextInput } from '../components/ui/Form'
 import { cx } from '../lib/utils'
+import { rotuloFuso } from '../lib/timezone'
+import { useTimezone } from '../hooks/useTimezone'
 import InstallGuide from '../components/pwa/InstallGuide'
 import DeviceNotifications from '../components/notifications/DeviceNotifications'
 import { resetPreferences } from '../lib/preferences'
@@ -28,6 +30,7 @@ export default function Settings() {
   const [newCat, setNewCat] = useState({ name: '', color: PRESET_COLORS[0] })
   const [logs, setLogs] = useState([])
   const [installOpen, setInstallOpen] = useState(false)
+  const { timezone } = useTimezone()
 
   const redoOnboarding = () => {
     resetPreferences(workspaceId)
@@ -112,6 +115,10 @@ export default function Settings() {
           <Linha rotulo="Nome" valor={user?.full_name} />
           <Linha rotulo="E-mail" valor={user?.email} />
           <Linha rotulo="Perfil" valor={ROLE_LABELS[user?.role] || user?.role} />
+          {/* O fuso vem do aparelho e e mostrado pela CIDADE — ninguem precisa
+              saber escrever "America/Fortaleza" para o lembrete chegar na hora
+              certa. O dado guardado continua sendo IANA. */}
+          <Linha rotulo="Fuso horário" valor={rotuloFuso(timezone)} />
         </Grupo>
 
         <Grupo titulo="Categorias">

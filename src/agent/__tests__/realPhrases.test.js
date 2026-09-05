@@ -80,8 +80,13 @@ describe('As 10 frases do QA real', () => {
     expect(r.data.daypart).toBe('depois_do_almoco')
     expect(r.data.start_time).toBeUndefined()
     expect(r.data.date).toBeUndefined()
-    expect(asks(r)).toEqual(['data']) // falta a data, e ela sera PERGUNTADA
-    // O periodo dito pelo usuario e preservado como nota, sem virar hora falsa.
+    // CP5.8.1 mudou o que se pergunta aqui, e de proposito: "lembra de" e um
+    // PEDIDO DE AVISO, e um aviso precisa de um instante. "Depois do almoco"
+    // nao e um instante — entao, alem da data, o horario do alerta tambem e
+    // perguntado. O que NAO mudou (e continua sendo o ponto deste teste): o
+    // periodo dito pelo usuario nunca vira uma hora inventada.
+    expect(r.data.alert_enabled).toBe(true)
+    expect(asks(r)).toEqual(['data', 'horario_alerta'])
     const payload = withDaypartNote({ ...r.data, date: AMANHA })
     expect(payload.notes).toBe('Depois do almoço')
     expect(payload.start_time).toBeUndefined()

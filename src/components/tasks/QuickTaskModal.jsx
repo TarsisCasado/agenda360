@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import Modal from '../ui/Modal'
+import { CANAL_PADRAO, validarAlerta, PEDIR_HORARIO } from '../../lib/alertRules'
 import { TextInput, TextArea, Select, Checkbox } from '../ui/Form'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -33,7 +34,7 @@ const empty = (defaults = {}) => ({
   link: '',
   notes: '',
   alert_enabled: false,
-  alert_type: ALERT_TYPES.IN_APP,
+  alert_type: CANAL_PADRAO,
   alert_minutes_before: 15,
   ...defaults,
 })
@@ -75,14 +76,11 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
       toast('Informe um titulo', 'error')
       return
     }
-    // Alerta exige data + horario para calcular o lembrete (mesma regra do
-    // TaskModal; nao inventamos horario padrao).
-    if (form.alert_enabled && !form.date) {
-      toast('Defina uma data e um horario para ativar o lembrete.', 'error')
-      return
-    }
-    if (form.alert_enabled && !form.start_time) {
-      toast('Defina um horario para ativar o lembrete.', 'error')
+    // A REGRA DO ALERTA vem de lib/alertRules.js — a MESMA de todas as portas
+    // de entrada, com a mesma frase. Antes cada formulario tinha o seu texto.
+    const alerta = validarAlerta({ ...form, start_time: form.start_time || null, date: form.date || null })
+    if (!alerta.ok) {
+      toast(alerta.mensagem, 'error')
       return
     }
     setSaving(true)
@@ -179,7 +177,16 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
 
         {/* Alerta / lembrete (mesmo caminho de dados do TaskModal) */}
         <div className="surface-sunken px-3 pb-3 pt-1">
-          <Checkbox label="Avisar antes" checked={form.alert_enabled} onChange={set('alert_enabled')} />
+          <Checkbox
+            label="Avisar antes"
+            checked={form.alert_enabled}
+            onChange={set('alert_enabled')}
+          />
+          {/* Dito ANTES de tentar salvar: o aviso precisa de um instante, e
+              inventar 09:00 seria pior que nao avisar. */}
+          {form.alert_enabled && !form.start_time && (
+            <p className="text-[12px] leading-snug text-danger">{PEDIR_HORARIO}</p>
+          )}
           {form.alert_enabled && (
             <div className="grid grid-cols-2 gap-3">
               <Select label="Como" value={form.alert_type} onChange={set('alert_type')}>

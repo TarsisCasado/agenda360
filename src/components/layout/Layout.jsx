@@ -13,6 +13,7 @@ import WorkspaceMissing from '../workspace/WorkspaceMissing'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { isOnboarded } from '../../lib/preferences'
 import { workspaceGate } from '../../lib/uiState'
+import { useTimezone } from '../../hooks/useTimezone'
 
 export default function Layout() {
   const { workspaceId, workspaces, loading: wsLoading } = useWorkspace()
@@ -26,6 +27,11 @@ export default function Layout() {
   const [captureOpen, setCaptureOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+
+  // CP5.8.1 — o fuso do usuario e o que transforma "14:00" no instante certo
+  // do lembrete. Sincronizado aqui, uma vez por sessao, e so quando e seguro
+  // (ver hooks/useTimezone).
+  useTimezone()
 
   // Onboarding conversacional no primeiro acesso (uma vez por workspace).
   useEffect(() => {
