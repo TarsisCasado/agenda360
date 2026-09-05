@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Inbox as InboxIcon } from 'lucide-react'
 import Modal from '../ui/Modal'
+import { TextInput, TextArea, Select, Checkbox } from '../ui/Form'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
@@ -183,156 +184,92 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
             </button>
           </div>
         )}
-        <div className="sm:col-span-2">
-          <label className="label">Titulo *</label>
-          <input
-            className="input"
-            value={form.title}
-            onChange={set('title')}
-            placeholder="Ex: Reuniao de alinhamento"
-          />
-        </div>
+        {/* CP5.7 — os campos passam a ser os do DS (rotulo ligado por id, anel
+            de foco unico, select e caixa de marcacao com a nossa moldura). Era
+            a ultima superficie visivel do produto com controle de navegador
+            cru no meio de uma tela desenhada. */}
+        <TextInput
+          className="sm:col-span-2"
+          label="Título *"
+          value={form.title}
+          onChange={set('title')}
+          placeholder="Ex: Reunião de alinhamento"
+        />
 
-        <div className="sm:col-span-2">
-          <label className="label">Descricao</label>
-          <textarea
-            className="input min-h-[70px]"
-            value={form.description}
-            onChange={set('description')}
-            placeholder="Detalhes da atividade"
-          />
-        </div>
+        <TextArea
+          className="sm:col-span-2"
+          label="Descrição"
+          rows={3}
+          value={form.description}
+          onChange={set('description')}
+          placeholder="Detalhes da atividade"
+        />
 
         <div>
-          <label className="label">Data</label>
-          <input
-            type="date"
-            className="input"
-            value={form.date}
-            onChange={set('date')}
-            disabled={noDate}
-          />
-          <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <input
-              type="checkbox"
-              checked={noDate}
-              onChange={toggleNoDate}
-              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-            />
-            Sem data
-          </label>
+          <TextInput type="date" label="Data" value={form.date} onChange={set('date')} disabled={noDate} />
+          <Checkbox label="Sem data" checked={noDate} onChange={toggleNoDate} className="mt-1" />
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="label">Inicio</label>
-            <input
-              type="time"
-              className="input"
-              value={form.start_time}
-              onChange={set('start_time')}
-              disabled={noDate}
-            />
-          </div>
-          <div>
-            <label className="label">Fim</label>
-            <input
-              type="time"
-              className="input"
-              value={form.end_time}
-              onChange={set('end_time')}
-              disabled={noDate}
-            />
-          </div>
+          <TextInput type="time" label="Início" value={form.start_time} onChange={set('start_time')} disabled={noDate} />
+          <TextInput type="time" label="Fim" value={form.end_time} onChange={set('end_time')} disabled={noDate} />
         </div>
 
-        <div>
-          <label className="label">Categoria</label>
-          <select className="input" value={form.category_id} onChange={set('category_id')}>
-            <option value="">Sem categoria</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">Prioridade</label>
-          <select className="input" value={form.priority} onChange={set('priority')}>
-            {Object.entries(PRIORITY_META).map(([key, meta]) => (
-              <option key={key} value={key}>
-                {meta.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select label="Categoria" value={form.category_id} onChange={set('category_id')}>
+          <option value="">Sem categoria</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </Select>
+        <Select label="Prioridade" value={form.priority} onChange={set('priority')}>
+          {Object.entries(PRIORITY_META).map(([key, meta]) => (
+            <option key={key} value={key}>{meta.label}</option>
+          ))}
+        </Select>
 
-        <div>
-          <label className="label">Status</label>
-          <select className="input" value={form.status} onChange={set('status')}>
-            {STATUS_ORDER.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_META[s].label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">Link relacionado</label>
-          <input
-            className="input"
-            value={form.link}
-            onChange={set('link')}
-            placeholder="https://..."
+        <Select label="Status" value={form.status} onChange={set('status')}>
+          {STATUS_ORDER.map((s) => (
+            <option key={s} value={s}>{STATUS_META[s].label}</option>
+          ))}
+        </Select>
+        <TextInput
+          label="Link relacionado"
+          value={form.link}
+          onChange={set('link')}
+          placeholder="https://..."
+          inputMode="url"
+        />
+
+        <TextArea
+          className="sm:col-span-2"
+          label="Observações"
+          rows={2}
+          value={form.notes}
+          onChange={set('notes')}
+        />
+
+        {/* Alertas: bloco rebaixado, sem borda — uma caixa a menos. */}
+        <div className="surface-sunken sm:col-span-2 px-3 pb-3 pt-1">
+          <Checkbox
+            label="Avisar antes"
+            checked={form.alert_enabled}
+            onChange={set('alert_enabled')}
           />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="label">Observacoes</label>
-          <textarea
-            className="input min-h-[60px]"
-            value={form.notes}
-            onChange={set('notes')}
-          />
-        </div>
-
-        {/* Alertas */}
-        <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={form.alert_enabled}
-              onChange={set('alert_enabled')}
-              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-            />
-            Ativar alerta / lembrete
-          </label>
           {form.alert_enabled && (
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Tipo</label>
-                <select className="input" value={form.alert_type} onChange={set('alert_type')}>
-                  {Object.entries(ALERT_TYPE_LABELS).map(([key, label]) => (
-                    <option
-                      key={key}
-                      value={key}
-                      disabled={key === ALERT_TYPES.WHATSAPP}
-                    >
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Minutos antes</label>
-                <input
-                  type="number"
-                  min="0"
-                  className="input"
-                  value={form.alert_minutes_before}
-                  onChange={set('alert_minutes_before')}
-                />
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Select label="Como" value={form.alert_type} onChange={set('alert_type')}>
+                {Object.entries(ALERT_TYPE_LABELS).map(([key, label]) => (
+                  <option key={key} value={key} disabled={key === ALERT_TYPES.WHATSAPP}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+              <TextInput
+                type="number"
+                min="0"
+                label="Minutos antes"
+                value={form.alert_minutes_before}
+                onChange={set('alert_minutes_before')}
+              />
             </div>
           )}
         </div>

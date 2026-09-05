@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import Modal from '../ui/Modal'
+import { TextInput, TextArea, Select, Checkbox } from '../ui/Form'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
@@ -125,65 +126,33 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
         </>
       }
     >
-      <div className="space-y-4">
-        <div>
-          <label className="label">Titulo *</label>
-          <input
-            className="input"
-            value={form.title}
-            onChange={set('title')}
-            placeholder="O que precisa ser feito?"
-          />
-        </div>
+      <div className="space-y-3">
+        {/* CP5.7 — mesmos controles do DS usados na Central de links, nas
+            Configuracoes e no formulario completo. */}
+        <TextInput
+          label="Título *"
+          value={form.title}
+          onChange={set('title')}
+          placeholder="O que precisa ser feito?"
+        />
 
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Data</label>
-            <input
-              type="date"
-              className="input"
-              value={form.date}
-              onChange={set('date')}
-              disabled={noDate}
-            />
-          </div>
-          <div>
-            <label className="label">Hora</label>
-            <input
-              type="time"
-              className="input"
-              value={form.start_time}
-              onChange={set('start_time')}
-              disabled={noDate}
-            />
-          </div>
+          <TextInput type="date" label="Data" value={form.date} onChange={set('date')} disabled={noDate} />
+          <TextInput type="time" label="Hora" value={form.start_time} onChange={set('start_time')} disabled={noDate} />
         </div>
 
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={noDate}
-            onChange={toggleNoDate}
-            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-          />
-          Sem data
-        </label>
+        <Checkbox label="Sem data" checked={noDate} onChange={toggleNoDate} />
 
-        <div>
-          <label className="label">Categoria</label>
-          <select className="input" value={form.category_id} onChange={set('category_id')}>
-            <option value="">Sem categoria</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select label="Categoria" value={form.category_id} onChange={set('category_id')}>
+          <option value="">Sem categoria</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </Select>
 
         {/* Prioridade em botoes grandes (facil no toque) */}
         <div>
-          <label className="label">Prioridade</label>
+          <span className="label">Prioridade</span>
           <div className="grid grid-cols-4 gap-2">
             {Object.entries(PRIORITY_META).map(([key, meta]) => (
               <button
@@ -191,14 +160,10 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
                 type="button"
                 onClick={() => setForm((f) => ({ ...f, priority: key }))}
                 className={cx(
-                  'rounded-lg border py-2 text-xs font-semibold transition-colors',
-                  form.priority === key
-                    ? 'border-transparent text-white'
-                    : 'border-slate-200 text-slate-500 dark:border-slate-700',
+                  'min-h-[40px] rounded-control text-[12px] font-semibold transition-colors',
+                  form.priority === key ? 'text-white' : 'bg-surface-2 text-secondary',
                 )}
-                style={
-                  form.priority === key ? { backgroundColor: meta.color } : undefined
-                }
+                style={form.priority === key ? { backgroundColor: meta.color } : undefined}
               >
                 {meta.label}
               </button>
@@ -206,50 +171,31 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
           </div>
         </div>
 
-        <div>
-          <label className="label">Status</label>
-          <select className="input" value={form.status} onChange={set('status')}>
-            {STATUS_ORDER.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_META[s].label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select label="Status" value={form.status} onChange={set('status')}>
+          {STATUS_ORDER.map((s) => (
+            <option key={s} value={s}>{STATUS_META[s].label}</option>
+          ))}
+        </Select>
 
         {/* Alerta / lembrete (mesmo caminho de dados do TaskModal) */}
-        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={form.alert_enabled}
-              onChange={set('alert_enabled')}
-              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-            />
-            Ativar alerta / lembrete
-          </label>
+        <div className="surface-sunken px-3 pb-3 pt-1">
+          <Checkbox label="Avisar antes" checked={form.alert_enabled} onChange={set('alert_enabled')} />
           {form.alert_enabled && (
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Tipo</label>
-                <select className="input" value={form.alert_type} onChange={set('alert_type')}>
-                  {Object.entries(ALERT_TYPE_LABELS).map(([key, label]) => (
-                    <option key={key} value={key} disabled={key === ALERT_TYPES.WHATSAPP}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Minutos antes</label>
-                <input
-                  type="number"
-                  min="0"
-                  className="input"
-                  value={form.alert_minutes_before}
-                  onChange={set('alert_minutes_before')}
-                />
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Select label="Como" value={form.alert_type} onChange={set('alert_type')}>
+                {Object.entries(ALERT_TYPE_LABELS).map(([key, label]) => (
+                  <option key={key} value={key} disabled={key === ALERT_TYPES.WHATSAPP}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+              <TextInput
+                type="number"
+                min="0"
+                label="Minutos antes"
+                value={form.alert_minutes_before}
+                onChange={set('alert_minutes_before')}
+              />
             </div>
           )}
         </div>
@@ -258,30 +204,15 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
         <button
           type="button"
           onClick={() => setShowOptional((v) => !v)}
-          className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 dark:bg-slate-800/60 dark:text-slate-300"
+          className="flex min-h-[44px] w-full items-center justify-between rounded-control bg-surface-2 px-3 text-[14px] font-medium text-secondary transition-colors active:bg-surface-3"
         >
-          Link e observacao (opcional)
+          Link e observação (opcional)
           {showOptional ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
         {showOptional && (
           <div className="space-y-3">
-            <div>
-              <label className="label">Link</label>
-              <input
-                className="input"
-                value={form.link}
-                onChange={set('link')}
-                placeholder="https://..."
-              />
-            </div>
-            <div>
-              <label className="label">Observacao</label>
-              <textarea
-                className="input min-h-[60px]"
-                value={form.notes}
-                onChange={set('notes')}
-              />
-            </div>
+            <TextInput label="Link" value={form.link} onChange={set('link')} placeholder="https://..." inputMode="url" />
+            <TextArea label="Observação" rows={2} value={form.notes} onChange={set('notes')} />
           </div>
         )}
       </div>

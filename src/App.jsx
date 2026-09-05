@@ -6,6 +6,7 @@ import { DataProvider } from './context/DataContext'
 import Layout from './components/layout/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import Spinner from './components/ui/Spinner'
+import { Skeleton } from './components/ui/Skeleton'
 import { lazyRoute } from './lib/lazyRoute'
 import Login from './pages/Login'
 import Today from './pages/Today'
@@ -24,20 +25,31 @@ const Assistant = lazyRoute(() => import('./pages/Assistant'))
 const Reports = lazyRoute(() => import('./pages/Reports'))
 const Settings = lazyRoute(() => import('./pages/Settings'))
 
+// CP5.7 — trocar de rota nao pode parecer "carregando um site". Um spinner
+// grande no meio da tela e a imagem do carregamento de pagina; um esqueleto com
+// a FORMA do que vem (titulo, contexto, algumas linhas) e a do aplicativo que
+// ja sabe o que vai mostrar. Discreto de proposito: se a rota abre em 80ms, o
+// que se ve e um piscar de estrutura, nao um pedido de espera.
 function RouteFallback() {
   return (
-    <div className="flex h-full items-center justify-center py-20">
-      <Spinner size={32} />
+    <div className="mx-auto w-full max-w-5xl animate-in" aria-busy="true" aria-label="Carregando">
+      <Skeleton className="h-7 w-44" />
+      <Skeleton className="mt-2 h-3 w-28" />
+      <div className="mt-6 space-y-2">
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-14 w-full" />
+      </div>
     </div>
   )
 }
 
 function FullScreenLoader() {
   return (
-    <div className="flex h-[100dvh] items-center justify-center bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-[100dvh] items-center justify-center bg-canvas">
       <div className="flex flex-col items-center gap-3">
-        <Spinner size={40} />
-        <p className="text-sm text-slate-500">Carregando...</p>
+        <Spinner size={32} />
+        <p className="text-caption">Abrindo…</p>
       </div>
     </div>
   )

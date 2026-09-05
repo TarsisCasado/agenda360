@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Page, PageHeader } from '../components/layout/Page'
 import { Lightbulb, Plus, Loader2 } from 'lucide-react'
 import { EmptyState, ErrorState } from '../components/ui/Common'
 import { useInbox } from '../hooks/useInbox'
@@ -45,24 +46,24 @@ export default function Ideas() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <header className="mb-5 flex items-end justify-between gap-3 px-2">
-        <div>
-          <h1 className="text-display">Ideias</h1>
-          <p className="text-caption mt-1">
-            {ideas.length > 0 ? pluralize(ideas.length, 'anotação', 'anotações') : 'Escreva sem fricção'}
-          </p>
-        </div>
-        {/* Acao contextual, nao botao permanente com rotulo longo. */}
-        <button
-          onClick={novaIdeia}
-          disabled={creating}
-          aria-label="Nova ideia"
-          className="press flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white"
-        >
-          {creating ? <Loader2 size={17} className="animate-spin" /> : <Plus size={19} />}
-        </button>
-      </header>
+    <Page width="content">
+      {/* CP5.7 — mesmo cabecalho das outras telas. O botao de nova ideia e a
+          acao DESTA pagina: fica na linha do titulo, nao solto no canto. */}
+      <PageHeader
+        title="Ideias"
+        subtitle={ideas.length > 0 ? pluralize(ideas.length, 'anotação', 'anotações') : 'Escreva sem fricção'}
+        actions={
+          <button
+            onClick={novaIdeia}
+            disabled={creating}
+            aria-label="Nova ideia"
+            className="btn-primary press !px-3"
+          >
+            {creating ? <Loader2 size={17} className="animate-spin" /> : <Plus size={18} />}
+            <span className="hidden sm:inline">Nova ideia</span>
+          </button>
+        }
+      />
 
       {error ? (
         <ErrorState onRetry={reload} />
@@ -76,12 +77,10 @@ export default function Ideas() {
         <EmptyState
           icon={Lightbulb}
           title="Nenhuma ideia ainda"
-          description="Capture um pensamento, um rascunho, uma lista — sem formulário. Toque em Nova ideia e comece a escrever."
-          action={
-            <button onClick={novaIdeia} className="btn-secondary press">
-              <Plus size={15} /> Nova ideia
-            </button>
-          }
+          // Sem acao aqui: "Nova ideia" ja esta ao lado do titulo, a 200px
+          // daqui. Dois botoes primarios para a mesma coisa na mesma tela e o
+          // tipo de repeticao que faz o produto parecer inseguro.
+          description="Capture um pensamento, um rascunho, uma lista — sem formulário."
         />
       ) : (
         // Lista estilo Notes: o conteudo manda, a moldura some.
@@ -108,6 +107,6 @@ export default function Ideas() {
           })}
         </ul>
       )}
-    </div>
+    </Page>
   )
 }

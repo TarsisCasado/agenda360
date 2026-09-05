@@ -269,6 +269,34 @@ body {
     @apply mb-1.5 block text-[12px] font-semibold text-secondary;
   }
 
+  /* SELECT: continua sendo um <select> de verdade (o iPhone abre a roda
+     nativa, o teclado navega, o leitor de tela anuncia). So a moldura muda —
+     a seta do sistema sai e entra a nossa, senao o controle denuncia a
+     "pagina web" no meio de um app. */
+  .select {
+    @apply input cursor-pointer appearance-none bg-surface-2 pr-9;
+  }
+  /* CAIXA DE MARCACAO / INTERRUPTOR: o input real fica invisivel (`peer`) e a
+     marca e desenhada ao lado. Nada de `appearance:none` no proprio input —
+     assim o foco, o teclado e o rotulo continuam nativos. */
+  .check-box {
+    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded-[7px] bg-surface-3 text-transparent transition-colors;
+    @apply peer-checked:bg-accent peer-checked:text-white;
+    @apply peer-focus-visible:ring-2 peer-focus-visible:ring-accent/45;
+  }
+  .switch-track {
+    @apply relative h-[26px] w-[44px] shrink-0 rounded-full bg-surface-3 transition-colors;
+    @apply peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/45;
+  }
+  /* O polegar mora DENTRO do trilho, entao nao e irmao do input: `peer-*` nao
+     alcanca. A regra desce um nivel, escrita a mao. */
+  .switch-thumb {
+    @apply absolute left-[3px] top-[3px] h-5 w-5 rounded-full bg-white shadow-card transition-transform;
+  }
+  .peer:checked ~ .switch-track .switch-thumb {
+    transform: translateX(18px);
+  }
+
   .chip {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] font-medium;
   }

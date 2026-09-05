@@ -167,8 +167,13 @@ export default function DayAgenda() {
 
   // Mês e Semana pedem largura; a timeline do Dia, nao — uma linha do tempo
   // esticada em 1100px vira planilha, que e exatamente o que evitamos.
+  // CP5.7 — a moldura EXTERNA e a mesma de todas as telas (max-w-5xl): e o
+  // eixo em que o titulo se alinha. A coluna do Dia continua estreita por
+  // dentro; so deixou de arrastar o cabecalho 176px para a direita quando se
+  // vinha de Hoje.
   return (
-    <div className={cx('mx-auto', visao === 'dia' ? 'max-w-2xl' : 'max-w-5xl')}>
+    <div className="mx-auto w-full max-w-5xl">
+    <div className={cx(visao === 'dia' ? 'max-w-2xl' : '')}>
       {/* O cabecalho segue o RECORTE: no Dia titula o dia; na Semana, a semana;
           no Mes quem titula e o proprio calendario, entao aqui fica so o nome
           da area — e a navegacao de mes e dele, nao daqui. */}
@@ -348,6 +353,7 @@ export default function DayAgenda() {
         defaults={modal.defaults}
         onClose={() => setModal({ open: false, task: null, defaults: null })}
       />
+    </div>
     </div>
   )
 }

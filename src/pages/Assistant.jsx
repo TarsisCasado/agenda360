@@ -316,7 +316,10 @@ export default function Assistant() {
   return (
     // COPILOTO — a conversa vive na pagina, nao dentro de um card de chat.
     // A entrada flutua sobre o conteudo (como um teclado nativo), com blur.
-    <div className="mx-auto flex h-full max-w-2xl flex-col">
+    // CP5.7 — mesma moldura externa das outras telas; a coluna da conversa
+    // continua com a largura de leitura.
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col">
+    <div className="flex h-full max-w-2xl flex-1 flex-col">
       <header className="mb-2 flex items-center justify-between gap-3 px-2">
         <div className="min-w-0">
           <h1 className="text-display">Copiloto</h1>
@@ -482,6 +485,7 @@ export default function Assistant() {
           </button>
         </div>
       </form>
+    </div>
     </div>
   )
 }
