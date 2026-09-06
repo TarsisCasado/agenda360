@@ -290,6 +290,71 @@ body {
   }
   /* O polegar mora DENTRO do trilho, entao nao e irmao do input: `peer-*` nao
      alcanca. A regra desce um nivel, escrita a mao. */
+  /* -------------------------------------------------------------------------
+     FORMULARIO DENSO (CP5.9) — a gramatica do editor de atividade.
+
+     O formulario antigo tinha uma regra so: TODA propriedade vira um retangulo
+     cinza com rotulo em cima. Doze propriedades = doze retangulos, e a tela
+     passa a parecer um cadastro de sistema. O que muda aqui nao e o tamanho da
+     fonte — e a FORMA:
+
+       1. o que a pessoa ESCREVE (titulo, descricao, observacao) perde a
+          moldura e vira texto sobre a propria folha. Um titulo com caixa
+          cinza compete com o cabecalho; sem caixa, ele domina;
+       2. o que a pessoa ESCOLHE (categoria, prioridade, status, canal) vira
+          LINHA — rotulo a esquerda, valor a direita — agrupada num bloco unico
+          separado por hairline. Uma caixa no lugar de quatro;
+       3. o que pertence ao mesmo conceito (data, inicio, fim) divide UMA caixa,
+          separada por hairline. A largura deixa de ser acidente do grid.
+     ------------------------------------------------------------------------- */
+
+  /* Campo de escrita SEM moldura: o texto e o proprio conteudo da folha. */
+  .input-bare {
+    @apply w-full border-0 bg-transparent p-0 text-primary transition-colors placeholder:text-muted focus:outline-none focus:ring-0;
+  }
+  /* Titulo da atividade: o elemento dominante do editor. */
+  .input-title {
+    @apply input-bare text-[19px] font-semibold leading-snug tracking-[-0.01em] sm:text-[20px];
+  }
+
+  /* Bloco agrupado: uma superficie, varias linhas, hairline entre elas. */
+  .group-box {
+    @apply overflow-hidden rounded-control bg-surface-2;
+  }
+  .group-box > * + * {
+    @apply border-t border-hairline/60;
+  }
+  /* Linha de propriedade: rotulo a esquerda, controle a direita, 44px de alvo. */
+  .prop-row {
+    @apply flex min-h-[44px] items-center gap-3 px-3.5;
+  }
+  .prop-label {
+    @apply shrink-0 text-[13px] font-medium text-secondary;
+  }
+  /* Controle dentro da linha: sem moldura propria (a linha ja e a moldura),
+     alinhado a direita, com espaco para a seta desenhada. */
+  .select-inline {
+    @apply w-full cursor-pointer appearance-none border-0 bg-transparent py-2.5 pr-6 text-right text-base font-medium text-primary focus:outline-none sm:text-[15px];
+  }
+  .input-inline {
+    @apply w-full border-0 bg-transparent py-2.5 text-right text-base text-primary placeholder:text-muted focus:outline-none sm:text-[15px];
+  }
+  /* Celula do trio Data/Inicio/Fim: rotulo miudo em cima, valor embaixo. */
+  .slot-cell {
+    @apply flex min-w-0 flex-col justify-center px-3 py-2;
+  }
+  .slot-label {
+    @apply mb-0.5 block text-[11px] font-semibold uppercase tracking-[0.05em] text-muted;
+  }
+  .slot-input {
+    @apply w-full border-0 bg-transparent p-0 text-[15px] font-medium text-primary focus:outline-none focus:ring-0 disabled:opacity-40;
+  }
+  /* O anel de foco do formulario denso mora no GRUPO, nao em cada controle:
+     sem moldura, o foco precisa de outro sinal. */
+  .focus-ring:focus-within {
+    @apply ring-2 ring-accent/40;
+  }
+
   .switch-thumb {
     @apply absolute left-[3px] top-[3px] h-5 w-5 rounded-full bg-white shadow-card transition-transform;
   }

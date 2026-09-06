@@ -1,23 +1,25 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Inbox as InboxIcon } from 'lucide-react'
+import { Check, Inbox as InboxIcon } from 'lucide-react'
 import Modal from '../ui/Modal'
-import { CANAL_PADRAO, validarAlerta, PEDIR_HORARIO } from '../../lib/alertRules'
-import { TextInput, TextArea, Select, Checkbox } from '../ui/Form'
+import { CANAL_PADRAO, validarAlerta } from '../../lib/alertRules'
+import {
+  TitleInput,
+  BareTextArea,
+  PropGroup,
+  PropSelect,
+  PropInput,
+  SlotField,
+  SectionLabel,
+} from '../ui/Form'
+import AlertaRows from './AlertaRows'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
 import { useToast } from '../../context/ToastContext'
 import { taskService } from '../../services/taskService'
 import { inboxTaskLinkService } from '../../services/inboxTaskLinkService'
-import {
-  STATUS_ORDER,
-  STATUS_META,
-  PRIORITY,
-  PRIORITY_META,
-  ALERT_TYPES,
-  ALERT_TYPE_LABELS,
-} from '../../lib/constants'
+import { STATUS_ORDER, STATUS_META, PRIORITY, PRIORITY_META } from '../../lib/constants'
 import { toISODate } from '../../lib/date'
 
 const empty = (defaults = {}) => ({
@@ -168,114 +170,145 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
         </>
       }
     >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* Origem discreta: Task criada a partir de uma captura da Caixa. */}
+      {/* ---------------------------------------------------------------
+          CP5.9 — o editor deixa de ser um cadastro.
+
+          Antes: doze propriedades, doze retangulos cinza empilhados, cada um
+          com rotulo em cima. O Titulo tinha exatamente o mesmo peso visual da
+          Observacao, e a Data ficava enorme ao lado de dois campos pequenos
+          porque calhava de ocupar uma coluna inteira do grid.
+
+          Agora tres formas, e so tres:
+            . o que se ESCREVE nao tem moldura (titulo dominante, resto abaixo);
+            . o que PERTENCE AO MESMO CONCEITO divide uma caixa (Data/Inicio/Fim);
+            . o que se ESCOLHE e linha dentro de um bloco agrupado.
+
+          Nenhuma regra de dominio muda aqui: mesmos campos, mesmo `form`,
+          mesmo `submit`, mesma validacao de alerta do CP5.8.1.
+          --------------------------------------------------------------- */}
+      <div className="space-y-5">
+        {/* Origem: metadata discreta ACIMA do titulo — informa de onde a
+            atividade veio sem competir com ele. */}
         {inboxLink && (
-          <div className="sm:col-span-2">
-            <button
-              type="button"
-              onClick={openOrigin}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-600 transition-colors hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300"
-              title="Abrir a captura na Caixa de Entrada"
-            >
-              <InboxIcon size={13} /> Origem: Caixa de Entrada
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={openOrigin}
+            className="press -mt-1 inline-flex items-center gap-1.5 text-[12px] font-semibold text-muted transition-colors hover:text-accent"
+            title="Abrir a captura na Caixa de Entrada"
+          >
+            <InboxIcon size={13} /> Origem: Caixa de Entrada
+          </button>
         )}
-        {/* CP5.7 — os campos passam a ser os do DS (rotulo ligado por id, anel
-            de foco unico, select e caixa de marcacao com a nossa moldura). Era
-            a ultima superficie visivel do produto com controle de navegador
-            cru no meio de uma tela desenhada. */}
-        <TextInput
-          className="sm:col-span-2"
-          label="Título *"
-          value={form.title}
-          onChange={set('title')}
-          placeholder="Ex: Reunião de alinhamento"
-        />
 
-        <TextArea
-          className="sm:col-span-2"
-          label="Descrição"
-          rows={3}
-          value={form.description}
-          onChange={set('description')}
-          placeholder="Detalhes da atividade"
-        />
-
-        <div>
-          <TextInput type="date" label="Data" value={form.date} onChange={set('date')} disabled={noDate} />
-          <Checkbox label="Sem data" checked={noDate} onChange={toggleNoDate} className="mt-1" />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <TextInput type="time" label="Início" value={form.start_time} onChange={set('start_time')} disabled={noDate} />
-          <TextInput type="time" label="Fim" value={form.end_time} onChange={set('end_time')} disabled={noDate} />
-        </div>
-
-        <Select label="Categoria" value={form.category_id} onChange={set('category_id')}>
-          <option value="">Sem categoria</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </Select>
-        <Select label="Prioridade" value={form.priority} onChange={set('priority')}>
-          {Object.entries(PRIORITY_META).map(([key, meta]) => (
-            <option key={key} value={key}>{meta.label}</option>
-          ))}
-        </Select>
-
-        <Select label="Status" value={form.status} onChange={set('status')}>
-          {STATUS_ORDER.map((s) => (
-            <option key={s} value={s}>{STATUS_META[s].label}</option>
-          ))}
-        </Select>
-        <TextInput
-          label="Link relacionado"
-          value={form.link}
-          onChange={set('link')}
-          placeholder="https://..."
-          inputMode="url"
-        />
-
-        <TextArea
-          className="sm:col-span-2"
-          label="Observações"
-          rows={2}
-          value={form.notes}
-          onChange={set('notes')}
-        />
-
-        {/* Alertas: bloco rebaixado, sem borda — uma caixa a menos. */}
-        <div className="surface-sunken sm:col-span-2 px-3 pb-3 pt-1">
-          <Checkbox
-            label="Avisar antes"
-            checked={form.alert_enabled}
-            onChange={set('alert_enabled')}
+        {/* O QUE SE ESCREVE — sem moldura. */}
+        <div className="space-y-1">
+          <TitleInput
+            aria-label="Título da atividade"
+            value={form.title}
+            onChange={set('title')}
+            placeholder="Título da atividade"
           />
-          {/* Dito ANTES de tentar salvar: o aviso precisa de um instante, e
-              inventar 09:00 seria pior que nao avisar. */}
-          {form.alert_enabled && !form.start_time && (
-            <p className="text-[12px] leading-snug text-danger">{PEDIR_HORARIO}</p>
-          )}
-          {form.alert_enabled && (
-            <div className="grid grid-cols-2 gap-3">
-              <Select label="Como" value={form.alert_type} onChange={set('alert_type')}>
-                {Object.entries(ALERT_TYPE_LABELS).map(([key, label]) => (
-                  <option key={key} value={key} disabled={key === ALERT_TYPES.WHATSAPP}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-              <TextInput
-                type="number"
-                min="0"
-                label="Minutos antes"
-                value={form.alert_minutes_before}
-                onChange={set('alert_minutes_before')}
-              />
-            </div>
-          )}
+          <BareTextArea
+            aria-label="Descrição"
+            value={form.description}
+            onChange={set('description')}
+            placeholder="Adicionar descrição…"
+          />
         </div>
+
+        {/* QUANDO — Data, Inicio e Fim pertencem ao mesmo conceito, entao
+            dividem UMA caixa. A largura passa a dizer algo: a data pede mais
+            espaco que uma hora, e nao o triplo por acidente de grid. */}
+        <section>
+          <SectionLabel>Quando</SectionLabel>
+          <div className="group-box focus-ring grid grid-cols-[1.35fr_1fr_1fr] divide-x divide-hairline/60">
+            <SlotField
+              type="date"
+              label="Data"
+              value={form.date}
+              onChange={set('date')}
+              disabled={noDate}
+            />
+            <SlotField
+              type="time"
+              label="Início"
+              value={form.start_time}
+              onChange={set('start_time')}
+              disabled={noDate}
+            />
+            <SlotField
+              type="time"
+              label="Fim"
+              value={form.end_time}
+              onChange={set('end_time')}
+              disabled={noDate}
+            />
+          </div>
+          {/* "Sem data" e um modo do grupo acima, nao um campo irmao: fica
+              colado nele, discreto, e continua com alvo de 44px. */}
+          <label className="mt-1 flex min-h-[44px] cursor-pointer select-none items-center gap-2 px-1">
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={noDate}
+              onChange={toggleNoDate}
+            />
+            <span className="check-box h-[18px] w-[18px]" aria-hidden>
+              <Check size={12} strokeWidth={3} />
+            </span>
+            <span className="text-[13px] text-secondary">Atividade sem data</span>
+          </label>
+        </section>
+
+        {/* PROPRIEDADES — uma caixa no lugar de quatro. Rotulo a esquerda,
+            valor a direita: propriedade de um objeto, nao campo de cadastro. */}
+        <section>
+          <SectionLabel>Propriedades</SectionLabel>
+          <PropGroup>
+            <PropSelect label="Categoria" value={form.category_id} onChange={set('category_id')}>
+              <option value="">Sem categoria</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </PropSelect>
+            <PropSelect label="Prioridade" value={form.priority} onChange={set('priority')}>
+              {Object.entries(PRIORITY_META).map(([key, meta]) => (
+                <option key={key} value={key}>{meta.label}</option>
+              ))}
+            </PropSelect>
+            <PropSelect label="Status" value={form.status} onChange={set('status')}>
+              {STATUS_ORDER.map((st) => (
+                <option key={st} value={st}>{STATUS_META[st].label}</option>
+              ))}
+            </PropSelect>
+            <PropInput
+              label="Link"
+              value={form.link}
+              onChange={set('link')}
+              placeholder="https://…"
+              inputMode="url"
+            />
+          </PropGroup>
+        </section>
+
+        {/* ALERTA — mesma peca usada na criacao rapida (components/tasks/
+            AlertaRows). Desligado e uma linha; ligado revela mais duas no
+            MESMO bloco. */}
+        <section>
+          <SectionLabel>Alerta</SectionLabel>
+          <AlertaRows form={form} set={set} />
+        </section>
+
+        {/* Observacoes: o texto mais secundario do editor, por ultimo e sem
+            moldura — separado do resto por um hairline em vez de uma caixa. */}
+        <section className="border-t hair pt-3">
+          <BareTextArea
+            aria-label="Observações"
+            value={form.notes}
+            onChange={set('notes')}
+            placeholder="Observações…"
+          />
+        </section>
       </div>
     </Modal>
   )

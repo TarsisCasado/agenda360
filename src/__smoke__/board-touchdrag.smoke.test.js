@@ -215,8 +215,13 @@ describe('arrasto no toque — os outros quatro gestos continuam intactos', () =
     await page.waitForTimeout(900)
     const dialogo = await page.getByRole('dialog').innerText()
     expect(dialogo, 'o toque tem de abrir a tarefa, não a folha de mover').toMatch(/Editar atividade/i)
-    // o titulo mora no valor do campo, nao no texto do dialogo
-    expect(await page.getByRole('dialog').locator('input').first().inputValue()).toBe('D sem data')
+    // O titulo mora no VALOR do campo, nao no texto do dialogo. Alvo pelo
+    // rotulo acessivel, nao por "o primeiro input": no CP5.9 o titulo virou um
+    // campo que cresce com o texto (um <input> de uma linha cortava titulos
+    // comuns a 390px), e "o primeiro input" passou a ser a data.
+    expect(
+      await page.getByRole('dialog').locator('[aria-label="Título da atividade"]').inputValue(),
+    ).toBe('D sem data')
   }, 60_000)
 
   it('mover o dedo ANTES do limiar não ativa — é assim que o deslize sobrevive', async () => {

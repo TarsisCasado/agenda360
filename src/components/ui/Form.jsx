@@ -1,4 +1,4 @@
-import { forwardRef, useId } from 'react'
+import { forwardRef, useId, useLayoutEffect, useRef } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import { cx } from '../../lib/utils'
 
@@ -147,6 +147,142 @@ export function Switch({ label, hint, className, id, ...props }) {
       </span>
     </label>
   )
+}
+
+// ---------------------------------------------------------------------------
+// FORMULARIO DENSO (CP5.9) — as pecas do editor de atividade.
+//
+// As tres decisoes do topo continuam valendo aqui (controle nativo, rotulo
+// real, um anel de foco so). O que muda e a MOLDURA: num editor com doze
+// propriedades, dar uma caixa cinza a cada uma faz a tela parecer um cadastro.
+// Entao o que se ESCREVE perde a caixa, e o que se ESCOLHE vira linha dentro
+// de um bloco agrupado.
+//
+// O rotulo continua existindo e continua ligado por id em todos eles — o que
+// muda e onde ele aparece, nao se ele existe.
+// ---------------------------------------------------------------------------
+
+// Texto que CRESCE com o conteudo.
+//
+// Um <input> de uma linha corta o texto que nao cabe: no editor a 390px, um
+// titulo comum como "Reuniao de alinhamento da equipe" sumia pela direita sem
+// nenhum sinal. E um <textarea> de altura fixa faz o contrario — reserva duas
+// linhas de vazio quando ha meia linha escrita, e o vao parece erro de
+// diagramacao. Os dois campos livres do editor usam a mesma peca: altura
+// medida a cada mudanca, nunca menor que uma linha.
+function AutoGrow({ className, value, singleLine, onKeyDown, ...props }) {
+  const ref = useRef(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      // Titulo e uma linha por natureza: Enter salta para o proximo campo em
+      // vez de abrir uma quebra que nenhuma lista sabe mostrar.
+      onKeyDown={(e) => {
+        if (singleLine && e.key === 'Enter') e.preventDefault()
+        onKeyDown?.(e)
+      }}
+      className={cx('input-bare resize-none overflow-hidden', className)}
+      {...props}
+    />
+  )
+}
+
+// Titulo da atividade: sem moldura, dominante. `aria-label` porque um rotulo
+// visivel seria redundante com o proprio texto grande.
+export function TitleInput({ className, ...props }) {
+  return <AutoGrow singleLine className={cx('input-title', className)} {...props} />
+}
+
+// Texto livre secundario (descricao, observacao): sem moldura, hierarquia
+// abaixo do titulo.
+export function BareTextArea({ className, ...props }) {
+  return (
+    <AutoGrow
+      className={cx('text-[15px] leading-relaxed text-secondary', className)}
+      {...props}
+    />
+  )
+}
+
+// Bloco agrupado — uma superficie para varias propriedades.
+export function PropGroup({ className, children }) {
+  return <div className={cx('group-box', className)}>{children}</div>
+}
+
+// Linha de propriedade com um <select> nativo alinhado a direita.
+export function PropSelect({ label, id, className, children, ...props }) {
+  const auto = useId()
+  const inputId = id || auto
+  return (
+    <div className={cx('prop-row', className)}>
+      <label htmlFor={inputId} className="prop-label">{label}</label>
+      <div className="relative min-w-0 flex-1">
+        <select id={inputId} className="select-inline" {...props}>
+          {children}
+        </select>
+        <ChevronDown
+          size={15}
+          aria-hidden
+          className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-muted"
+        />
+      </div>
+    </div>
+  )
+}
+
+// Linha de propriedade com entrada de texto alinhada a direita.
+export function PropInput({ label, id, className, ...props }) {
+  const auto = useId()
+  const inputId = id || auto
+  return (
+    <div className={cx('prop-row', className)}>
+      <label htmlFor={inputId} className="prop-label">{label}</label>
+      <input id={inputId} className="input-inline" {...props} />
+    </div>
+  )
+}
+
+// Linha de propriedade com interruptor — para o que LIGA e DESLIGA e revela
+// mais linhas abaixo (progressive disclosure sem card aninhado).
+export function PropSwitch({ label, id, className, ...props }) {
+  const auto = useId()
+  const inputId = id || auto
+  return (
+    <label htmlFor={inputId} className={cx('prop-row cursor-pointer select-none', className)}>
+      <span className="min-w-0 flex-1 text-[15px] font-medium text-primary">{label}</span>
+      <input id={inputId} type="checkbox" role="switch" className="peer sr-only" {...props} />
+      <span className="switch-track" aria-hidden>
+        <span className="switch-thumb" />
+      </span>
+    </label>
+  )
+}
+
+// Celula do grupo Data / Inicio / Fim. Rotulo miudo em cima, valor embaixo:
+// as tres dividem UMA caixa em vez de flutuarem como campos independentes de
+// larguras que nao querem dizer nada.
+export function SlotField({ label, id, className, ...props }) {
+  const auto = useId()
+  const inputId = id || auto
+  return (
+    <div className={cx('slot-cell', className)}>
+      <label htmlFor={inputId} className="slot-label">{label}</label>
+      <input id={inputId} className="slot-input" {...props} />
+    </div>
+  )
+}
+
+// Rotulo de secao do editor (QUANDO, PROPRIEDADES).
+export function SectionLabel({ className, children }) {
+  return <p className={cx('text-section mb-1.5 px-1', className)}>{children}</p>
 }
 
 // Nao ha "Segmented" aqui de proposito: a escolha entre poucas opcoes

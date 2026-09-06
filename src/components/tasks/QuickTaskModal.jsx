@@ -1,21 +1,15 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import Modal from '../ui/Modal'
-import { CANAL_PADRAO, validarAlerta, PEDIR_HORARIO } from '../../lib/alertRules'
+import { CANAL_PADRAO, validarAlerta } from '../../lib/alertRules'
 import { TextInput, TextArea, Select, Checkbox } from '../ui/Form'
+import AlertaRows from './AlertaRows'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
 import { useToast } from '../../context/ToastContext'
 import { taskService } from '../../services/taskService'
-import {
-  STATUS_ORDER,
-  STATUS_META,
-  PRIORITY,
-  PRIORITY_META,
-  ALERT_TYPES,
-  ALERT_TYPE_LABELS,
-} from '../../lib/constants'
+import { STATUS_ORDER, STATUS_META, PRIORITY, PRIORITY_META } from '../../lib/constants'
 import { toISODate } from '../../lib/date'
 import { cx } from '../../lib/utils'
 
@@ -175,37 +169,11 @@ export default function QuickTaskModal({ open, onClose, defaults, onSaved }) {
           ))}
         </Select>
 
-        {/* Alerta / lembrete (mesmo caminho de dados do TaskModal) */}
-        <div className="surface-sunken px-3 pb-3 pt-1">
-          <Checkbox
-            label="Avisar antes"
-            checked={form.alert_enabled}
-            onChange={set('alert_enabled')}
-          />
-          {/* Dito ANTES de tentar salvar: o aviso precisa de um instante, e
-              inventar 09:00 seria pior que nao avisar. */}
-          {form.alert_enabled && !form.start_time && (
-            <p className="text-[12px] leading-snug text-danger">{PEDIR_HORARIO}</p>
-          )}
-          {form.alert_enabled && (
-            <div className="grid grid-cols-2 gap-3">
-              <Select label="Como" value={form.alert_type} onChange={set('alert_type')}>
-                {Object.entries(ALERT_TYPE_LABELS).map(([key, label]) => (
-                  <option key={key} value={key} disabled={key === ALERT_TYPES.WHATSAPP}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-              <TextInput
-                type="number"
-                min="0"
-                label="Minutos antes"
-                value={form.alert_minutes_before}
-                onChange={set('alert_minutes_before')}
-              />
-            </div>
-          )}
-        </div>
+        {/* Alerta: MESMA peca do formulario completo (AlertaRows). Este
+            trecho era uma copia identica do TaskModal — duas copias da mesma
+            regra e como as duas portas comecam a divergir sem ninguem decidir
+            que deviam divergir. O caminho de dados nao muda. */}
+        <AlertaRows form={form} set={set} />
 
         {/* Campos opcionais recolhidos por padrao */}
         <button
