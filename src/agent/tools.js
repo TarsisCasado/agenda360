@@ -61,6 +61,14 @@ export function createTools(services) {
         // CP5.1 passou a entender "nao quero lembrete" como ALTERACAO do
         // rascunho. Sem isto, a frase nao teria onde pousar.
         alert_enabled: { type: 'boolean' },
+        // CP6.1 — a antecedencia existia no dominio (TASK_DEFAULTS do
+        // taskService) mas NAO no schema da ferramenta, e `validation.js`
+        // descarta chave desconhecida em silencio: "me avisa meia hora antes"
+        // nao tinha onde pousar, viesse do NLU local ou de um LLM. Um contrato
+        // que promete um campo que a ferramenta joga fora e um contrato que
+        // mente. Quem decide se ha instante suficiente para o aviso continua
+        // sendo alertRules (CP5.8.1) — este schema so deixa o valor chegar la.
+        alert_minutes_before: { type: 'number' },
       },
       execute: (data, identity) =>
         services.tasks.create(identity.workspaceId, identity.userId, data),
@@ -85,6 +93,10 @@ export function createTools(services) {
         status: { type: 'enum', values: STATUSES },
         link: { type: 'string', max: 2000 },
         notes: { type: 'string', max: 2000 },
+        // Mesma razao do create: sem estes dois, "tira o alerta" e "me avisa
+        // meia hora antes" nao alcancam uma atividade que ja existe.
+        alert_enabled: { type: 'boolean' },
+        alert_minutes_before: { type: 'number' },
       },
       execute: async (data, identity) => {
         const { task_id, ...patch } = data
