@@ -5,6 +5,7 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { chromium, devices } from 'playwright'
+import { getWeekDays, toISODate, addDays } from '../lib/date'
 
 // ---------------------------------------------------------------------------
 // SMOKE DE HOJE + AGENDA (CP5.5) — no build real.
@@ -267,7 +268,24 @@ describe('Agenda — o que ACONTECE numa hora vs. o que PRECISA ser feito', () =
     const semana = await texto()
     expect(semana).toMatch(/Reuniao com Joao/)
     expect(semana).toMatch(/Enviar o relatorio/)
-    expect(semana, 'a semana inclui amanhã').toMatch(/Compromisso de amanha/)
+    // "Amanha" so pertence a esta semana se hoje NAO for o ultimo dia dela.
+    // A afirmacao antiga ("a semana inclui amanha") era verdadeira de segunda a
+    // sabado e FALSA aos domingos — a suite quebrava um dia por semana por uma
+    // premissa do teste, nao do produto. A regra de semana nao muda: a
+    // expectativa e derivada da MESMA funcao que a Agenda usa para montar a
+    // faixa (getWeekDays, weekStartsOn: 1), entao teste e produto nao podem
+    // discordar sobre onde a semana termina.
+    //
+    // E o caso do ultimo dia deixa de ser um buraco: vira a afirmacao oposta e
+    // igualmente verdadeira — a semana mostra os SEUS sete dias, e nao o de
+    // depois.
+    const semanaAtual = getWeekDays(new Date()).map(toISODate)
+    const amanhaISO = toISODate(addDays(new Date(), 1))
+    if (semanaAtual.includes(amanhaISO)) {
+      expect(semana, 'amanhã cai nesta semana, então tem de aparecer').toMatch(/Compromisso de amanha/)
+    } else {
+      expect(semana, 'amanhã cai na semana seguinte: NÃO pode vazar para esta').not.toMatch(/Compromisso de amanha/)
+    }
 
     // No Mês em 390px a célula mostra PONTOS, não títulos — cabe o mês inteiro
     // na tela, e o conteúdo do dia se lê tocando nele. Então a verificação aqui
