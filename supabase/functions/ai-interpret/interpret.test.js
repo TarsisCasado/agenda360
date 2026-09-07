@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { interpretTurn, OUTCOME, MAX_TEXT } from '../_shared/interpretTurn.js'
 import {
   createGeminiAdapter, createOpenAIAdapter, createAnthropicAdapter,
-  pickProvider, resolveModel, MODEL_DEFAULTS, ProviderError,
+  pickProvider, resolveModel, MODEL_DEFAULTS, ProviderError, DEFAULT_TIMEOUT_MS,
 } from '../_shared/providers.js'
 import { buildSystemPrompt, buildResponseSchema } from '../_shared/prompt.js'
 
@@ -69,6 +69,41 @@ describe('o que se PEDE ao Gemini', () => {
     expect(url).toContain(MODEL_DEFAULTS.gemini)
     expect(body.generationConfig.responseMimeType).toBe('application/json')
     expect(body.generationConfig.responseSchema.properties.turn_kind.enum).toContain('revise')
+  })
+
+  it('o timeout é um só, e é o medido — 15s', () => {
+    // Guarda de regressao de uma decisao MEDIDA, nao estimada: com 8s, 2 de 3
+    // chamadas do QA real foram abortadas por nos antes do Gemini responder.
+    // Se alguem voltar o numero para baixo sem nova medida, o teste avisa.
+    expect(DEFAULT_TIMEOUT_MS).toBe(15000)
+  })
+
+  it('nenhum adaptador carrega timeout próprio — todos herdam a constante', async () => {
+    // Prova pelo comportamento, nao pela leitura do codigo: sem `timeoutMs`, o
+    // abort dos tres cai exatamente em DEFAULT_TIMEOUT_MS.
+    const nuncaResponde = (_url, init) =>
+      new Promise((_, reject) => {
+        init.signal.addEventListener('abort', () => {
+          const e = new Error('aborted')
+          e.name = 'AbortError'
+          reject(e)
+        })
+      })
+    const chaves = { GEMINI_API_KEY: 'k', OPENAI_API_KEY: 'k', ANTHROPIC_API_KEY: 'k' }
+    for (const criar of [createGeminiAdapter, createOpenAIAdapter, createAnthropicAdapter]) {
+      vi.useFakeTimers()
+      try {
+        const p = criar({ env: ENV(chaves), fetchImpl: nuncaResponde }).interpret(ENTRADA)
+        const capturado = p.then(() => null, (e) => e)
+        await vi.advanceTimersByTimeAsync(DEFAULT_TIMEOUT_MS)
+        const err = await capturado
+        expect(err).toBeInstanceOf(ProviderError)
+        expect(err.cause).toBe('timeout')
+        expect(err.message).toContain(String(DEFAULT_TIMEOUT_MS))
+      } finally {
+        vi.useRealTimers()
+      }
+    }
   })
 
   it('NÃO manda temperature — a família Gemini 3 a ignora', async () => {

@@ -22,7 +22,28 @@ import { buildSystemPrompt, buildResponseSchema, buildUserPrompt } from './promp
 // abaixo em vez de escondido.
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_TIMEOUT_MS = 8000
+// -------------------- TIMEOUT: UM LUGAR SO ---------------------------------
+//
+// Este e o unico timeout dos tres adaptadores. Os adaptadores continuam
+// aceitando `timeoutMs` (os testes injetam 40ms para provar o caminho de
+// abortar), mas nenhum carrega numero proprio: mudar aqui muda para todos.
+//
+// 15s, e nao os 8s originais, por MEDICAO e nao por palpite. O QA real do
+// CP6.3, ja com a Function deployada e o JWT valido, deu em tres chamadas:
+//   . ~9,1s  -> outcome=timeout   (abortado por nos, no limite de 8s)
+//   . ~3,3s  -> provider_http 503 (o Gemini recusou; transitorio, nao lentidao)
+//   . ~8,4s  -> outcome=timeout   (idem a primeira)
+// Ou seja: 2 de 3 chamadas foram cortadas POR NOS, e nao pelo provider. Um
+// timeout que aborta a resposta que estava chegando nao protege ninguem — so
+// transforma latencia em falha e esconde o comportamento real do modelo.
+//
+// O numero antigo saiu de uma estimativa ("o dobro de uma resposta de Flash")
+// feita antes de existir qualquer medida. A primeira medida a contradisse.
+//
+// 15s continua MUITO abaixo do limite de execucao da plataforma, entao o
+// AbortController segue fazendo o que importa: garantir que a Function termine
+// por decisao nossa, com `outcome=timeout` no log, em vez de ficar presa.
+export const DEFAULT_TIMEOUT_MS = 15000
 
 // -------------------- MODELOS: um lugar so, com default explicito ----------
 //
@@ -62,8 +83,8 @@ export class ProviderError extends Error {
 async function postJson(url, { headers, body, timeoutMs, fetchImpl }) {
   const ctrl = new AbortController()
   // Sem isto, a Function ficava presa ate o limite da plataforma enquanto o
-  // usuario olhava para uma tela parada. Oito segundos e mais que o dobro de
-  // uma resposta normal de Flash: quem passa disso nao vai responder bem.
+  // usuario olhava para uma tela parada. O valor esta em DEFAULT_TIMEOUT_MS, com
+  // a medicao que o justifica.
   const t = setTimeout(() => ctrl.abort(), timeoutMs)
   let res
   try {
@@ -134,8 +155,8 @@ export function createGeminiAdapter({ env, fetchImpl, timeoutMs = DEFAULT_TIMEOU
               //
               // `low` porque a tarefa e extrair campos de uma frase curta, nao
               // raciocinar sobre um problema: nivel alto custaria latencia dentro
-              // de um timeout de 8s e dinheiro, sem ler melhor "reuniao amanha as
-              // 8h". Configuravel por env pela mesma razao do modelo — a escolha
+              // do timeout e dinheiro, sem ler melhor "reuniao amanha as 8h".
+              // Configuravel por env pela mesma razao do modelo — a escolha
               // certa hoje pode nao ser a de amanha. (`minimal` nao existe no 3.8
               // e devolve erro de validacao.)
               thinkingConfig: { thinkingLevel: env.get('GEMINI_THINKING_LEVEL') || 'low' },

@@ -33,7 +33,7 @@ literais (prioridades e status) espelhando `src/lib/constants.js`, vigiadas por
 `src/agent/contracts/contract.compat.test.js`: se o domínio mudar e o contrato
 não, a suíte fica vermelha.
 
-O miolo é **puro JS testável em Node** — por isso os 27 testes desta Function
+O miolo é **puro JS testável em Node** — por isso os 29 testes desta Function
 rodam na suíte normal, sem rede, sem chave e sem Deno.
 
 ## Providers
@@ -74,7 +74,7 @@ Quem controla isso agora é `generationConfig.thinkingConfig.thinkingLevel`.
 
 | | |
 |---|---|
-| default | `low` — extrair campos de uma frase curta não é raciocinar sobre um problema; nível alto custa latência dentro do timeout de 8s e dinheiro, sem ler melhor |
+| default | `low` — extrair campos de uma frase curta não é raciocinar sobre um problema; nível alto custa latência dentro do timeout e dinheiro, sem ler melhor |
 | env | `GEMINI_THINKING_LEVEL` |
 | valores | `low` · `medium` · `high`. **`minimal` não existe no 3.8** e devolve erro de validação |
 
@@ -138,8 +138,32 @@ Sem dump de tarefas, sem `user_id`, sem ids de categoria. O corte é aplicado
 - **Erro não carrega mensagem interna** — o cliente recebe só a causa
   classificada; `err.message` pode conter nome de env, URL de provider ou status
   interno
-- `AbortController` de 8s; sem ele a Function ficava presa até o limite da
-  plataforma
+- `AbortController` de 15s (`DEFAULT_TIMEOUT_MS`); sem ele a Function ficava
+  presa até o limite da plataforma
+
+## Timeout — 15s, medido
+
+Um só lugar: `DEFAULT_TIMEOUT_MS` em `_shared/providers.js`, herdado pelos três
+adaptadores.
+
+Nasceu 8s por estimativa — "o dobro de uma resposta de Flash" — escrita antes de
+existir qualquer medida. O QA real do CP6.3, já com a Function deployada e JWT
+de usuário, deu em três chamadas:
+
+| tentativa | tempo | resultado |
+|---|---|---|
+| 1 | ~9,1s | `outcome=timeout` — **abortada por nós** |
+| 2 | ~3,3s | `provider_http` `status 503` — o Gemini recusou (transitório) |
+| 3 | ~8,4s | `outcome=timeout` — **abortada por nós** |
+
+Duas de três foram cortadas pelo nosso próprio relógio, não pelo provider. Um
+timeout que aborta a resposta que estava chegando não protege ninguém: converte
+latência em falha e esconde o comportamento real do modelo. O 503 é outra
+história — é o provider dizendo não, e nenhum timeout conserta isso.
+
+15s segue muito abaixo do limite de execução da plataforma, então o
+`AbortController` continua fazendo o que importa: a Function termina por decisão
+nossa, com `outcome=timeout` no log, em vez de ficar presa.
 
 ## Rate limit — limitação conhecida
 
@@ -174,7 +198,7 @@ texto da captura, os valores do patch, chaves, nem dado pessoal.
 npx vitest run supabase/functions/ai-interpret/interpret.test.js
 ```
 
-27 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
+29 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
 pedimos ao provider e como recebemos cada forma de resposta ruim.
 
 Contra a API real (exige chave, **não faça em CI**):
