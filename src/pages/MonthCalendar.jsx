@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, CalendarPlus } from 'lucide-react'
 import { EmptyState, ErrorState } from '../components/ui/Common'
 import TaskCard from '../components/tasks/TaskCard'
 import TaskModal from '../components/tasks/TaskModal'
+import { COMPROMISSO } from '../lib/activityKind'
 import Modal from '../components/ui/Modal'
 import { useTasks } from '../hooks/useTasks'
 import { useData } from '../context/DataContext'
@@ -262,10 +263,12 @@ export default function MonthCalendar({ embedded = false }) {
         )}
       </Modal>
 
+      {/* Criacao contextual do Mes tambem e da Agenda: compromisso. */}
       <TaskModal
         open={taskModal.open}
         task={taskModal.task}
         defaults={taskModal.defaults}
+        kind={taskModal.task ? undefined : COMPROMISSO}
         onClose={() => setTaskModal({ open: false, task: null, defaults: null })}
       />
     </div>

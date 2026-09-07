@@ -81,9 +81,17 @@ async function abrirApp(device) {
 const folha = (page) => page.locator('[role="dialog"]')
 
 // Abre a captura pela porta daquele tamanho de tela.
+//
+// CP5.9.1 — as duas portas continuam abrindo a MESMA coisa, e essa continua
+// sendo a invariante deste arquivo. O que mudou e que elas abrem a mesma
+// ESCOLHA: capturar em linguagem natural virou uma das tres opcoes, em vez de
+// ser o unico caminho. A captura conversacional nao mudou em nada — mudou
+// quantos cliques ate ela, e so para quem ja sabe que queria outra coisa.
 async function abrirCaptura(page, porta_ = 'mobile') {
   if (porta_ === 'desktop') await page.getByRole('button', { name: /Nova atividade/i }).click()
   else await page.locator('nav').last().getByRole('button').first().click()
+  await page.locator('[role="menu"]').waitFor({ timeout: 8000 })
+  await page.locator('[role="menu"]').getByRole('menuitem', { name: /Capturar com o Copiloto/ }).click()
   await folha(page).waitFor({ timeout: 8000 })
   await page.waitForTimeout(400)
 }

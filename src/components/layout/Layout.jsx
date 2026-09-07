@@ -7,6 +7,7 @@ import ErrorBoundary from '../ErrorBoundary'
 import TaskModal from '../tasks/TaskModal'
 import QuickTaskModal from '../tasks/QuickTaskModal'
 import CaptureSheet from '../capture/CaptureSheet'
+import NovaAtividadeMenu from '../tasks/NovaAtividadeMenu'
 import CommandPalette from '../command/CommandPalette'
 import OnboardingFlow from '../onboarding/OnboardingFlow'
 import WorkspaceMissing from '../workspace/WorkspaceMissing'
@@ -14,6 +15,7 @@ import { useWorkspace } from '../../context/WorkspaceContext'
 import { isOnboarded } from '../../lib/preferences'
 import { workspaceGate } from '../../lib/uiState'
 import { useTimezone } from '../../hooks/useTimezone'
+import { TAREFA, COMPROMISSO, defaultsDeCriacao } from '../../lib/activityKind'
 
 export default function Layout() {
   const { workspaceId, workspaces, loading: wsLoading } = useWorkspace()
@@ -25,6 +27,8 @@ export default function Layout() {
   const [quickTaskOpen, setQuickTaskOpen] = useState(false)
   const [quickDefaults, setQuickDefaults] = useState(undefined)
   const [captureOpen, setCaptureOpen] = useState(false)
+  const [menuNovaOpen, setMenuNovaOpen] = useState(false)
+  const [novoTipo, setNovoTipo] = useState(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
 
@@ -37,6 +41,17 @@ export default function Layout() {
   useEffect(() => {
     if (workspaceId) setShowOnboarding(!isOnboarded(workspaceId))
   }, [workspaceId])
+
+  // CP5.9.1 — "Nova atividade" deixa de significar "fale com o Copiloto".
+  // Quem ja sabe o que quer criar entra direto no editor; quem tem algo solto
+  // na cabeca continua tendo a captura.
+  const escolherCriacao = useCallback((chave) => {
+    if (chave === 'capturar') { setCaptureOpen(true); return }
+    const tipo = chave === 'compromisso' ? COMPROMISSO : TAREFA
+    setNovoTipo(tipo)
+    setFullTaskDefaults(defaultsDeCriacao(tipo))
+    setFullTaskOpen(true)
+  }, [])
 
   const openQuickTask = useCallback((defaults) => {
     setQuickDefaults(defaults)
@@ -67,7 +82,7 @@ export default function Layout() {
             proposta e pela edicao de uma atividade existente. */}
         <Topbar
           onMenu={() => setSidebarOpen(true)}
-          onNewTask={() => setCaptureOpen(true)}
+          onNewTask={() => setMenuNovaOpen(true)}
           onOpenPalette={() => setPaletteOpen(true)}
         />
         <main className="flex-1 overflow-y-auto px-3 pb-safe-nav pt-4 sm:px-6 lg:px-10 lg:pb-10">
@@ -82,7 +97,14 @@ export default function Layout() {
       </div>
 
       {/* Menu inferior fixo com Captura central (mobile) */}
-      <BottomNav onCreate={() => setCaptureOpen(true)} />
+      <BottomNav onCreate={() => setMenuNovaOpen(true)} />
+
+      {/* Escolha rapida: Tarefa | Compromisso | Capturar com o Copiloto. */}
+      <NovaAtividadeMenu
+        open={menuNovaOpen}
+        onClose={() => setMenuNovaOpen(false)}
+        onEscolher={escolherCriacao}
+      />
 
       {/* CAPTURA UNIVERSAL — entrada principal (linguagem natural + IA real). */}
       <CaptureSheet
@@ -102,7 +124,8 @@ export default function Layout() {
       <TaskModal
         open={fullTaskOpen}
         defaults={fullTaskDefaults}
-        onClose={() => { setFullTaskOpen(false); setFullTaskDefaults(undefined) }}
+        kind={novoTipo}
+        onClose={() => { setFullTaskOpen(false); setFullTaskDefaults(undefined); setNovoTipo(null) }}
         task={null}
       />
       {/* Formulario rapido (FAB mobile / palette) */}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, Inbox as InboxIcon } from 'lucide-react'
+import { Check, Inbox as InboxIcon, Trash2 } from 'lucide-react'
 import Modal from '../ui/Modal'
 import { CANAL_PADRAO, validarAlerta } from '../../lib/alertRules'
 import {
@@ -13,6 +13,7 @@ import {
   SectionLabel,
 } from '../ui/Form'
 import AlertaRows from './AlertaRows'
+import ConfirmarExclusao from './ConfirmarExclusao'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
@@ -21,6 +22,7 @@ import { taskService } from '../../services/taskService'
 import { inboxTaskLinkService } from '../../services/inboxTaskLinkService'
 import { STATUS_ORDER, STATUS_META, PRIORITY, PRIORITY_META } from '../../lib/constants'
 import { toISODate } from '../../lib/date'
+import { tipoDeAtividade, COMPROMISSO } from '../../lib/activityKind'
 
 const empty = (defaults = {}) => ({
   title: '',
@@ -42,7 +44,11 @@ const empty = (defaults = {}) => ({
 // `onCreate` (opcional) injeta a persistencia na CRIACAO — usado pela conversao
 // Inbox -> Task para criar a Task (origin 'inbox') e o vinculo. Se ausente, usa
 // taskService.create. TaskModal permanece generico (sem redesign).
-export default function TaskModal({ open, onClose, task, defaults, onSaved, onCreate }) {
+// `kind` (CP5.9.1): quando a pessoa escolheu DIRETO o que criar, o editor abre
+// dizendo o nome do que ela escolheu e — no caso do compromisso — ja com o dia
+// preenchido e o horario esperando. Nao existe tipo novo no banco: `kind` so
+// decide o rotulo e o foco. Ver lib/activityKind.js.
+export default function TaskModal({ open, onClose, task, defaults, kind, onSaved, onCreate }) {
   const { user } = useAuth()
   const { workspaceId } = useWorkspace()
   const { categories, reload } = useData()
@@ -52,7 +58,11 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
   const [saving, setSaving] = useState(false)
   // Vinculo com a Caixa de Entrada (quando a Task veio de uma captura).
   const [inboxLink, setInboxLink] = useState(null)
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false)
   const isEdit = Boolean(task)
+  // Ao EDITAR, a especie vem da propria atividade (start_time). Ao CRIAR, vem
+  // da escolha da pessoa. Mesma regra derivada, dois momentos.
+  const especie = isEdit ? tipoDeAtividade(task) : kind
 
   useEffect(() => {
     if (!open) return
@@ -111,6 +121,14 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
       toast('Informe um titulo para a atividade', 'error')
       return
     }
+    // COMPROMISSO exige dia (CP5.9.1): hora sem dia nao existe na agenda — a
+    // mesma regra que agent/slots ja aplica na captura. Nao vale so esconder a
+    // caixa "sem data": se a pessoa apagar o dia a mao, o compromisso viraria
+    // uma tarefa em silencio, e ela escolheu criar um compromisso.
+    if (especie?.id === COMPROMISSO.id && !form.date) {
+      toast('Um compromisso precisa de um dia.', 'error')
+      return
+    }
     // A REGRA DO ALERTA vem de lib/alertRules.js — a MESMA de todas as portas
     // de entrada, com a mesma frase. Antes cada formulario tinha o seu texto.
     const alerta = validarAlerta({ ...form, start_time: form.start_time || null, date: form.date || null })
@@ -157,10 +175,26 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
     <Modal
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Editar atividade' : 'Nova atividade'}
+      title={
+        isEdit
+          ? `Editar ${especie ? especie.rotulo.toLowerCase() : 'atividade'}`
+          : especie?.titulo || 'Nova atividade'
+      }
       size="lg"
       footer={
         <>
+          {/* Excluir e destrutivo, entao NAO disputa espaco com Salvar: fica do
+              outro lado do rodape, sem preenchimento, discreto. So existe ao
+              editar — nao se exclui o que ainda nao foi criado. */}
+          {isEdit && (
+            <button
+              className="btn-ghost press mr-auto text-danger"
+              onClick={() => setConfirmarExclusao(true)}
+              disabled={saving}
+            >
+              <Trash2 size={15} /> Excluir
+            </button>
+          )}
           <button className="btn-secondary" onClick={onClose} disabled={saving}>
             Cancelar
           </button>
@@ -245,8 +279,13 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
             />
           </div>
           {/* "Sem data" e um modo do grupo acima, nao um campo irmao: fica
-              colado nele, discreto, e continua com alvo de 44px. */}
-          <label className="mt-1 flex min-h-[44px] cursor-pointer select-none items-center gap-2 px-1">
+              colado nele, discreto, e continua com alvo de 44px. Nao aparece
+              para um compromisso — oferecer "sem data" para algo que acontece
+              numa hora e oferecer um estado invalido. */}
+          <label
+            hidden={especie?.id === COMPROMISSO.id}
+            className="mt-1 flex min-h-[44px] cursor-pointer select-none items-center gap-2 px-1"
+          >
             <input
               type="checkbox"
               className="peer sr-only"
@@ -310,6 +349,15 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
           />
         </section>
       </div>
+
+      {/* A MESMA confirmacao de todas as telas, sobre a MESMA operacao de
+          dominio (taskService.remove), que ja cuida dos lembretes. */}
+      <ConfirmarExclusao
+        open={confirmarExclusao}
+        task={task}
+        onClose={() => setConfirmarExclusao(false)}
+        onDeleted={() => { onSaved?.(null); onClose() }}
+      />
     </Modal>
   )
 }

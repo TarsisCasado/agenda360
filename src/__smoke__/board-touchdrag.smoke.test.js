@@ -214,7 +214,12 @@ describe('arrasto no toque — os outros quatro gestos continuam intactos', () =
     // tivesse engolido o toque, nenhum dialogo abriria aqui.
     await page.waitForTimeout(900)
     const dialogo = await page.getByRole('dialog').innerText()
-    expect(dialogo, 'o toque tem de abrir a tarefa, não a folha de mover').toMatch(/Editar atividade/i)
+    // No CP5.9.1 o editor passou a dizer a especie ("Editar tarefa" / "Editar
+    // compromisso") em vez do guarda-chuva. O que este teste prova continua o
+    // mesmo: o toque abriu o EDITOR, e nao a folha de mover.
+    expect(dialogo, 'o toque tem de abrir a tarefa, não a folha de mover').toMatch(
+      /Editar (atividade|tarefa|compromisso)/i,
+    )
     // O titulo mora no VALOR do campo, nao no texto do dialogo. Alvo pelo
     // rotulo acessivel, nao por "o primeiro input": no CP5.9 o titulo virou um
     // campo que cresce com o texto (um <input> de uma linha cortava titulos

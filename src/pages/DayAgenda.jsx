@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 import { ErrorState, EmptyState } from '../components/ui/Common'
 import TaskRow from '../components/tasks/TaskRow'
 import TaskModal from '../components/tasks/TaskModal'
+import { COMPROMISSO } from '../lib/activityKind'
 import Section from '../components/ui/Section'
 import { useData } from '../context/DataContext'
 import { useTasks } from '../hooks/useTasks'
@@ -347,10 +348,14 @@ export default function DayAgenda() {
         </>
       )}
 
+      {/* CP5.9.1 — criar a partir de uma faixa de hora da Agenda ja E criar um
+          compromisso: a acao carrega o horario. O contexto antecipa a intencao,
+          entao o editor abre com esse nome em vez de perguntar de novo. */}
       <TaskModal
         open={modal.open}
         task={modal.task}
         defaults={modal.defaults}
+        kind={modal.task ? undefined : COMPROMISSO}
         onClose={() => setModal({ open: false, task: null, defaults: null })}
       />
     </div>

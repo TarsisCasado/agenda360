@@ -20,6 +20,7 @@ import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { taskService } from '../../services/taskService'
+import ConfirmarExclusao from './ConfirmarExclusao'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { STATUS_ORDER, STATUS_META, STATUS } from '../../lib/constants'
 import { isTaskOverdue } from '../../lib/date'
@@ -66,6 +67,7 @@ function TaskCard({
   const [menuOpen, setMenuOpen] = useState(false)
   const [reschedOpen, setReschedOpen] = useState(false)
   const [delegOpen, setDelegOpen] = useState(false)
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false)
   useEscapeKey(menuOpen, () => setMenuOpen(false))
   const category = categoryById(task.category_id)
   const overdue = isTaskOverdue(task)
@@ -88,16 +90,12 @@ function TaskCard({
     }
   }
 
-  const handleDelete = async () => {
+  // CP5.9.1 — a confirmacao passa a ser a MESMA do editor. Era o
+  // `window.confirm` do navegador: uma caixa do sistema operacional no meio de
+  // um app desenhado, sem o titulo da atividade e com "OK" como acao padrao.
+  const handleDelete = () => {
     setMenuOpen(false)
-    if (!window.confirm(`Excluir "${task.title}"?`)) return
-    try {
-      await taskService.remove(user.id, task)
-      toast('Atividade excluida')
-      refresh()
-    } catch (err) {
-      toast('Erro: ' + err.message, 'error')
-    }
+    setConfirmarExclusao(true)
   }
 
   const onDragStart = (e) => {
@@ -301,6 +299,12 @@ function TaskCard({
         task={task}
         onClose={() => setDelegOpen(false)}
         onDone={onChanged}
+      />
+      <ConfirmarExclusao
+        open={confirmarExclusao}
+        task={task}
+        onClose={() => setConfirmarExclusao(false)}
+        onDeleted={refresh}
       />
     </div>
   )
