@@ -126,10 +126,61 @@ function parseModelJson(texto) {
   }
 }
 
-// -------------------- GEMINI ------------------------------------------------
-// `responseMimeType` + `responseSchema` fazem o proprio provider restringir a
-// geracao ao formato — nao e o prompt pedindo JSON, e o modelo impedido de sair
-// dele. Ver `generationConfig` abaixo para por que nao ha `temperature` aqui.
+// -------------------- GEMINI: Interactions API ------------------------------
+//
+// POR QUE INTERACTIONS E NAO `generateContent` (CP6.3.3).
+//
+// Medido em 07/09/2026, com a MESMA chave e o MESMO modelo:
+//   GET  .../models/gemini-3.8-flash          -> 200 em 1,26s
+//   POST .../models/...:generateContent       -> 404 em ~0,5-1,0s, tres vezes
+//   POST .../models/...:generateContent?key=  -> 404 (nao era o header)
+//   POST /v1beta/interactions                 -> 200 em 8,26s
+// A chave funciona e o modelo existe; o que nao respondia era a rota. Isto NAO
+// prova que `generateContent` esta quebrado em geral — a doc diz que ele
+// continua suportado. E uma decisao de compatibilidade: usar a API que este
+// projeto/chave de fato atende, que e tambem a recomendada desde jun/2026.
+//
+// O 8,26s de uma chamada MINIMA tambem explica o CP6.3.1: 8s de timeout nunca
+// teriam bastado nem para "responda ok". Os 15s ficam.
+//
+// VERSAO REST: `/v1beta/interactions`. E a que a doc atual documenta e a que
+// respondeu 200 no teste real. NAO existe `/v1beta2/interactions` na doc que
+// consegui consultar; se existisse, seria a excecao e nao o caminho comum.
+//
+// SEM header `Api-Revision`. Ele existia para pilotar a virada de schema de
+// mai/2026: o schema novo (`steps`) virou padrao em 26/05 e o antigo
+// (`outputs`) foi REMOVIDO em 08/06. Hoje, 07/09/2026, so existe o novo —
+// mandar a revisao antiga nao volta atras, e fixar a nova e repetir o padrao.
+//
+// STATELESS: `store: false` explicito. O default do servidor e ARMAZENAR
+// (`store: true`) para habilitar estado server-side; nao e isso que queremos.
+// O rascunho e o historico vao no NOSSO contrato de entrada, sob nosso
+// controle, e nada da captura fica guardado do lado do provider.
+export const INTERACTIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions'
+
+// Teto de saida. Nosso JSON de interpretacao inteiro cabe em ~300 tokens; o
+// modelo tem 64k disponiveis, e 64k de corda e o que transforma uma geracao
+// ruim num timeout indistinguivel de queda. 1024 deixa folga para os tokens de
+// raciocinio do nivel `low` sem deixar espaco para divagar. Se algum dia a
+// resposta chegar truncada, este e o primeiro botao — por isso tem env.
+export const DEFAULT_MAX_OUTPUT_TOKENS = 1024
+
+// Na Interactions a resposta e uma LINHA DO TEMPO de passos (`steps`), nao um
+// `candidates[0]`: pensamento, chamadas de ferramenta e, no fim, o
+// `model_output`. Pegamos exatamente esse passo e o texto dentro dele. Se ele
+// nao existir, isso e falha de provider — nao se inventa resposta.
+export function extrairModelOutput(json) {
+  const steps = Array.isArray(json?.steps) ? json.steps : null
+  if (!steps) throw new ProviderError('provider_body', 'resposta sem steps')
+  for (const step of steps) {
+    if (step?.type !== 'model_output') continue
+    const partes = Array.isArray(step.content) ? step.content : []
+    const texto = partes.find((c) => c?.type === 'text' && typeof c.text === 'string')
+    if (texto) return texto.text
+  }
+  throw new ProviderError('provider_body', 'resposta sem model_output')
+}
+
 export function createGeminiAdapter({ env, fetchImpl, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   return {
     id: 'gemini',
@@ -137,36 +188,43 @@ export function createGeminiAdapter({ env, fetchImpl, timeoutMs = DEFAULT_TIMEOU
       const key = env.get('GEMINI_API_KEY')
       if (!key) throw new ProviderError('not_configured', 'GEMINI_API_KEY ausente')
       const model = resolveModel('gemini', env)
-      const json = await postJson(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          headers: { 'x-goog-api-key': key },
-          timeoutMs,
-          fetchImpl,
-          body: {
-            systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
-            contents: [{ role: 'user', parts: [{ text: buildUserPrompt(input) }] }],
-            generationConfig: {
-              // SEM `temperature`. A familia Gemini 3 IGNORA temperature, top_p e
-              // top_k — nao da erro, simplesmente nao faz nada. Um parametro que
-              // nao faz nada e pior que ausente: parece que a determinacao esta
-              // configurada quando nao esta. Quem controla isso agora e
-              // `thinkingLevel`.
-              //
-              // `low` porque a tarefa e extrair campos de uma frase curta, nao
-              // raciocinar sobre um problema: nivel alto custaria latencia dentro
-              // do timeout e dinheiro, sem ler melhor "reuniao amanha as 8h".
-              // Configuravel por env pela mesma razao do modelo — a escolha
-              // certa hoje pode nao ser a de amanha. (`minimal` nao existe no 3.8
-              // e devolve erro de validacao.)
-              thinkingConfig: { thinkingLevel: env.get('GEMINI_THINKING_LEVEL') || 'low' },
-              responseMimeType: 'application/json',
-              responseSchema: buildResponseSchema(),
-            },
+      const maxTokens = Number(env.get('GEMINI_MAX_OUTPUT_TOKENS')) || DEFAULT_MAX_OUTPUT_TOKENS
+      const json = await postJson(INTERACTIONS_URL, {
+        headers: { 'x-goog-api-key': key },
+        timeoutMs,
+        fetchImpl,
+        body: {
+          model,
+          // Nada desta captura fica no servidor do provider. Ver acima.
+          store: false,
+          system_instruction: buildSystemPrompt(),
+          // `input` aceita string, Content, lista de Content ou lista de Step.
+          // Mandamos a string — e a forma do exemplo oficial, e a nossa entrada
+          // ja e UM texto (o contrato do CP6.1 serializado). Menos forma para
+          // errar num turno que nao precisa de nenhuma delas.
+          input: buildUserPrompt(input),
+          generation_config: {
+            // SEM `temperature`: a familia Gemini 3 a ignora — nao da erro,
+            // simplesmente nao faz nada, e parametro morto parece configuracao.
+            // Quem controla determinismo/latencia agora e o nivel de raciocinio.
+            //
+            // `low` porque extrair campos de uma frase curta nao e raciocinar
+            // sobre um problema. O default do 3.8 Flash e `medium`, entao isto
+            // e uma escolha ativa por latencia. (`minimal` NAO existe no 3.8.)
+            thinking_level: env.get('GEMINI_THINKING_LEVEL') || 'low',
+            max_output_tokens: maxTokens,
+          },
+          // Structured output na forma nova: um objeto polimorfico com
+          // discriminador. `response_mime_type` solto deixou de existir — o
+          // mime foi para dentro, ao lado do schema.
+          response_format: {
+            type: 'text',
+            mime_type: 'application/json',
+            schema: buildResponseSchema(),
           },
         },
-      )
-      return { raw: parseModelJson(json?.candidates?.[0]?.content?.parts?.[0]?.text), model }
+      })
+      return { raw: parseModelJson(extrairModelOutput(json)), model }
     },
   }
 }

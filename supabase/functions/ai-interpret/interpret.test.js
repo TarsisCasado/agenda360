@@ -3,6 +3,7 @@ import { interpretTurn, OUTCOME, MAX_TEXT } from '../_shared/interpretTurn.js'
 import {
   createGeminiAdapter, createOpenAIAdapter, createAnthropicAdapter,
   pickProvider, resolveModel, MODEL_DEFAULTS, ProviderError, DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_OUTPUT_TOKENS, INTERACTIONS_URL, extrairModelOutput,
 } from '../_shared/providers.js'
 import { buildSystemPrompt, buildResponseSchema } from '../_shared/prompt.js'
 
@@ -30,12 +31,23 @@ const ENTRADA = {
   history: [],
 }
 
-// Resposta de Gemini bem formada, carregando o objeto que o modelo produziu.
-function respostaGemini(obj) {
+// Resposta da Interactions API bem formada. A forma nova e uma LINHA DO TEMPO
+// de passos: pensamento, ferramentas e, no fim, o `model_output`. O helper
+// inclui um passo de raciocinio ANTES do util de proposito — se algum dia o
+// parser voltar a pegar "o primeiro passo", isto quebra.
+function respostaTexto(texto) {
   return {
     ok: true,
-    json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] }),
+    json: async () => ({
+      steps: [
+        { type: 'thought', content: [{ type: 'text', text: 'pensando...' }] },
+        { type: 'model_output', content: [{ type: 'text', text: texto }] },
+      ],
+    }),
   }
+}
+function respostaGemini(obj) {
+  return respostaTexto(JSON.stringify(obj))
 }
 
 const CRIAR_OK = {
@@ -58,17 +70,64 @@ const CRIAR_OK = {
 }
 
 describe('o que se PEDE ao Gemini', () => {
-  it('vai com esquema de geração — não só "responda JSON" no prompt', async () => {
+  it('fala com a Interactions API, e o modelo vai no corpo — não na URL', async () => {
+    // A rota mudou no CP6.3.3: `:generateContent` devolvia 404 para esta chave.
+    // Na Interactions o modelo e um CAMPO, entao a URL e sempre a mesma.
     const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
-    const a = createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl })
-    await a.interpret(ENTRADA)
+    await createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl }).interpret(ENTRADA)
 
     const [url, init] = fetchImpl.mock.calls[0]
     const body = JSON.parse(init.body)
-    expect(url).toContain('generativelanguage.googleapis.com')
-    expect(url).toContain(MODEL_DEFAULTS.gemini)
-    expect(body.generationConfig.responseMimeType).toBe('application/json')
-    expect(body.generationConfig.responseSchema.properties.turn_kind.enum).toContain('revise')
+    expect(url).toBe(INTERACTIONS_URL)
+    expect(url).toContain('/v1beta/interactions')
+    expect(url).not.toContain(':generateContent')
+    expect(body.model).toBe(MODEL_DEFAULTS.gemini)
+    expect(body.system_instruction).toContain('Agenda 360')
+  })
+
+  it('o modelo do env manda, e continua no corpo', async () => {
+    const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
+    await createGeminiAdapter({
+      env: ENV({ GEMINI_API_KEY: 'k', GEMINI_MODEL: 'gemini-outro-flash' }), fetchImpl,
+    }).interpret(ENTRADA)
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).model).toBe('gemini-outro-flash')
+  })
+
+  it('nada desta captura fica guardado no provider: store=false explícito', async () => {
+    // O default do servidor e ARMAZENAR. Silencio aqui seria consentimento.
+    const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
+    await createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl }).interpret(ENTRADA)
+    const body = JSON.parse(fetchImpl.mock.calls[0][1].body)
+    expect(body.store).toBe(false)
+    expect(body.previous_interaction_id).toBeUndefined()   // stateless de verdade
+  })
+
+  it('vai com esquema de geração — não só "responda JSON" no prompt', async () => {
+    // Na forma nova o mime foi para dentro de um objeto polimorfico com
+    // discriminador; `response_mime_type` solto deixou de existir.
+    const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
+    await createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl }).interpret(ENTRADA)
+
+    const body = JSON.parse(fetchImpl.mock.calls[0][1].body)
+    expect(body.response_format.type).toBe('text')
+    expect(body.response_format.mime_type).toBe('application/json')
+    expect(body.response_format.schema.properties.turn_kind.enum).toContain('revise')
+    expect(body.response_mime_type).toBeUndefined()
+    expect(body.generationConfig).toBeUndefined()          // camelCase legacy fora
+  })
+
+  it('a saída tem teto — 64k de corda é o que vira timeout', async () => {
+    const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
+    await createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl }).interpret(ENTRADA)
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).generation_config.max_output_tokens)
+      .toBe(DEFAULT_MAX_OUTPUT_TOKENS)
+    expect(DEFAULT_MAX_OUTPUT_TOKENS).toBeLessThanOrEqual(2048)
+
+    const outro = vi.fn(async () => respostaGemini(CRIAR_OK))
+    await createGeminiAdapter({
+      env: ENV({ GEMINI_API_KEY: 'k', GEMINI_MAX_OUTPUT_TOKENS: '256' }), fetchImpl: outro,
+    }).interpret(ENTRADA)
+    expect(JSON.parse(outro.mock.calls[0][1].body).generation_config.max_output_tokens).toBe(256)
   })
 
   it('o timeout é um só, e é o medido — 15s', () => {
@@ -112,11 +171,11 @@ describe('o que se PEDE ao Gemini', () => {
     // thinkingLevel, e o teste guarda as duas metades dessa troca.
     const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
     await createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl }).interpret(ENTRADA)
-    const cfg = JSON.parse(fetchImpl.mock.calls[0][1].body).generationConfig
+    const cfg = JSON.parse(fetchImpl.mock.calls[0][1].body).generation_config
     expect(cfg.temperature).toBeUndefined()
     expect(cfg.top_p).toBeUndefined()
     expect(cfg.top_k).toBeUndefined()
-    expect(cfg.thinkingConfig.thinkingLevel).toBe('low')
+    expect(cfg.thinking_level).toBe('low')
   })
 
   it('o nível de raciocínio é configurável — e nunca "minimal"', async () => {
@@ -126,9 +185,9 @@ describe('o que se PEDE ao Gemini', () => {
     await createGeminiAdapter({
       env: ENV({ GEMINI_API_KEY: 'k', GEMINI_THINKING_LEVEL: 'medium' }), fetchImpl,
     }).interpret(ENTRADA)
-    const cfg = JSON.parse(fetchImpl.mock.calls[0][1].body).generationConfig
-    expect(cfg.thinkingConfig.thinkingLevel).toBe('medium')
-    expect(['low', 'medium', 'high']).toContain(cfg.thinkingConfig.thinkingLevel)
+    const cfg = JSON.parse(fetchImpl.mock.calls[0][1].body).generation_config
+    expect(cfg.thinking_level).toBe('medium')
+    expect(['low', 'medium', 'high']).toContain(cfg.thinking_level)
   })
 
   it('a chave viaja no header, nunca na URL', async () => {
@@ -145,7 +204,7 @@ describe('o que se PEDE ao Gemini', () => {
       ...ENTRADA,
       draft: { intent: 'create_task', phase: 'awaiting_confirmation', data: { start_time: '09:00' } },
     })
-    const enviado = JSON.parse(JSON.parse(fetchImpl.mock.calls[0][1].body).contents[0].parts[0].text)
+    const enviado = JSON.parse(JSON.parse(fetchImpl.mock.calls[0][1].body).input)
     expect(Object.keys(enviado).sort()).toEqual(
       ['awaiting', 'categorias', 'draft', 'historico', 'mensagem', 'now'].sort(),
     )
@@ -291,7 +350,7 @@ describe('o que se RECEBE — turno ruim', () => {
   })
 
   it('HTTP 4xx e 5xx do provider viram falha controlada', async () => {
-    for (const s of [401, 429, 500]) {
+    for (const s of [401, 403, 429, 500, 503]) {
       const { status, payload } = await comFetch(async () => ({ ok: false, status: s, json: async () => ({}) }))
       expect(status).toBe(502)
       expect(payload.outcome).toBe(OUTCOME.PROVIDER)
@@ -305,17 +364,43 @@ describe('o que se RECEBE — turno ruim', () => {
   })
 
   it('texto do modelo que não é JSON (ou vem em ```) é tratado', async () => {
-    const cercado = await comFetch(async () => ({
-      ok: true,
-      json: async () => ({ candidates: [{ content: { parts: [{ text: '```json\n' + JSON.stringify(CRIAR_OK) + '\n```' }] } }] }),
-    }))
+    const cercado = await comFetch(async () => respostaTexto('```json\n' + JSON.stringify(CRIAR_OK) + '\n```'))
     expect(cercado.payload.turn_kind).toBe('create')
 
-    const prosa = await comFetch(async () => ({
-      ok: true,
-      json: async () => ({ candidates: [{ content: { parts: [{ text: 'Claro! Vou marcar sim.' }] } }] }),
-    }))
+    const prosa = await comFetch(async () => respostaTexto('Claro! Vou marcar sim.'))
     expect(prosa.status).toBe(502)
+  })
+
+  it('resposta sem model_output é falha, não silêncio', async () => {
+    // So passo de pensamento: o modelo "respondeu" e nao disse nada util.
+    // Inventar um objeto vazio aqui seria pior que falhar.
+    const soPensamento = await comFetch(async () => ({
+      ok: true,
+      json: async () => ({ steps: [{ type: 'thought', content: [{ type: 'text', text: 'hm' }] }] }),
+    }))
+    expect(soPensamento.status).toBe(502)
+    expect(soPensamento.payload.outcome).toBe(OUTCOME.PROVIDER)
+
+    const semSteps = await comFetch(async () => ({ ok: true, json: async () => ({ interaction: {} }) }))
+    expect(semSteps.status).toBe(502)
+
+    const outputSemTexto = await comFetch(async () => ({
+      ok: true,
+      json: async () => ({ steps: [{ type: 'model_output', content: [{ type: 'image', image: {} }] }] }),
+    }))
+    expect(outputSemTexto.status).toBe(502)
+  })
+
+  it('extrairModelOutput pega o passo certo mesmo com ruído em volta', () => {
+    const texto = extrairModelOutput({
+      steps: [
+        { type: 'thought', content: [{ type: 'text', text: 'nao sou eu' }] },
+        { type: 'function_call', content: [{ type: 'text', text: 'nem eu' }] },
+        { type: 'model_output', content: [{ type: 'image' }, { type: 'text', text: 'sou eu' }] },
+      ],
+    })
+    expect(texto).toBe('sou eu')
+    expect(() => extrairModelOutput({})).toThrow(ProviderError)
   })
 
   it('sem chave configurada: 503, e o cliente não descobre qual env falta', async () => {
@@ -346,6 +431,22 @@ describe('nada interno vaza, e o log não lê a vida de ninguém', () => {
     expect(payload).toEqual({ error: 'interpret_failed', outcome: OUTCOME.PROVIDER })
   })
 
+  it('a chave não aparece em log nem em erro — nem quando o provider recusa', async () => {
+    // 401 e exatamente o caso em que a tentacao de "mostrar a credencial para
+    // depurar" aparece. O log leva o status; a chave nao sai daqui.
+    const CHAVE = 'AIza-chave-ficticia-do-teste-123'
+    const logs = []
+    const provider = createGeminiAdapter({
+      env: ENV({ GEMINI_API_KEY: CHAVE }),
+      fetchImpl: async () => ({ ok: false, status: 401, json: async () => ({ error: { message: `key ${CHAVE} invalid` } }) }),
+    })
+    const { payload } = await interpretTurn({ body: ENTRADA, provider, log: (e) => logs.push(e) })
+    expect(JSON.stringify(payload)).not.toContain(CHAVE)
+    expect(JSON.stringify(logs)).not.toContain(CHAVE)
+    expect(logs[0].detail).toBe('status 401')
+    expect(payload.outcome).toBe(OUTCOME.PROVIDER)
+  })
+
   it('o log leva FORMA, nunca o texto da captura', async () => {
     const logs = []
     const provider = createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl: async () => respostaGemini(CRIAR_OK) })
@@ -363,7 +464,7 @@ describe('nada interno vaza, e o log não lê a vida de ninguém', () => {
     const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
     const provider = createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl })
     await interpretTurn({ body: { ...ENTRADA, input: { text: 'a'.repeat(50000) } }, provider })
-    const enviado = JSON.parse(JSON.parse(fetchImpl.mock.calls[0][1].body).contents[0].parts[0].text)
+    const enviado = JSON.parse(JSON.parse(fetchImpl.mock.calls[0][1].body).input)
     expect(enviado.mensagem.length).toBe(MAX_TEXT)
   })
 
@@ -374,7 +475,7 @@ describe('nada interno vaza, e o log não lê a vida de ninguém', () => {
       body: { ...ENTRADA, history: Array.from({ length: 100 }, (_, i) => ({ role: 'user', content: `t${i}` })) },
       provider,
     })
-    const enviado = JSON.parse(JSON.parse(fetchImpl.mock.calls[0][1].body).contents[0].parts[0].text)
+    const enviado = JSON.parse(JSON.parse(fetchImpl.mock.calls[0][1].body).input)
     expect(enviado.historico).toHaveLength(6)
   })
 })

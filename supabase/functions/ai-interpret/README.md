@@ -4,9 +4,12 @@ Interpreta uma captura em linguagem natural e devolve **uma leitura estruturada*
 no contrato canônico do CP6.1. Não executa nada, não toca no banco, não conhece
 services de escrita.
 
-> **Estado: NÃO deployada, e `ai.remote` desligada.** O CP6.2 entregou o código
-> e o CP6.3 a compatibilidade com Gemini 3.8 Flash. Nada aqui roda em produção
-> nem em Preview até um checkpoint que o autorize explicitamente.
+> **Estado: deployada em Preview (CP6.3), `ai.remote` ainda `false`.** O CP6.2
+> entregou o código, o CP6.3 a compatibilidade com Gemini 3.8 Flash, o CP6.3.1 o
+> timeout medido e o CP6.3.3 a migração para a Interactions API. Deployada ela
+> não muda nada no produto: o front não a chama enquanto a flag estiver
+> desligada, e ligá-la exige um checkpoint próprio. **O código desta migração
+> ainda não foi deployado.**
 
 ---
 
@@ -33,19 +36,72 @@ literais (prioridades e status) espelhando `src/lib/constants.js`, vigiadas por
 `src/agent/contracts/contract.compat.test.js`: se o domínio mudar e o contrato
 não, a suíte fica vermelha.
 
-O miolo é **puro JS testável em Node** — por isso os 29 testes desta Function
+O miolo é **puro JS testável em Node** — por isso os 36 testes desta Function
 rodam na suíte normal, sem rede, sem chave e sem Deno.
 
 ## Providers
 
 | | structured output | notas |
 |---|---|---|
-| **gemini** (default) | ✅ `responseSchema` nativo | menor latência e custo; áudio nativo no futuro |
+| **gemini** (default) | ✅ `response_format.schema` nativo | **Interactions API** — ver abaixo |
 | **openai** | ✅ `response_format: json_object` | |
 | **anthropic** | ⚠️ só via prompt | registrado, não escondido |
 
 Escolha **server-side** por `AI_PROVIDER`. Nunca pelo cliente — quem escolhe o
 provider escolhe onde o texto vai parar.
+
+### Rota: Interactions API, não `generateContent` (CP6.3.3)
+
+O adaptador Gemini fala com **`POST /v1beta/interactions`**, e o modelo vai no
+**corpo**, não na URL.
+
+**A razão é factual, medida em 07/09/2026 com a mesma chave e o mesmo modelo:**
+
+| chamada | resultado |
+|---|---|
+| `GET /v1beta/models/gemini-3.8-flash` | **200** em 1,26s |
+| `POST /v1beta/models/…:generateContent` (mínimo, sem schema nem thinking) | **404**, três vezes (~0,5–1,0s) |
+| idem, com `?key=` em vez do header | **404** — não era a forma de autenticar |
+| `POST /v1beta/interactions` (mínimo) | **200** em 8,26s |
+
+A chave funciona e o modelo existe: o que não respondia era a rota.
+
+**Isto não prova que `generateContent` está quebrado globalmente** — a
+documentação oficial diz que ele **continua suportado**. É uma decisão de
+compatibilidade com o que este projeto/chave de fato atende, e de usar a API
+que o Google recomenda para projetos novos desde jun/2026.
+
+De quebra, o 8,26s de uma chamada *mínima* explica o CP6.3.1 em retrospecto:
+8s de timeout nunca teriam bastado nem para "responda ok". Os 15s ficam.
+
+**Versão REST: `/v1beta/interactions`.** É a que a documentação atual descreve e
+a que respondeu 200 no teste real. Não há `/v1beta2/interactions` na
+documentação consultada.
+
+**Sem header `Api-Revision`.** Ele existia para pilotar a virada de schema de
+maio/2026 — `steps` virou padrão em 26/05 e o antigo `outputs` foi **removido**
+em 08/06. Hoje só existe o novo: mandar a revisão antiga não volta atrás, e
+fixar a nova é repetir o padrão.
+
+**Stateless: `store: false` explícito.** O default do servidor é *armazenar*, e
+silêncio aqui seria consentimento. Rascunho e histórico continuam viajando no
+**nosso** contrato de entrada; não usamos `previous_interaction_id`.
+
+> ⚠️ **Verificado por documentação, ainda não por chamada real.** O ambiente de
+> desenvolvimento tem `ai.google.dev` bloqueado por política de egresso, então
+> o formato foi montado a partir da documentação pesquisada, não de páginas
+> abertas. O primeiro QA real confirma. Se vier **400**, os dois suspeitos, nesta
+> ordem: a forma de `system_instruction` (string vs objeto) e o `nullable` do
+> schema — que é JSON Schema aqui, e `nullable` é OpenAPI. `nullable` foi
+> **mantido de propósito**: é o que permite ao modelo apagar um campo numa
+> revisão (`date: null`). Trocá-lo por palpite mudaria semântica sem evidência.
+
+### Teto de saída
+
+`max_output_tokens` = **1024** (`DEFAULT_MAX_OUTPUT_TOKENS`, env
+`GEMINI_MAX_OUTPUT_TOKENS`). Nosso JSON inteiro cabe em ~300 tokens; o modelo
+tem 64k disponíveis, e 64k de corda é o que transforma uma geração ruim num
+timeout indistinguível de queda. Antes do CP6.3.3 não havia teto nenhum.
 
 ### Modelo
 
@@ -70,7 +126,7 @@ simplesmente não faz nada. Um parâmetro morto no corpo é pior que ausente:
 parece que a determinação está configurada quando não está. Por isso o adaptador
 não os envia.
 
-Quem controla isso agora é `generationConfig.thinkingConfig.thinkingLevel`.
+Quem controla isso agora é `generation_config.thinking_level`.
 
 | | |
 |---|---|
@@ -91,6 +147,7 @@ Gemini 3.
 | `ANTHROPIC_API_KEY` | se `AI_PROVIDER=anthropic` |
 | `GEMINI_MODEL` / `OPENAI_MODEL` / `ANTHROPIC_MODEL` | opcionais |
 | `GEMINI_THINKING_LEVEL` | opcional — `low` (default) · `medium` · `high` |
+| `GEMINI_MAX_OUTPUT_TOKENS` | opcional — inteiro; default 1024 |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | injetados pela plataforma |
 
 **Nenhuma variável `VITE_*`.** `VITE_*` é compilada no bundle e vai para o
@@ -116,6 +173,12 @@ uma chave que ficaria pública.
 Sem dump de tarefas, sem `user_id`, sem ids de categoria. O corte é aplicado
 **de novo no servidor** — o cliente pode mentir.
 
+A resposta da Interactions API é uma **linha do tempo de passos**, não um
+`candidates[0]`: pensamento, chamadas de ferramenta e, no fim, o `model_output`.
+`extrairModelOutput()` pega exatamente esse passo e o texto dentro dele; sem ele,
+é falha de provider — não se inventa resposta. Daí o JSON segue pelo **mesmo**
+`parseInterpretation` de sempre.
+
 **Saída** (`_shared/contract.js`):
 
 ```jsonc
@@ -138,6 +201,7 @@ Sem dump de tarefas, sem `user_id`, sem ids de categoria. O corte é aplicado
 - **Erro não carrega mensagem interna** — o cliente recebe só a causa
   classificada; `err.message` pode conter nome de env, URL de provider ou status
   interno
+- Nada da captura fica no provider: `store: false` explícito
 - `AbortController` de 15s (`DEFAULT_TIMEOUT_MS`); sem ele a Function ficava
   presa até o limite da plataforma
 
@@ -164,6 +228,11 @@ história — é o provider dizendo não, e nenhum timeout conserta isso.
 15s segue muito abaixo do limite de execução da plataforma, então o
 `AbortController` continua fazendo o que importa: a Function termina por decisão
 nossa, com `outcome=timeout` no log, em vez de ficar presa.
+
+O CP6.3.3 fechou o diagnóstico: aquelas chamadas iam para `:generateContent`,
+que respondia **404** a esta chave — e uma chamada *mínima* pela rota certa
+levou **8,26s**. Nenhum dos dois valores de timeout teria salvado a rota errada,
+e 8s não bastariam nem para a certa.
 
 ## Rate limit — limitação conhecida
 
@@ -198,7 +267,7 @@ texto da captura, os valores do patch, chaves, nem dado pessoal.
 npx vitest run supabase/functions/ai-interpret/interpret.test.js
 ```
 
-29 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
+36 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
 pedimos ao provider e como recebemos cada forma de resposta ruim.
 
 Contra a API real (exige chave, **não faça em CI**):
