@@ -1,9 +1,20 @@
+/* eslint-env node */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
+// Carimbo do build: o sha do commit quando a Vercel o expoe, senao o instante
+// da compilacao. Nao aparece na interface — serve para o QA e para os testes
+// poderem afirmar QUAL build a tela esta executando, em vez de deduzir pela
+// aparencia.
+const BUILD_ID =
+  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ||
+  process.env.GIT_SHA?.slice(0, 7) ||
+  new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)
+
 export default defineConfig({
+  define: { 'import.meta.env.VITE_BUILD_ID': JSON.stringify(BUILD_ID) },
   plugins: [
     react(),
     VitePWA({

@@ -1,274 +1,336 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  Sun,
-  Clock,
-  Flame,
-  Sparkles,
-  Lightbulb,
-  ListTodo,
-} from 'lucide-react'
-import TaskCard from '../components/tasks/TaskCard'
+import { ChevronRight, Plus } from 'lucide-react'
+import TaskRow from '../components/tasks/TaskRow'
 import TaskModal from '../components/tasks/TaskModal'
-import { EmptyState } from '../components/ui/Common'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
-import { useTasks, useUndatedTasks } from '../hooks/useTasks'
-import { useInbox } from '../hooks/useInbox'
+import { useTasks } from '../hooks/useTasks'
 import { useAuth } from '../context/AuthContext'
-import { useData } from '../context/DataContext'
+import { toISODate, formatLong } from '../lib/date'
 import {
-  toISODate,
-  addDays,
-  formatLong,
-  isTaskOverdue,
-  byTime,
-  nowTimeString,
-} from '../lib/date'
-import { STATUS, PRIORITY } from '../lib/constants'
-import { percent, cx } from '../lib/utils'
-import { greeting, daySummary, buildInsights } from '../lib/insights'
-import { ideaTitle, sortIdeasByRecent } from '../lib/ideas'
+  buildToday,
+  proximidade,
+  HOJE_BALDES,
+  AMOSTRA_ATRASADAS,
+  AMOSTRA_SEM_DATA,
+} from '../lib/today'
+import { greetingFor } from '../lib/todayContext'
+import { pluralize } from '../lib/plural'
+import { cx } from '../lib/utils'
 
-// Cabecalho de secao consistente (hierarquia forte, pouco ruido).
-function SectionHead({ icon: Icon, label, tone = 'text-slate-400', action }) {
+// ---------------------------------------------------------------------------
+// HOJE — foco e execucao. NAO e um painel.
+//
+// A pergunta e "o que merece minha atencao AGORA?", nunca "quantas coisas
+// existem no sistema?". Toda a estrutura abaixo sai dessa frase.
+//
+// O QUE MUDOU E POR QUE
+//   O cabecalho antigo gastava a primeira tela inteira antes de mostrar
+//   qualquer tarefa: data + saudacao gigante + frase de contexto + barra de
+//   progresso. Bonito e caro — a informacao util comecava abaixo da dobra num
+//   iPhone. Agora a saudacao ocupa duas linhas e as ENTRADAS DE FOCO vem em
+//   seguida.
+//
+//   Sairam da superficie (o codigo e a persistencia continuam intactos, entao
+//   o rollback e trocar este arquivo):
+//     - a barra de progresso do dia. Media de conclusao e metrica, e metrica
+//       responde "quanto rendi", nao "o que preciso fazer";
+//     - "Ideias recentes". Ideia nao pede atencao hoje; pede quando se quer
+//       pensar. O lugar dela e Ideias, que e um destino primario desde o CP5.2;
+//     - a frase de contexto e a sugestao em linha, absorvidas: as quatro
+//       entradas ja dizem o mesmo com numero em vez de prosa.
+//
+// AS QUATRO ENTRADAS DE FOCO nao sao quatro dashboards: sao quatro NUMEROS
+// clicaveis que respondem, de relance, onde ha atencao necessaria. Cada uma
+// leva ao lugar onde aquilo se resolve. Quando todas sao zero elas encolhem
+// para uma linha so de texto, em vez de virarem quatro caixas vazias.
+//
+// DEDUPLICACAO: um item aparece UMA vez na tela. A regra inteira, com a ordem
+// de prioridade e o porque de cada empate, esta em lib/today.js.
+// ---------------------------------------------------------------------------
+
+const TOM_ENTRADA = {
+  danger: 'text-danger',
+  accent: 'text-accent-text',
+  neutro: 'text-primary',
+}
+
+const DESTINO = {
+  atrasada: '/tarefas',
+  hoje: '/dia',
+  em_andamento: '/tarefas',
+  sem_data: '/tarefas',
+}
+
+// ENTRADA DE FOCO — contagem em cima, rotulo embaixo. Compacta de proposito:
+// e um marcador, nao um cartao de conteudo.
+function Entrada({ balde, count, onClick }) {
+  const vazia = count === 0
   return (
-    <div className="mb-2.5 flex items-center justify-between">
-      <h2 className={cx('flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider', tone)}>
-        <Icon size={14} /> {label}
-      </h2>
-      {action}
-    </div>
+    <button
+      onClick={onClick}
+      disabled={vazia}
+      data-testid={`hoje-entrada-${balde.key}`}
+      className={cx(
+        'press flex min-h-[62px] flex-col justify-center rounded-row px-3 py-2 text-left transition-colors',
+        vazia ? 'bg-surface-2/50' : 'bg-surface hover:bg-surface-2',
+      )}
+    >
+      <span
+        className={cx(
+          'text-[22px] font-bold leading-none tabular-nums',
+          vazia ? 'text-faint' : TOM_ENTRADA[balde.tone],
+        )}
+      >
+        {count}
+      </span>
+      <span className={cx('mt-1 text-[12px] font-medium', vazia ? 'text-faint' : 'text-secondary')}>
+        {balde.label}
+      </span>
+    </button>
+  )
+}
+
+// AGORA / PROXIMO — o unico bloco com peso visual da tela. So existe quando ha
+// um COMPROMISSO (tem hora). Tarefa sem hora nunca vira "agora": inventar
+// urgencia e o oposto do que esta tela faz.
+function Proximo({ task, now, onOpen }) {
+  const prox = proximidade(task.start_time, now)
+  const inicio = String(task.start_time).slice(0, 5)
+  const fim = task.end_time ? String(task.end_time).slice(0, 5) : null
+  return (
+    <button
+      onClick={() => onOpen(task)}
+      data-testid="hoje-proximo"
+      className="press interactive block w-full rounded-surface bg-surface p-4 text-left"
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums text-primary">
+          {inicio}
+        </span>
+        {fim && <span className="text-caption tabular-nums">até {fim}</span>}
+        {prox && (
+          <span
+            className={cx(
+              'ml-auto shrink-0 text-[12px] font-semibold',
+              prox.tom === 'agora' ? 'text-accent-text' : 'text-secondary',
+            )}
+          >
+            {prox.texto}
+          </span>
+        )}
+      </div>
+      <p className="mt-2 text-[17px] font-semibold leading-snug tracking-[-0.01em] text-primary">
+        {task.title}
+      </p>
+    </button>
+  )
+}
+
+// Rotulo de secao + acao textual. Sem moldura: o agrupamento e por ritmo.
+// O rotulo NAO repete a contagem: quem conta e a entrada de foco la em cima.
+// "3 Atrasadas" no marcador e "ATRASADAS 3" quarenta pixels abaixo e a mesma
+// informacao dita duas vezes, que foi o vicio que este checkpoint veio tirar.
+function Bloco({ label, acao, onAcao, children }) {
+  return (
+    <section>
+      <div className="mb-1 flex items-baseline justify-between gap-3 px-2">
+        <h2 className="text-section">{label}</h2>
+        {acao && (
+          <button
+            onClick={onAcao}
+            className="press inline-flex items-center gap-0.5 text-[13px] font-semibold text-accent-text"
+          >
+            {acao}
+            <ChevronRight size={13} />
+          </button>
+        )}
+      </div>
+      <div className="list">{children}</div>
+    </section>
   )
 }
 
 export default function Today() {
   const { user } = useAuth()
-  const { categoryById } = useData()
   const navigate = useNavigate()
-  const range = useMemo(
-    () => ({ start: toISODate(addDays(new Date(), -30)), end: toISODate(new Date()) }),
-    [],
-  )
-  const { tasks, loading } = useTasks(range)
-  const { tasks: undated } = useUndatedTasks()
-  const { notes } = useInbox()
+  // SEM RANGE. O Hoje antigo carregava só os últimos 30 dias, então uma
+  // atrasada de 40 dias e QUALQUER tarefa em andamento sem data simplesmente
+  // não existiam nesta tela. Hoje precisa do universo aberto para responder o
+  // que promete; quem recorta é `buildToday`.
+  const { tasks, loading } = useTasks({})
   const [editing, setEditing] = useState(null)
-  const [creating, setCreating] = useState(false)
-  const [createDefaults, setCreateDefaults] = useState(null)
+  const [criando, setCriando] = useState(false)
+  const [verTodasAtrasadas, setVerTodasAtrasadas] = useState(false)
 
-  const today = toISODate(new Date())
-  const now = nowTimeString()
+  const agora = useMemo(() => new Date(), [])
+  const hojeISO = toISODate(agora)
+  const primeiroNome = user?.full_name?.split(' ')[0] || 'você'
 
-  const overdue = useMemo(
-    () => tasks.filter((t) => isTaskOverdue(t)).sort((a, b) => (a.date < b.date ? -1 : 1)),
-    [tasks],
-  )
-  const todayTasks = useMemo(() => tasks.filter((t) => t.date === today).sort(byTime), [tasks, today])
-  const pendingToday = todayTasks.filter((t) => [STATUS.TODO, STATUS.IN_PROGRESS].includes(t.status))
-  const priorities = useMemo(
-    () => pendingToday.filter((t) => [PRIORITY.HIGH, PRIORITY.URGENT].includes(t.priority)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [todayTasks],
-  )
-  const next = useMemo(
-    () => pendingToday.find((t) => !t.start_time || t.start_time >= now) || pendingToday[0] || null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [todayTasks, now],
+  const t = useMemo(
+    () => buildToday(tasks, { today: hojeISO, now: agora }),
+    [tasks, hojeISO, agora],
   )
 
-  const doneCount = todayTasks.filter((t) => t.status === STATUS.DONE).length
-  const progress = percent(doneCount, todayTasks.length)
-  const firstName = user?.full_name?.split(' ')[0] || 'você'
-
-  const insights = useMemo(() => buildInsights(tasks, { today }), [tasks, today])
-  const topInsight = insights[0] || null
-  const recentIdeas = useMemo(() => sortIdeasByRecent(notes).slice(0, 3), [notes])
-
-  const summary = daySummary({ pending: pendingToday.length, done: doneCount, overdue: overdue.length, next })
-
-  const handleInsight = (cta) => {
-    if (cta.kind === 'navigate') navigate(cta.payload)
-    else if (cta.kind === 'create') { setCreateDefaults(cta.payload); setCreating(true) }
-  }
+  const abrir = (task) => setEditing(task)
+  const atrasadas = verTodasAtrasadas
+    ? t.baldes.atrasada
+    : t.baldes.atrasada.slice(0, AMOSTRA_ATRASADAS)
+  const restoAtrasadas = t.baldes.atrasada.length - atrasadas.length
+  const semData = t.baldes.sem_data.slice(0, AMOSTRA_SEM_DATA)
+  const restoSemData = t.baldes.sem_data.length - semData.length
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      {/* Saudacao grande e limpa — hierarquia tipografica forte */}
-      <header className="animate-in">
-        <p className="text-sm font-semibold text-brand-600 dark:text-brand-400">{greeting()},</p>
-        <h1 className="mt-0.5 text-3xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
-          {firstName} 👋
+    <div className="mx-auto w-full max-w-2xl xl:max-w-5xl">
+      <header className="mb-4 px-2">
+        <h1 className="text-display">
+          {greetingFor(agora)}, {primeiroNome}
         </h1>
-        <p className="mt-1 text-sm capitalize text-slate-400">{formatLong(new Date())}</p>
-        <p className="mt-3 text-[17px] font-medium leading-snug text-slate-700 dark:text-slate-200">{summary}</p>
+        <p className="text-caption mt-0.5">{formatLong(agora)}</p>
       </header>
-
-      {/* Pulso do dia: uma unica faixa limpa (progresso + numeros), sem varios cards */}
-      <div className="flex items-center gap-4 rounded-2xl bg-slate-900 px-5 py-4 text-white dark:bg-slate-800">
-        <div className="flex-1">
-          <p className="text-3xl font-extrabold leading-none">{progress}%</p>
-          <p className="mt-1 text-xs text-white/60">do dia concluído</p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/15">
-            <div className="h-full rounded-full bg-emerald-400 transition-[width] duration-700" style={{ width: `${progress}%` }} />
-          </div>
-        </div>
-        <div className="flex gap-5 text-center">
-          <div>
-            <p className="text-xl font-extrabold">{todayTasks.length}</p>
-            <p className="text-[10px] text-white/50">hoje</p>
-          </div>
-          <div>
-            <p className={cx('text-xl font-extrabold', overdue.length ? 'text-red-400' : 'text-white')}>{overdue.length}</p>
-            <p className="text-[10px] text-white/50">atrasadas</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Um insight no maximo — evita excesso de cards */}
-      {topInsight && (
-        <button
-          onClick={() => topInsight.cta && handleInsight(topInsight.cta)}
-          className="interactive flex w-full items-center gap-3 rounded-2xl bg-brand-50 p-3.5 text-left dark:bg-brand-900/20"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/70 text-brand-600 dark:bg-slate-900/40 dark:text-brand-300">
-            <Sparkles size={17} />
-          </span>
-          <p className="min-w-0 flex-1 text-sm font-medium text-slate-700 dark:text-slate-200">{topInsight.title}</p>
-          {topInsight.cta && <ArrowRight size={16} className="shrink-0 text-brand-500" />}
-        </button>
-      )}
 
       {loading && tasks.length === 0 ? (
         <TaskListSkeleton count={4} />
       ) : (
-        <>
-          {priorities.length > 0 && (
-            <section>
-              <SectionHead icon={Flame} label="Prioridades" tone="text-amber-500" />
-              <div className="space-y-2.5">
-                {priorities.map((t) => <TaskCard key={t.id} task={t} showActions onEdit={setEditing} />)}
-              </div>
-            </section>
+        <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start xl:gap-6">
+        <div className="space-y-6">
+          {/* ENTRADAS DE FOCO. Com tudo em zero elas somem e viram uma linha:
+              a estrutura continua elegante em vez de virar quatro caixas
+              vazias pedindo desculpa. */}
+          {t.vazio ? (
+            <p className="text-body px-2" data-testid="hoje-tudo-limpo">
+              Nada puxando sua atenção agora.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="hoje-entradas">
+              {HOJE_BALDES.map((b) => (
+                <Entrada
+                  key={b.key}
+                  balde={b}
+                  count={t.contagens[b.key]}
+                  onClick={() => navigate(DESTINO[b.key])}
+                />
+              ))}
+            </div>
           )}
 
-          {next && (
-            <section>
-              <SectionHead icon={Clock} label="Próxima" />
-              <button
-                onClick={() => setEditing(next)}
-                className="interactive card block w-full overflow-hidden text-left hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="h-1" style={{ backgroundColor: categoryById(next.category_id)?.color || '#6366f1' }} />
-                <div className="p-4">
-                  <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{next.title}</p>
-                  {next.start_time && (
-                    <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
-                      <Clock size={14} /> {next.start_time}{next.end_time ? ` - ${next.end_time}` : ''}
-                    </p>
-                  )}
-                  {next.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{next.description}</p>}
-                </div>
+          {/* No celular o proximo compromisso vem no fluxo, logo abaixo das
+              entradas. Em telas grandes ele migra para a coluna da direita,
+              junto com o resto do dia — ver o `<aside>` no fim do arquivo. */}
+          {t.proximo && (
+            <div className="xl:hidden">
+              <Proximo task={t.proximo} now={agora} onOpen={abrir} />
+            </div>
+          )}
+
+          {atrasadas.length > 0 && (
+            <Bloco
+              label="Atrasadas"
+              acao={restoAtrasadas > 0 && !verTodasAtrasadas ? `Ver as outras ${restoAtrasadas}` : null}
+              onAcao={() => setVerTodasAtrasadas(true)}
+            >
+              {atrasadas.map((task) => (
+                <TaskRow key={task.id} task={task} onOpen={abrir} onChanged={() => {}} showDate />
+              ))}
+            </Bloco>
+          )}
+
+          {t.baldes.em_andamento.length > 0 && (
+            <Bloco label="Em andamento">
+              {t.baldes.em_andamento.map((task) => (
+                <TaskRow key={task.id} task={task} onOpen={abrir} onChanged={() => {}} showDate />
+              ))}
+            </Bloco>
+          )}
+
+          {t.hojeSemProximo.length > 0 && (
+            <Bloco
+              label={t.proximo ? 'Depois, hoje' : 'Hoje'}
+              acao="Agenda"
+              onAcao={() => navigate('/dia')}
+            >
+              {t.hojeSemProximo.map((task) => (
+                <TaskRow key={task.id} task={task} onOpen={abrir} onChanged={() => {}} />
+              ))}
+            </Bloco>
+          )}
+
+          {semData.length > 0 && (
+            <Bloco
+              label="Sem data"
+              acao={restoSemData > 0 ? `Ver as ${t.contagens.sem_data}` : 'Organizar'}
+              onAcao={() => navigate('/tarefas')}
+            >
+              {semData.map((task) => (
+                <TaskRow key={task.id} task={task} onOpen={abrir} onChanged={() => {}} />
+              ))}
+            </Bloco>
+          )}
+
+          {/* DIA LIVRE. Nao e erro do sistema, e uma boa noticia — entao nao
+              leva icone de alerta nem caixa de estado vazio. Leva uma frase e
+              uma porta. */}
+          {t.vazio && (
+            <div className="px-2" data-testid="hoje-vazio">
+              <p className="text-[17px] font-semibold text-primary">Seu dia está livre.</p>
+              <p className="text-body mt-1">
+                Sem nada atrasado, agendado para hoje ou esperando organização.
+              </p>
+              <button onClick={() => setCriando(true)} className="btn-secondary press mt-4">
+                <Plus size={16} /> Capturar algo
               </button>
-            </section>
+            </div>
           )}
+        </div>
 
-          {overdue.length > 0 && (
-            <section>
-              <SectionHead icon={AlertTriangle} label={`Atrasadas (${overdue.length})`} tone="text-red-500" />
-              <div className="space-y-2.5">
-                {overdue.map((t) => <TaskCard key={t.id} task={t} showActions onEdit={setEditing} />)}
-              </div>
-            </section>
-          )}
-
-          <section>
-            <SectionHead
-              icon={Sun}
-              label="Hoje"
-              action={
-                <button onClick={() => navigate('/dia')} className="flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
-                  Por horário <ArrowRight size={14} />
-                </button>
-              }
-            />
-            {todayTasks.length === 0 ? (
-              <EmptyState
-                icon={CheckCircle2}
-                title="Nada agendado para hoje"
-                description="Um bom momento para adiantar algo importante ou simplesmente descansar."
-                action={
-                  <button onClick={() => { setCreateDefaults(null); setCreating(true) }} className="btn-primary press">
-                    Criar atividade
+        {/* SEGUNDA ZONA (>=1280px) — "como esta o meu dia".
+            A coluna da esquerda responde O QUE PRECISA DE MIM; esta responde
+            COMO O DIA ESTA ARMADO. Sao perguntas diferentes, e num monitor ha
+            largura para as duas ao mesmo tempo — que era exatamente o espaco
+            que sobrava vazio antes. So aparece quando ha compromisso: sem
+            horario nenhum, uma coluna lateral vazia seria pior que nao ter
+            coluna. */}
+        {t.compromissos.length > 0 && (
+          <aside className="mt-6 hidden xl:mt-0 xl:block" data-testid="hoje-coluna-dia">
+            <h2 className="text-section mb-1.5 px-2">Seu dia</h2>
+            <div className="space-y-2">
+              {t.compromissos.map((c) =>
+                c.id === t.proximo?.id ? (
+                  <Proximo key={c.id} task={c} now={agora} onOpen={abrir} />
+                ) : (
+                  <button
+                    key={c.id}
+                    onClick={() => abrir(c)}
+                    className="press flex w-full items-baseline gap-3 rounded-row bg-surface px-3 py-2.5 text-left"
+                  >
+                    <span className="shrink-0 text-[13px] font-semibold tabular-nums text-secondary">
+                      {String(c.start_time).slice(0, 5)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[14px] text-primary">
+                      {c.title}
+                    </span>
                   </button>
-                }
-              />
-            ) : (
-              <div className="space-y-2.5">
-                {todayTasks.map((t) => <TaskCard key={t.id} task={t} showActions onEdit={setEditing} />)}
-              </div>
-            )}
-          </section>
+                ),
+              )}
+            </div>
+          </aside>
+        )}
+        </div>
+      )}
 
-          {/* Aguardando acao: tarefas sem data vivem em Tarefas */}
-          {undated.length > 0 && (
-            <section>
-              <SectionHead
-                icon={ListTodo}
-                label={`Aguardando ação (${undated.length})`}
-                action={
-                  <button onClick={() => navigate('/tarefas')} className="flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
-                    Ver Tarefas <ArrowRight size={14} />
-                  </button>
-                }
-              />
-              <div className="space-y-2.5">
-                {undated.slice(0, 3).map((t) => <TaskCard key={t.id} task={t} showActions onEdit={setEditing} />)}
-              </div>
-            </section>
-          )}
-
-          {/* Ideias recentes */}
-          {recentIdeas.length > 0 && (
-            <section>
-              <SectionHead
-                icon={Lightbulb}
-                label="Ideias recentes"
-                tone="text-amber-500"
-                action={
-                  <button onClick={() => navigate('/ideias')} className="flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
-                    Ver Ideias <ArrowRight size={14} />
-                  </button>
-                }
-              />
-              <div className="space-y-2">
-                {recentIdeas.map((n) => {
-                  const title = ideaTitle(n)
-                  return (
-                    <button
-                      key={n.id}
-                      onClick={() => navigate(`/ideias/${n.id}`, { state: { note: n } })}
-                      className="interactive card flex w-full items-center gap-3 px-4 py-3 text-left hover:-translate-y-0.5 hover:shadow-md"
-                    >
-                      <Lightbulb size={16} className="shrink-0 text-amber-400" />
-                      <span className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </section>
-          )}
-        </>
+      {/* Fecho discreto: reconhece o que foi feito sem virar painel. */}
+      {!loading && !t.vazio && t.total > 0 && (
+        <p className="text-caption mt-6 px-2">
+          {pluralize(t.total, 'item', 'itens')} pedindo atenção.
+        </p>
       )}
 
       <TaskModal open={Boolean(editing)} task={editing} onClose={() => setEditing(null)} />
       <TaskModal
-        open={creating}
+        open={criando}
         task={null}
-        defaults={createDefaults || { date: today }}
-        onClose={() => { setCreating(false); setCreateDefaults(null) }}
+        defaults={{ date: hojeISO }}
+        onClose={() => setCriando(false)}
       />
     </div>
   )

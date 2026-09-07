@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ChevronLeft, Check, Loader2, Trash2, ListChecks, Sparkles } from 'lucide-react'
+import { ChevronLeft, Check, Loader2, Trash2, ListChecks } from 'lucide-react'
 import { inboxService } from '../services/inboxService'
 import { taskService } from '../services/taskService'
 import { useAuth } from '../context/AuthContext'
@@ -14,8 +14,11 @@ import { firstLine } from '../lib/ideas'
 // IDEA EDITOR — experiencia de ESCRITA em tela cheia (principios do Apple
 // Notes), fora do Layout: sem sidebar/bottom-nav competindo, viewport inteira,
 // safe-area e teclado do iOS respeitados. Autosave com debounce. Persiste em
-// inbox_items via inboxService (title + content). Nenhum botao falso: apenas
-// acoes reais; a IA aparece marcada como "em breve" (desabilitada).
+// inbox_items via inboxService (title + content). Nenhum botao falso: a
+// toolbar mostra SO acoes que funcionam agora. (O controle "IA - em breve"
+// saiu: um botao desabilitado e permanentemente cinza le como quebrado, nao
+// como promessa. Quando a acao de IA existir, ela entra aqui funcionando --
+// a arquitetura do agente ja esta pronta em src/agent.)
 // ---------------------------------------------------------------------------
 
 export default function IdeaEditor() {
@@ -165,7 +168,7 @@ export default function IdeaEditor() {
         />
       </div>
 
-      {/* Toolbar inferior — apenas acoes REAIS + IA marcada como futura.
+      {/* Toolbar inferior — apenas acoes REAIS.
           Safe-area para nao ficar atras do home indicator. */}
       <div
         className="border-t border-slate-100 px-3 py-2 dark:border-slate-800/80"
@@ -174,13 +177,6 @@ export default function IdeaEditor() {
         <div className="mx-auto flex max-w-2xl items-center gap-2">
           <button onClick={toTask} className="press flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200">
             <ListChecks size={16} /> Transformar em tarefa
-          </button>
-          <button
-            disabled
-            title="Recurso de IA chega em breve"
-            className="flex cursor-not-allowed items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-300 dark:text-slate-600"
-          >
-            <Sparkles size={16} /> IA <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">em breve</span>
           </button>
         </div>
       </div>

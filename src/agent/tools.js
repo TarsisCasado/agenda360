@@ -16,6 +16,7 @@
 // `services` e injetado (testes usam mocks). `identity` vem SEMPRE da sessao.
 // ---------------------------------------------------------------------------
 import { AgentError, ErrorCodes } from './errors'
+import { norm } from './nlu/normalize'
 import { FLAGS } from './featureFlags'
 import { STATUS } from '../lib/constants'
 
@@ -44,7 +45,11 @@ export function createTools(services) {
       schema: {
         title: { type: 'string', required: true, max: 300 },
         description: { type: 'string', max: 2000 },
-        date: { type: 'date', required: true },
+        // Sem `required`: a atividade PODE nascer sem data ("sem data",
+        // "coloque em tarefas a fazer"). Quem garante que a data e sempre
+        // PERGUNTADA — e so dispensada quando o usuario dispensa — e a camada
+        // de slots, que vale para qualquer provider.
+        date: { type: 'date' },
         start_time: { type: 'time' },
         end_time: { type: 'time' },
         category_id: { type: 'id' },
@@ -52,6 +57,10 @@ export function createTools(services) {
         status: { type: 'enum', values: STATUSES, default: 'todo' },
         link: { type: 'string', max: 2000 },
         notes: { type: 'string', max: 2000 },
+        // Lembrete: o dominio ja tem o campo (TASK_DEFAULTS do taskService) e o
+        // CP5.1 passou a entender "nao quero lembrete" como ALTERACAO do
+        // rascunho. Sem isto, a frase nao teria onde pousar.
+        alert_enabled: { type: 'boolean' },
       },
       execute: (data, identity) =>
         services.tasks.create(identity.workspaceId, identity.userId, data),
@@ -193,10 +202,13 @@ export function createTools(services) {
           start: data.start,
           end: data.end,
         })
-        const q = (data.query || '').toLowerCase()
+        // Busca INSENSIVEL A ACENTO: o usuario escreve "reuniao" ou "reunião"
+        // e precisa achar a mesma tarefa (senao "conclui a reunião" nao
+        // encontra "Reuniao com gerentes").
+        const q = norm(data.query || '')
         return list.filter(
           (t) =>
-            (!q || t.title?.toLowerCase().includes(q)) &&
+            (!q || norm(t.title).includes(q)) &&
             (!data.status || t.status === data.status),
         )
       },

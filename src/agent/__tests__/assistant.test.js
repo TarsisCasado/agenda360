@@ -58,7 +58,8 @@ function build({ providerResult, services = makeServices(), memory = makeMemory(
 describe('Assistant orchestrator', () => {
   it('create_task -> proposal (escrita exige confirmacao) e registra proposed', async () => {
     const { assistant, aiActions, memory } = build({
-      providerResult: { intent: 'create_task', confidence: 0.9, data: { title: 'Reuniao', date: '2026-07-16' } },
+      // Com titulo, data E horario nao falta slot algum: vai direto a proposta.
+      providerResult: { intent: 'create_task', confidence: 0.9, data: { title: 'Reuniao', date: '2026-07-16', start_time: '10:00' } },
     })
     const res = await assistant.ask({ text: 'agende reuniao amanha', identity: IDENTITY })
     expect(res.kind).toBe('proposal')
@@ -70,7 +71,8 @@ describe('Assistant orchestrator', () => {
 
   it('confirma proposta -> executa e registra applied', async () => {
     const { assistant, services, aiActions } = build({
-      providerResult: { intent: 'create_task', confidence: 0.9, data: { title: 'Reuniao', date: '2026-07-16' } },
+      // Com titulo, data E horario nao falta slot algum: vai direto a proposta.
+      providerResult: { intent: 'create_task', confidence: 0.9, data: { title: 'Reuniao', date: '2026-07-16', start_time: '10:00' } },
     })
     const res = await assistant.ask({ text: 'agende reuniao amanha', identity: IDENTITY })
     const out = await assistant.confirm({ proposal: res.proposal, identity: IDENTITY, conversationId: 'conv-1' })
@@ -81,7 +83,8 @@ describe('Assistant orchestrator', () => {
 
   it('confirma proposta EDITADA -> executa com os dados editados', async () => {
     const { assistant, services } = build({
-      providerResult: { intent: 'create_task', confidence: 0.9, data: { title: 'Reuniao', date: '2026-07-16' } },
+      // Com titulo, data E horario nao falta slot algum: vai direto a proposta.
+      providerResult: { intent: 'create_task', confidence: 0.9, data: { title: 'Reuniao', date: '2026-07-16', start_time: '10:00' } },
     })
     const res = await assistant.ask({ text: 'agende reuniao amanha', identity: IDENTITY })
     const edited = { ...res.proposal, payload: { ...res.proposal.payload, title: 'Reuniao EDITADA' } }
