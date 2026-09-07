@@ -130,11 +130,13 @@ describe('o que se PEDE ao Gemini', () => {
     expect(JSON.parse(outro.mock.calls[0][1].body).generation_config.max_output_tokens).toBe(256)
   })
 
-  it('o timeout é um só, e é o medido — 15s', () => {
-    // Guarda de regressao de uma decisao MEDIDA, nao estimada: com 8s, 2 de 3
-    // chamadas do QA real foram abortadas por nos antes do Gemini responder.
-    // Se alguem voltar o numero para baixo sem nova medida, o teste avisa.
-    expect(DEFAULT_TIMEOUT_MS).toBe(15000)
+  it('o timeout é um só, e é o medido — 30s', () => {
+    // Guarda de regressao de uma decisao MEDIDA, nao estimada: a chamada valida
+    // do QA real pela rota certa levou 23,88s, e 15s a teria cortado. E teto de
+    // seguranca temporario, nao alvo — ver o comentario em providers.js.
+    // Se alguem baixar o numero sem nova medida, o teste avisa.
+    expect(DEFAULT_TIMEOUT_MS).toBe(30000)
+    expect(DEFAULT_TIMEOUT_MS).toBeGreaterThan(23876)   // a medida que o obriga
   })
 
   it('nenhum adaptador carrega timeout próprio — todos herdam a constante', async () => {

@@ -72,7 +72,8 @@ compatibilidade com o que este projeto/chave de fato atende, e de usar a API
 que o Google recomenda para projetos novos desde jun/2026.
 
 De quebra, o 8,26s de uma chamada *mínima* explica o CP6.3.1 em retrospecto:
-8s de timeout nunca teriam bastado nem para "responda ok". Os 15s ficam.
+8s de timeout nunca teriam bastado nem para "responda ok" — e nem os 15s, como o
+QA seguinte mostrou. Ver **Timeout** abaixo.
 
 **Versão REST: `/v1beta/interactions`.** É a que a documentação atual descreve e
 a que respondeu 200 no teste real. Não há `/v1beta2/interactions` na
@@ -90,11 +91,13 @@ silêncio aqui seria consentimento. Rascunho e histórico continuam viajando no
 > ⚠️ **Verificado por documentação, ainda não por chamada real.** O ambiente de
 > desenvolvimento tem `ai.google.dev` bloqueado por política de egresso, então
 > o formato foi montado a partir da documentação pesquisada, não de páginas
-> abertas. O primeiro QA real confirma. Se vier **400**, os dois suspeitos, nesta
-> ordem: a forma de `system_instruction` (string vs objeto) e o `nullable` do
-> schema — que é JSON Schema aqui, e `nullable` é OpenAPI. `nullable` foi
-> **mantido de propósito**: é o que permite ao modelo apagar um campo numa
-> revisão (`date: null`). Trocá-lo por palpite mudaria semântica sem evidência.
+> abertas.
+>
+> **Confirmado por chamada real em 07/09/2026 (CP6.3.3.1): HTTP 200.** A resposta
+> veio em `steps[] → model_output → content[] → text`, exatamente como o parser
+> espera. Ficam validados na prática: a rota, `response_format` como **objeto**
+> (não array), `system_instruction` como string, `thinking_level: low`,
+> `max_output_tokens: 1024` e o structured output.
 
 ### Teto de saída
 
@@ -202,37 +205,39 @@ A resposta da Interactions API é uma **linha do tempo de passos**, não um
   classificada; `err.message` pode conter nome de env, URL de provider ou status
   interno
 - Nada da captura fica no provider: `store: false` explícito
-- `AbortController` de 15s (`DEFAULT_TIMEOUT_MS`); sem ele a Function ficava
+- `AbortController` de 30s (`DEFAULT_TIMEOUT_MS`); sem ele a Function ficava
   presa até o limite da plataforma
 
-## Timeout — 15s, medido
+## Timeout — 30s, e é um curativo
 
 Um só lugar: `DEFAULT_TIMEOUT_MS` em `_shared/providers.js`, herdado pelos três
-adaptadores.
+adaptadores. Cada valor que ele teve saiu de uma medida, e cada medida derrubou
+a estimativa anterior:
 
-Nasceu 8s por estimativa — "o dobro de uma resposta de Flash" — escrita antes de
-existir qualquer medida. O QA real do CP6.3, já com a Function deployada e JWT
-de usuário, deu em três chamadas:
-
-| tentativa | tempo | resultado |
+| | valor | por quê |
 |---|---|---|
-| 1 | ~9,1s | `outcome=timeout` — **abortada por nós** |
-| 2 | ~3,3s | `provider_http` `status 503` — o Gemini recusou (transitório) |
-| 3 | ~8,4s | `outcome=timeout` — **abortada por nós** |
+| CP6.2 | 8s | estimativa pura — "o dobro de uma resposta de Flash", escrita antes de existir qualquer medida |
+| CP6.3.1 | 15s | o QA real cortou **2 de 3** chamadas no nosso próprio limite (~9,1s e ~8,4s). Só depois se descobriu que aquelas chamadas iam para `:generateContent`, que respondia **404** a esta chave |
+| CP6.3.3.1 | **30s** | o QA real da rota **certa** devolveu **200 válido em 23,88s** |
 
-Duas de três foram cortadas pelo nosso próprio relógio, não pelo provider. Um
-timeout que aborta a resposta que estava chegando não protege ninguém: converte
-latência em falha e esconde o comportamento real do modelo. O 503 é outra
-história — é o provider dizendo não, e nenhum timeout conserta isso.
+O dado que importa dessa última medida não é o tempo: é o que veio junto.
+**`total_thought_tokens: 0`** e **`total_output_tokens: 26`** — quase 24 segundos
+para produzir 26 tokens sem pensar nada. A lentidão não está no tamanho do nosso
+pedido, nem no esquema, nem no esforço do modelo.
 
-15s segue muito abaixo do limite de execução da plataforma, então o
-`AbortController` continua fazendo o que importa: a Function termina por decisão
-nossa, com `outcome=timeout` no log, em vez de ficar presa.
+**30s é teto de segurança, não solução de performance.** Existe para não cortar
+uma resposta que estava chegando, e nada além disso. Não é um alvo aceitável:
+24 segundos de espera não cabem numa captura de agenda. O que fazer a respeito —
+fallback local, resposta otimista, streaming, outro modelo, outra região — é
+assunto de um checkpoint próprio, com amostra de várias chamadas em vez de uma.
+Até lá, o número é curativo, e está escrito aqui que é.
 
-O CP6.3.3 fechou o diagnóstico: aquelas chamadas iam para `:generateContent`,
-que respondia **404** a esta chave — e uma chamada *mínima* pela rota certa
-levou **8,26s**. Nenhum dos dois valores de timeout teria salvado a rota errada,
-e 8s não bastariam nem para a certa.
+**Sem retry.** Repetir uma chamada de 24s dobra a espera para tentar consertar o
+que não é falha transitória.
+
+30s segue abaixo do limite de execução da plataforma, então o `AbortController`
+continua fazendo o que importa: a Function termina por decisão nossa, com
+`outcome=timeout` no log, em vez de ficar presa.
 
 ## Rate limit — limitação conhecida
 

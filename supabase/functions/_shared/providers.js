@@ -28,22 +28,33 @@ import { buildSystemPrompt, buildResponseSchema, buildUserPrompt } from './promp
 // aceitando `timeoutMs` (os testes injetam 40ms para provar o caminho de
 // abortar), mas nenhum carrega numero proprio: mudar aqui muda para todos.
 //
-// 15s, e nao os 8s originais, por MEDICAO e nao por palpite. O QA real do
-// CP6.3, ja com a Function deployada e o JWT valido, deu em tres chamadas:
-//   . ~9,1s  -> outcome=timeout   (abortado por nos, no limite de 8s)
-//   . ~3,3s  -> provider_http 503 (o Gemini recusou; transitorio, nao lentidao)
-//   . ~8,4s  -> outcome=timeout   (idem a primeira)
-// Ou seja: 2 de 3 chamadas foram cortadas POR NOS, e nao pelo provider. Um
-// timeout que aborta a resposta que estava chegando nao protege ninguem — so
-// transforma latencia em falha e esconde o comportamento real do modelo.
+// TETO DE SEGURANCA TEMPORARIO, NAO SOLUCAO DE PERFORMANCE. Cada numero aqui
+// saiu de uma medida, e cada medida derrubou a estimativa anterior:
 //
-// O numero antigo saiu de uma estimativa ("o dobro de uma resposta de Flash")
-// feita antes de existir qualquer medida. A primeira medida a contradisse.
+//   8s  (CP6.2)   estimativa pura, escrita antes de existir qualquer medida
+//                 ("o dobro de uma resposta de Flash").
+//   15s (CP6.3.1) o QA real cortou 2 de 3 chamadas no nosso proprio limite.
+//                 So depois se descobriu que aquelas chamadas iam para
+//                 `:generateContent`, que respondia 404 a esta chave.
+//   30s (CP6.3.3.1) o QA real da rota CERTA, com resposta 200 e valida, levou
+//                 **23,88s** — com `total_thought_tokens: 0` e
+//                 `total_output_tokens: 26`. Ou seja: 24 segundos para
+//                 produzir 26 tokens sem pensar. A lentidao NAO esta no
+//                 tamanho do nosso pedido nem no esforco do modelo.
 //
-// 15s continua MUITO abaixo do limite de execucao da plataforma, entao o
+// 30s existe para nao cortar uma resposta que estava chegando — e nada mais.
+// Nao e um alvo aceitavel: 24s de espera nao cabem numa captura de agenda, e
+// quem decide o que fazer com isso (fallback local, resposta otimista,
+// streaming, outro modelo) e um checkpoint proprio, com dados de varias
+// chamadas. Ate la, este numero e curativo, e esta escrito que e.
+//
+// SEM RETRY. Repetir uma chamada de 24s duplica a espera para tentar consertar
+// o que nao e falha transitoria.
+//
+// 30s continua abaixo do limite de execucao da plataforma, entao o
 // AbortController segue fazendo o que importa: garantir que a Function termine
 // por decisao nossa, com `outcome=timeout` no log, em vez de ficar presa.
-export const DEFAULT_TIMEOUT_MS = 15000
+export const DEFAULT_TIMEOUT_MS = 30000
 
 // -------------------- MODELOS: um lugar so, com default explicito ----------
 //
