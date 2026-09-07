@@ -69,7 +69,31 @@ describe('o que se PEDE ao Gemini', () => {
     expect(url).toContain(MODEL_DEFAULTS.gemini)
     expect(body.generationConfig.responseMimeType).toBe('application/json')
     expect(body.generationConfig.responseSchema.properties.turn_kind.enum).toContain('revise')
-    expect(body.generationConfig.temperature).toBe(0)
+  })
+
+  it('NÃO manda temperature — a família Gemini 3 a ignora', async () => {
+    // Ignorada nao e inofensiva: um parametro morto no corpo faz parecer que a
+    // determinacao esta configurada quando nao esta. Quem controla isso agora e
+    // thinkingLevel, e o teste guarda as duas metades dessa troca.
+    const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
+    await createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl }).interpret(ENTRADA)
+    const cfg = JSON.parse(fetchImpl.mock.calls[0][1].body).generationConfig
+    expect(cfg.temperature).toBeUndefined()
+    expect(cfg.top_p).toBeUndefined()
+    expect(cfg.top_k).toBeUndefined()
+    expect(cfg.thinkingConfig.thinkingLevel).toBe('low')
+  })
+
+  it('o nível de raciocínio é configurável — e nunca "minimal"', async () => {
+    // `minimal` nao existe no 3.8 e devolve erro de validacao; se um dia for
+    // configurado por engano, que quebre aqui e nao em producao.
+    const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
+    await createGeminiAdapter({
+      env: ENV({ GEMINI_API_KEY: 'k', GEMINI_THINKING_LEVEL: 'medium' }), fetchImpl,
+    }).interpret(ENTRADA)
+    const cfg = JSON.parse(fetchImpl.mock.calls[0][1].body).generationConfig
+    expect(cfg.thinkingConfig.thinkingLevel).toBe('medium')
+    expect(['low', 'medium', 'high']).toContain(cfg.thinkingConfig.thinkingLevel)
   })
 
   it('a chave viaja no header, nunca na URL', async () => {
@@ -105,9 +129,13 @@ describe('o que se PEDE ao Gemini', () => {
     expect(buildResponseSchema().required).toContain('turn_kind')
   })
 
-  it('o modelo é configurável por env, com default explícito', () => {
+  it('o modelo é configurável por env, com default explícito e ATUAL', () => {
     expect(resolveModel('gemini', ENV({}))).toBe(MODEL_DEFAULTS.gemini)
     expect(resolveModel('gemini', ENV({ GEMINI_MODEL: 'gemini-9-turbo' }))).toBe('gemini-9-turbo')
+    // O fallback nao pode apontar para um modelo aposentado: se o env falhar, a
+    // rede de seguranca precisa segurar. O CP6.2 nasceu com gemini-2.0-flash.
+    expect(MODEL_DEFAULTS.gemini).not.toMatch(/^gemini-2\./)
+    expect(MODEL_DEFAULTS.gemini).toBe('gemini-3.8-flash')
   })
 
   it('o provider é escolhido server-side, e um nome desconhecido não passa', () => {

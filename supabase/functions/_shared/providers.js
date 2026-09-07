@@ -31,11 +31,14 @@ export const DEFAULT_TIMEOUT_MS = 8000
 // na resposta de diagnostico — entao "qual modelo respondeu isso?" e uma
 // pergunta com resposta, nao uma arqueologia.
 //
-// Os nomes de Gemini Flash mudam com frequencia. O default abaixo e um ponto de
-// partida documentado, NAO uma escolha definitiva: trocar e mexer no env
-// `GEMINI_MODEL`, sem tocar em codigo nem redeployar por causa disso.
+// Os nomes de Gemini Flash mudam com frequencia — e mudaram: o CP6.2 nasceu com
+// `gemini-2.0-flash`, que ja nao e o Flash corrente. O default aqui subiu para
+// `gemini-3.8-flash` porque um default obsoleto e pior que nenhum: se o env
+// falhar, o fallback silencioso apontaria para um modelo que pode nem responder.
+// O ambiente continua mandando por `GEMINI_MODEL`; este valor e a rede de
+// seguranca, e rede de seguranca velha nao segura ninguem.
 export const MODEL_DEFAULTS = {
-  gemini: 'gemini-2.0-flash',
+  gemini: 'gemini-3.8-flash',
   openai: 'gpt-4o-mini',
   anthropic: 'claude-haiku-4-5-20251001',
 }
@@ -104,8 +107,8 @@ function parseModelJson(texto) {
 
 // -------------------- GEMINI ------------------------------------------------
 // `responseMimeType` + `responseSchema` fazem o proprio provider restringir a
-// geracao ao formato. `temperature: 0` porque interpretar nao e criar: a mesma
-// frase deve produzir a mesma leitura.
+// geracao ao formato — nao e o prompt pedindo JSON, e o modelo impedido de sair
+// dele. Ver `generationConfig` abaixo para por que nao ha `temperature` aqui.
 export function createGeminiAdapter({ env, fetchImpl, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   return {
     id: 'gemini',
@@ -123,7 +126,19 @@ export function createGeminiAdapter({ env, fetchImpl, timeoutMs = DEFAULT_TIMEOU
             systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
             contents: [{ role: 'user', parts: [{ text: buildUserPrompt(input) }] }],
             generationConfig: {
-              temperature: 0,
+              // SEM `temperature`. A familia Gemini 3 IGNORA temperature, top_p e
+              // top_k — nao da erro, simplesmente nao faz nada. Um parametro que
+              // nao faz nada e pior que ausente: parece que a determinacao esta
+              // configurada quando nao esta. Quem controla isso agora e
+              // `thinkingLevel`.
+              //
+              // `low` porque a tarefa e extrair campos de uma frase curta, nao
+              // raciocinar sobre um problema: nivel alto custaria latencia dentro
+              // de um timeout de 8s e dinheiro, sem ler melhor "reuniao amanha as
+              // 8h". Configuravel por env pela mesma razao do modelo — a escolha
+              // certa hoje pode nao ser a de amanha. (`minimal` nao existe no 3.8
+              // e devolve erro de validacao.)
+              thinkingConfig: { thinkingLevel: env.get('GEMINI_THINKING_LEVEL') || 'low' },
               responseMimeType: 'application/json',
               responseSchema: buildResponseSchema(),
             },

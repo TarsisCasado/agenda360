@@ -4,9 +4,9 @@ Interpreta uma captura em linguagem natural e devolve **uma leitura estruturada*
 no contrato canônico do CP6.1. Não executa nada, não toca no banco, não conhece
 services de escrita.
 
-> **Estado: NÃO deployada, e `ai.remote` desligada.** O CP6.2 entregou só o
-> código. Nada aqui roda em produção nem em Preview até um checkpoint que o
-> autorize explicitamente.
+> **Estado: NÃO deployada, e `ai.remote` desligada.** O CP6.2 entregou o código
+> e o CP6.3 a compatibilidade com Gemini 3.8 Flash. Nada aqui roda em produção
+> nem em Preview até um checkpoint que o autorize explicitamente.
 
 ---
 
@@ -33,7 +33,7 @@ literais (prioridades e status) espelhando `src/lib/constants.js`, vigiadas por
 `src/agent/contracts/contract.compat.test.js`: se o domínio mudar e o contrato
 não, a suíte fica vermelha.
 
-O miolo é **puro JS testável em Node** — por isso os 25 testes desta Function
+O miolo é **puro JS testável em Node** — por isso os 27 testes desta Function
 rodam na suíte normal, sem rede, sem chave e sem Deno.
 
 ## Providers
@@ -54,13 +54,32 @@ Nome de modelo espalhado pelo código é nome que ninguém troca.
 
 | provider | default | env |
 |---|---|---|
-| gemini | `gemini-2.0-flash` | `GEMINI_MODEL` |
+| gemini | `gemini-3.8-flash` | `GEMINI_MODEL` |
 | openai | `gpt-4o-mini` | `OPENAI_MODEL` |
 | anthropic | `claude-haiku-4-5-20251001` | `ANTHROPIC_MODEL` |
 
-Os nomes de Gemini Flash mudam com frequência: o default acima é um **ponto de
-partida documentado**, não uma escolha definitiva. Trocar é mexer no env — sem
-tocar em código.
+Os nomes de Gemini Flash mudam com frequência — **e mudaram**: o CP6.2 nasceu com
+`gemini-2.0-flash`, que já não é o Flash corrente. O default subiu no CP6.3
+porque um default obsoleto é pior que nenhum: se o env falhar, o fallback
+silencioso apontaria para um modelo que pode nem responder.
+
+### Raciocínio (`thinkingLevel`)
+
+A família Gemini 3 **ignora** `temperature`, `top_p` e `top_k` — não dá erro,
+simplesmente não faz nada. Um parâmetro morto no corpo é pior que ausente:
+parece que a determinação está configurada quando não está. Por isso o adaptador
+não os envia.
+
+Quem controla isso agora é `generationConfig.thinkingConfig.thinkingLevel`.
+
+| | |
+|---|---|
+| default | `low` — extrair campos de uma frase curta não é raciocinar sobre um problema; nível alto custa latência dentro do timeout de 8s e dinheiro, sem ler melhor |
+| env | `GEMINI_THINKING_LEVEL` |
+| valores | `low` · `medium` · `high`. **`minimal` não existe no 3.8** e devolve erro de validação |
+
+OpenAI e Anthropic **mantêm** `temperature: 0` — a depreciação é só da família
+Gemini 3.
 
 ## Variáveis de ambiente (server-side; **nenhum valor neste repositório**)
 
@@ -71,10 +90,15 @@ tocar em código.
 | `OPENAI_API_KEY` | se `AI_PROVIDER=openai` |
 | `ANTHROPIC_API_KEY` | se `AI_PROVIDER=anthropic` |
 | `GEMINI_MODEL` / `OPENAI_MODEL` / `ANTHROPIC_MODEL` | opcionais |
+| `GEMINI_THINKING_LEVEL` | opcional — `low` (default) · `medium` · `high` |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | injetados pela plataforma |
 
 **Nenhuma variável `VITE_*`.** `VITE_*` é compilada no bundle e vai para o
-browser — é exatamente o oposto do que uma chave de API precisa.
+browser — é exatamente o oposto do que uma chave de API precisa. O CP6.3 removeu
+do `.env.example` as entradas mortas `VITE_AI_PROVIDER` e `VITE_AI_API_KEY`:
+nenhuma linha do código as lia, mas o arquivo é o primeiro lugar onde alguém
+procura o que configurar, e um campo chamado `VITE_AI_API_KEY` convida a colar
+uma chave que ficaria pública.
 
 ## Contrato
 
@@ -123,8 +147,8 @@ Sem dump de tarefas, sem `user_id`, sem ids de categoria. O corte é aplicado
 **zera no cold start**: isto **não é rate limit distribuído**. É primeira linha
 contra repetição acidental e loop no cliente, não contra atacante determinado.
 
-O limite real exigiria contagem persistente por janela — uma migration, que o
-CP6.2 não faz. Fica escrito aqui em vez de parecer resolvido.
+O limite real exigiria contagem persistente por janela — uma migration, que
+nenhum destes checkpoints faz. Fica escrito aqui em vez de parecer resolvido.
 
 ## Observabilidade
 
@@ -132,7 +156,7 @@ Uma linha JSON por chamada, com **forma, nunca conteúdo**:
 
 ```jsonc
 { "fn": "ai-interpret", "outcome": "remote_ok", "provider": "gemini",
-  "model": "gemini-2.0-flash", "ms": 812, "text_len": 74, "had_draft": true,
+  "model": "gemini-3.8-flash", "ms": 812, "text_len": 74, "had_draft": true,
   "turn_kind": "revise", "refers_to_draft": true, "intent": "create_task",
   "patch_fields": ["start_time"], "rejected": [] }
 ```
@@ -150,7 +174,7 @@ texto da captura, os valores do patch, chaves, nem dado pessoal.
 npx vitest run supabase/functions/ai-interpret/interpret.test.js
 ```
 
-25 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
+27 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
 pedimos ao provider e como recebemos cada forma de resposta ruim.
 
 Contra a API real (exige chave, **não faça em CI**):
