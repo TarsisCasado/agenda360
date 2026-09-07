@@ -98,7 +98,14 @@ export default function Tasks() {
       </header>
 
       {visao === 'semana' ? (
-        <div className="mx-auto w-full max-w-6xl">
+        // CP5.10 — o Kanban perdeu o `max-w-6xl`. Ele era invisivel enquanto a
+        // barra lateral custava 224px fixos: sobrava pouco mais que 1152px de
+        // qualquer jeito. Com a barra recolhivel, esse limite passaria a ser a
+        // unica coisa impedindo as sete colunas de receber o espaco liberado —
+        // recolher a barra devolveria vazio nas margens em vez de largura ao
+        // conteudo. Uma grade de sete dias e exatamente a superficie que foi
+        // desenhada para aproveitar tela.
+        <div className="w-full">
           <WeekKanban embedded />
         </div>
       ) : error ? (

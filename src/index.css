@@ -355,6 +355,31 @@ body {
     @apply ring-2 ring-accent/40;
   }
 
+  /* -------------------------------------------------------------------------
+     RAIL (CP5.10) — a barra lateral recolhida.
+
+     Sem rotulo visivel, o icone precisa de outra forma de se identificar. O
+     `title` do navegador nao serve: so aparece no mouse, depois de um atraso
+     que ninguem controla, e o teclado nunca o ve. Entao o rotulo vira um
+     elemento nosso, revelado por hover E por foco — quem navega por Tab tem
+     de saber onde esta tanto quanto quem usa o mouse.
+     ------------------------------------------------------------------------- */
+  .rail-tip {
+    @apply pointer-events-none absolute left-[calc(100%+8px)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-control px-2.5 py-1.5 text-[13px] font-medium opacity-0 shadow-float transition-opacity;
+    /* Invertido de proposito: o balao e a cor do TEXTO sobre a cor da
+       superficie. Assim ele se le nos dois temas sem uma regra por tema. */
+    background: rgb(var(--c-text));
+    color: rgb(var(--c-surface));
+  }
+  /* Hover e foco de TECLADO, e so isso. `:focus-within` tambem revelaria depois
+     de um clique de mouse — e ai o balao "Expandir menu" fica grudado na tela
+     enquanto o botao mantiver o foco, que e exatamente o que acontece logo
+     depois de recolher a barra. Visto no QA. */
+  .group:hover > .rail-tip,
+  .group:focus-visible > .rail-tip {
+    @apply opacity-100;
+  }
+
   .switch-thumb {
     @apply absolute left-[3px] top-[3px] h-5 w-5 rounded-full bg-white shadow-card transition-transform;
   }
