@@ -36,7 +36,7 @@ literais (prioridades e status) espelhando `src/lib/constants.js`, vigiadas por
 `src/agent/contracts/contract.compat.test.js`: se o domínio mudar e o contrato
 não, a suíte fica vermelha.
 
-O miolo é **puro JS testável em Node** — por isso os 36 testes desta Function
+O miolo é **puro JS testável em Node** — por isso os 43 testes desta Function
 rodam na suíte normal, sem rede, sem chave e sem Deno.
 
 ## Providers
@@ -182,6 +182,38 @@ A resposta da Interactions API é uma **linha do tempo de passos**, não um
 é falha de provider — não se inventa resposta. Daí o JSON segue pelo **mesmo**
 `parseInterpretation` de sempre.
 
+### Descrições no esquema (CP6.3.5)
+
+O QA real de 07/09/2026 devolveu **200, em 2.290 ms, no contrato** — e mesmo
+assim `patch: { title, url: "America/Fortaleza" }`. O fuso horário, que viaja no
+contexto `now`, foi parar no campo de endereço web, e `rejected` veio **vazio**:
+`url` é um campo legítimo, tipado apenas como string até 2000 caracteres. A
+fronteira não tinha como recusar aquilo, e não é trabalho dela.
+
+O que faltava era mais cedo. Toda a semântica dos campos vivia **só na prosa do
+system prompt**; o esquema — que é o que restringe a geração campo a campo — era
+um saco de 17 slots opcionais sem nome semântico. Um slot vazio chamado `url`,
+ao lado de uma string solta no payload sem destino nenhum, é um atrator.
+
+Agora cada propriedade diz o que é, e as duas que o QA confundiu dizem também o
+que **não** são ("nunca fuso horário, nunca valor vindo do contexto").
+
+**Isto é hipótese de qualidade, não correção provada.** Descrição boa não
+garante que o modelo extraia `09:00` e `30`; só QA real diz isso, e um teste
+offline que afirmasse o contrário seria ficção. Os testes garantem a **forma**:
+que a descrição existe, que chega ao corpo enviado, e que nenhum campo do
+contrato fica sem ela.
+
+**Sem `format` e sem `propertyOrdering`.** Os dois são documentados no tipo
+`Schema` do Google — o caminho OpenAPI do `generateContent`. O que enviamos é o
+JSON Schema do `response_format` da Interactions API, e já carregamos **um**
+keyword OpenAPI não verificado nessa rota: `nullable`, mantido porque é o que
+permite apagar um campo numa revisão. Somar mais dois tornaria um eventual 400
+indistinguível entre três suspeitos, e cada rodada de QA custa uma chamada real.
+A ordenação que importa saiu de graça: a ordem de declaração das propriedades já
+espelha a ordem em que o system prompt as descreve — o que a documentação
+recomenda — e um teste tranca isso.
+
 **Saída** (`_shared/contract.js`):
 
 ```jsonc
@@ -272,7 +304,7 @@ texto da captura, os valores do patch, chaves, nem dado pessoal.
 npx vitest run supabase/functions/ai-interpret/interpret.test.js
 ```
 
-36 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
+43 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
 pedimos ao provider e como recebemos cada forma de resposta ruim.
 
 Contra a API real (exige chave, **não faça em CI**):

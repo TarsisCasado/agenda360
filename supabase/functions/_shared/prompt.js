@@ -69,41 +69,77 @@ REGRAS:
 // confianca — `parseInterpretation` valida tudo de novo do nosso lado, porque
 // um esquema aceito nao garante um valor sensato ("31/12/2026" e uma string
 // perfeitamente valida). Mas reduz muito o lixo que chega a fronteira.
+//
+// -------------------- POR QUE CADA CAMPO TEM `description` (CP6.3.5) -------
+//
+// O QA real de 07/09/2026 devolveu 200, rapido e no contrato — e mesmo assim
+// `patch: { title, url: "America/Fortaleza" }`: o fuso horario, que viaja no
+// contexto `now`, foi parar no campo de endereco web, e `rejected` veio VAZIO,
+// porque `url` e um campo legitimo tipado apenas como string.
+//
+// A fronteira nao tinha como recusar aquilo, e nao e trabalho dela: `url`
+// aceita qualquer string por contrato. O que faltava era mais cedo. Toda a
+// semantica dos campos vivia SO na prosa do system prompt; o esquema — que e o
+// que restringe a geracao campo a campo — era um saco de 17 slots opcionais
+// sem nome semantico. Um slot vazio chamado `url`, ao lado de uma string solta
+// no payload que nao tem destino nenhum, e um atrator.
+//
+// Entao cada propriedade passa a dizer o que e. Isto e HIPOTESE DE QUALIDADE,
+// nao correcao provada: descricao boa nao garante que o modelo extraia
+// "09:00" e "30" — so QA real diz isso, e um teste offline que afirmasse o
+// contrario seria ficcao. O que os testes garantem e que a descricao existe,
+// que ela chega ao corpo enviado, e que nenhum campo do contrato fica sem ela.
+//
+// NAO ha `format` nem `propertyOrdering` aqui. Os dois sao documentados no
+// tipo `Schema` do Google (o caminho OpenAPI do `generateContent`), e o que
+// enviamos e o JSON Schema do `response_format` da Interactions API. Ja
+// carregamos UM keyword OpenAPI nao verificado nesse caminho — `nullable`,
+// mantido porque e o que permite apagar um campo numa revisao. Somar mais dois
+// tornaria um eventual 400 indistinguivel entre tres suspeitos, e cada rodada
+// de QA custa uma chamada real. A ordenacao que importa saiu de graca: a ordem
+// de declaracao abaixo espelha a ordem em que o system prompt descreve os
+// campos, que e o que a documentacao recomenda — e um teste tranca isso.
 // ---------------------------------------------------------------------------
 export function buildResponseSchema() {
   const S = (type, extra = {}) => ({ type, ...extra })
+  const D = (type, description, extra = {}) => ({ type, description, ...extra })
   return {
     type: 'object',
     properties: {
-      turn_kind: S('string', { enum: Object.values(TURN_KIND) }),
-      refers_to_draft: S('boolean'),
-      intent: S('string', { nullable: true, enum: [...ALLOWED_INTENTS, 'unknown'] }),
-      confidence: S('number'),
+      turn_kind: D('string', 'O que este turno faz com o rascunho: criar, revisar, confirmar, cancelar, perguntar, ou desconhecido.', { enum: Object.values(TURN_KIND) }),
+      refers_to_draft: D('boolean', 'true quando a frase fala do rascunho recebido em "draft", inclusive por referencia ("a reuniao", "isso"). false quando nao ha rascunho.'),
+      intent: D('string', 'A acao pretendida, quando clara. null quando nao houver uma so acao evidente.', { nullable: true, enum: [...ALLOWED_INTENTS, 'unknown'] }),
+      confidence: D('number', 'Entre 0 e 1. Quanto voce confia nesta leitura COMPLETA — abaixe quando deixar de extrair algo que a frase disse.'),
       patch: {
         type: 'object',
+        description: 'Somente os campos que esta frase realmente afirma. Numa revisao, apenas os que MUDAM; o que nao vier permanece como estava.',
         properties: {
-          title: S('string'),
-          description: S('string'),
-          notes: S('string'),
-          date: S('string', { nullable: true }),
-          start_time: S('string', { nullable: true }),
-          end_time: S('string', { nullable: true }),
-          kind: S('string', { enum: Object.values(KIND) }),
-          alert_enabled: S('boolean'),
-          alert_minutes_before: S('integer'),
-          alert_at_time: S('string'),
-          category_hint: S('string'),
-          priority: S('string', { enum: PRIORITIES }),
-          status: S('string', { enum: STATUSES }),
-          link: S('string'),
-          url: S('string'),
-          query: S('string'),
-          task_id: S('string'),
+          title: D('string', 'Titulo curto da atividade — o assunto. NAO inclua horario, data, pedido de aviso nem correcao ("alias, melhor 8:30"): isso pertence aos campos proprios.'),
+          description: D('string', 'Texto livre adicional sobre a atividade, quando a pessoa der detalhe alem do titulo.'),
+          notes: D('string', 'Anotacao livre associada a atividade.'),
+          date: D('string', 'Data local da atividade em YYYY-MM-DD. Resolva "amanha", "sexta", "semana que vem" contra "now.today". null apaga a data.', { nullable: true }),
+          start_time: D('string', 'Hora de INICIO da atividade no formato HH:MM em 24h (ex.: "09:00" para "9h"). null apaga a hora.', { nullable: true }),
+          end_time: D('string', 'Hora de TERMINO da atividade no formato HH:MM em 24h. null apaga a hora.', { nullable: true }),
+          kind: D('string', 'Natureza declarada: "tarefa" (algo a fazer) ou "compromisso" (acontece numa hora marcada, com pessoas ou lugar).', { enum: Object.values(KIND) }),
+          alert_enabled: D('boolean', 'true quando a pessoa pede aviso ("me avisa", "me lembra", "poe um lembrete"); false quando pede para tirar o alerta.'),
+          alert_minutes_before: D('integer', 'Quantos MINUTOS antes do inicio o aviso deve tocar. "meia hora antes" = 30. "quinze minutos antes" = 15. "na hora" = 0.'),
+          alert_at_time: D('string', 'O RELOGIO do aviso em HH:MM 24h, quando a pessoa der a hora do aviso em vez do intervalo ("me avisa as 08:30"). Devolva a hora como ouviu; NAO calcule a diferenca.'),
+          category_hint: D('string', 'NOME de uma categoria da lista recebida em "categorias", quando a frase indicar uma. Nunca invente nome fora da lista.'),
+          priority: D('string', 'Prioridade declarada pela pessoa.', { enum: PRIORITIES }),
+          status: D('string', 'Situacao declarada pela pessoa (concluida, cancelada, adiada...).', { enum: STATUSES }),
+          link: D('string', 'Link que a PESSOA mencionou explicitamente na frase. Nunca fuso horario, nunca valor vindo do contexto.'),
+          url: D('string', 'URL ou endereco web que a PESSOA mencionou explicitamente na frase (ex.: "https://..."). Nunca fuso horario, nunca "now.timezone", nunca qualquer valor vindo do contexto.'),
+          query: D('string', 'Texto a procurar, quando a frase for uma busca.'),
+          task_id: D('string', 'Identificador de uma atividade existente, SO quando vier explicito no contexto recebido. Nunca invente.'),
         },
       },
-      needs_clarification: S('boolean'),
-      clarification: S('string', { nullable: true }),
-      ambiguities: { type: 'array', items: S('string') },
+      needs_clarification: D('boolean', 'true quando falta algo essencial que a frase nao disse — em vez de chutar, pergunte.'),
+      clarification: D('string', 'A pergunta curta a fazer a pessoa quando needs_clarification for true.', { nullable: true }),
+      ambiguities: {
+        type: 'array',
+        description: 'Nomes dos campos que ficaram ambiguos nesta frase (ex.: "horario" para "as 8", que pode ser manha ou noite).',
+        items: S('string'),
+      },
     },
     required: ['turn_kind', 'refers_to_draft', 'confidence', 'patch', 'needs_clarification'],
   }

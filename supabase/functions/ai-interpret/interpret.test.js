@@ -6,6 +6,7 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS, INTERACTIONS_URL, extrairModelOutput,
 } from '../_shared/providers.js'
 import { buildSystemPrompt, buildResponseSchema } from '../_shared/prompt.js'
+import { PATCH_FIELD_NAMES } from '../_shared/contract.js'
 
 // ---------------------------------------------------------------------------
 // AI-INTERPRET v2 — provado SEM internet e SEM chave (CP6.2).
@@ -479,5 +480,84 @@ describe('nada interno vaza, e o log não lê a vida de ninguém', () => {
     })
     const enviado = JSON.parse(JSON.parse(fetchImpl.mock.calls[0][1].body).input)
     expect(enviado.historico).toHaveLength(6)
+  })
+})
+
+describe('o esquema diz o que cada campo é (CP6.3.5)', () => {
+  // O QA real devolveu `patch: { title, url: "America/Fortaleza" }` — o fuso do
+  // contexto num campo de endereco web, com `rejected` vazio, porque `url` e um
+  // campo legitimo tipado so como string. A fronteira nao podia recusar aquilo.
+  // O que faltava era mais cedo: o esquema nao dizia o que os campos SAO.
+  //
+  // Estes testes guardam a FORMA do pedido. Nenhum deles afirma que o modelo
+  // passara a extrair "09:00" e 30 — isso so o QA real diz.
+  const schema = buildResponseSchema()
+  const patch = schema.properties.patch.properties
+
+  it('nenhum campo do patch fica sem descrição', () => {
+    for (const [nome, def] of Object.entries(patch)) {
+      expect(typeof def.description, `patch.${nome} sem description`).toBe('string')
+      expect(def.description.length, `patch.${nome} com description vazia`).toBeGreaterThan(20)
+    }
+  })
+
+  it('os campos do topo também são descritos', () => {
+    for (const [nome, def] of Object.entries(schema.properties)) {
+      expect(typeof def.description, `${nome} sem description`).toBe('string')
+      expect(def.description.length).toBeGreaterThan(20)
+    }
+  })
+
+  it('os campos que o QA confundiu dizem explicitamente o que NÃO são', () => {
+    // Nao e superstição: o valor que vazou veio de `now.timezone`, e o unico
+    // lugar onde isso pode ser dito ao decodificador e aqui.
+    expect(patch.url.description).toMatch(/timezone|fuso/i)
+    expect(patch.link.description).toMatch(/timezone|fuso/i)
+    expect(patch.start_time.description).toContain('HH:MM')
+    expect(patch.end_time.description).toContain('HH:MM')
+    expect(patch.alert_at_time.description).toContain('HH:MM')
+    expect(patch.date.description).toContain('YYYY-MM-DD')
+    expect(patch.alert_minutes_before.description).toMatch(/30/)
+    expect(patch.title.description).toMatch(/NAO inclua|nao inclua/i)
+  })
+
+  it('o esquema e o contrato têm exatamente os mesmos campos', () => {
+    // Paridade nos dois sentidos: campo no contrato sem slot no esquema nunca
+    // seria gerado; slot no esquema sem campo no contrato seria descartado na
+    // fronteira depois de ter custado tokens.
+    expect(Object.keys(patch).sort()).toEqual([...PATCH_FIELD_NAMES].sort())
+  })
+
+  it('a ordem de declaração espelha a ordem do system prompt', () => {
+    // A documentacao pede que prompt e esquema apresentem os campos na mesma
+    // ordem; hoje isso e verdade, e sem este teste continuaria verdade por
+    // acaso. Vale como reforco de ordenacao — NAO resolve semantica.
+    const prompt = buildSystemPrompt()
+    const lista = prompt.slice(prompt.indexOf('patch — apenas estes campos'), prompt.indexOf('REGRAS:'))
+    const posicoes = Object.keys(patch).map((n) => {
+      const i = lista.search(new RegExp(`\\b${n}\\b`))
+      expect(i, `${n} não aparece na lista de campos do prompt`).toBeGreaterThan(-1)
+      return i
+    })
+    expect(posicoes).toEqual([...posicoes].sort((x, y) => x - y))
+  })
+
+  it('não viajam palavras-chave OpenAPI não verificadas nesta rota', () => {
+    // `format` e `propertyOrdering` sao do tipo `Schema` (caminho
+    // generateContent). Aqui e o JSON Schema do response_format da Interactions,
+    // e ja carregamos UM keyword nao verificado — `nullable`, mantido porque e
+    // o que permite apagar campo numa revisao. Somar mais tornaria um eventual
+    // 400 indistinguivel entre suspeitos.
+    const texto = JSON.stringify(schema)
+    expect(texto).not.toContain('propertyOrdering')
+    expect(texto).not.toContain('"format"')
+  })
+
+  it('as descrições chegam de fato no corpo enviado ao Gemini', async () => {
+    const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
+    await createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl }).interpret(ENTRADA)
+    const enviado = JSON.parse(fetchImpl.mock.calls[0][1].body).response_format.schema
+    expect(enviado.properties.patch.properties.url.description).toMatch(/timezone|fuso/i)
+    expect(enviado.properties.patch.properties.start_time.description).toContain('HH:MM')
   })
 })
