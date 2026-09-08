@@ -133,5 +133,9 @@ export function isRevisionOf(interp, draft) {
   if (!draft) return false
   if (interp?.turn_kind !== TURN_KIND.REVISE) return false
   if (!interp.refers_to_draft) return false
-  return Object.keys(interp.patch || {}).length > 0
+  // `patch` no contrato cru; `data` depois que a ponte normaliza para a forma
+  // que o runtime consome (CP6.4). E a mesma coisa com dois nomes, e aceitar os
+  // dois evita que a ponte tenha de reconstruir o objeto so para esta pergunta.
+  const campos = interp.patch ?? interp.data
+  return Object.keys(campos || {}).length > 0
 }

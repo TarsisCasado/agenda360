@@ -15,6 +15,7 @@ export {
   PRIORITIES,
   STATUSES,
   PATCH_FIELD_NAMES,
+  CLEARABLE_FIELD_NAMES,
   parseInterpretation,
   emptyInterpretation,
 } from '../../../supabase/functions/_shared/contract.js'

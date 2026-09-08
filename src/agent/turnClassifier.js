@@ -54,6 +54,7 @@
 import { extractDelta, residualSubject } from './nlu/delta'
 import { detectSpeechAct } from './nlu/speechAct'
 import { detectQuestion } from './nlu/question'
+import { isRevisionOf } from './contracts/normalizeInterpretation'
 
 export const TURN = {
   INSPECT: 'inspect',
@@ -88,6 +89,24 @@ export function classifyTurn({ interp = {}, text, context = {} } = {}) {
   const question = isDraftQuery({ interp, text, providerAgrees })
   if (question.match) {
     return { kind: TURN.INSPECT, fields: question.fields }
+  }
+
+  // 0.5) O INTERPRETADOR DECLAROU REVISAO (CP6.4).
+  //
+  //    Vale so quando ele fala o vocabulario do contrato v1 — turn_kind
+  //    'revise', refers_to_draft true e patch com conteudo. O NLU local nao
+  //    declara nada disso, entao para ele nada muda aqui.
+  //
+  //    Vem ANTES da regra 1 porque e exatamente o caso que a regra 1 errava: em
+  //    "mude o horario da reuniao para as 09h", "reuniao" sobra como residuo e
+  //    o interpretador reconhece uma intencao — os dois sinais da regra 1 — e o
+  //    rascunho vivo era descartado. Quem tem o rascunho estruturado na mao nao
+  //    precisa adivinhar se aquilo e sujeito novo ou anafora: ele JA respondeu.
+  //
+  //    Continua sendo VOTO, nao ordem: um `revise` de patch vazio nao passa por
+  //    `isRevisionOf`, e a decisao volta para os sinais deterministicos.
+  if (isRevisionOf(interp, context.pending)) {
+    return { kind: TURN.MODIFY, patch: interp.data, fields: Object.keys(interp.data || {}), residue }
   }
 
   // 1) Sujeito novo E concordancia do interpretador: substituicao inequivoca.

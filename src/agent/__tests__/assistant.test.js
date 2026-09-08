@@ -180,6 +180,8 @@ describe('ProviderManager fallback', () => {
     // isSupabaseConfigured e false no ambiente de teste -> useRemote()=false -> mock direto.
     const r = await pm.interpret('agende reuniao amanha as 15h', { today: '2026-07-15', categories: [] })
     expect(r.intent).toBe('create_task')
-    expect(r.provider).toMatch(/mock/)
+    // CP6.4: a origem passou a ser explicita. Sem Supabase configurado o remoto
+    // nem e tentado, entao isto e LOCAL — nao fallback.
+    expect(r.source).toBe('local')
   })
 })

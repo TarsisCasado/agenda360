@@ -89,7 +89,22 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     return { kind: 'proposal', proposal }
   }
 
-  async function ask({ text, identity, categories = [], conversationId }) {
+  // CP6.4 — ORIGEM VISIVEL. A pagina precisa poder dizer se a leitura veio do
+  // provider remoto, do interpretador local, ou do local DEPOIS de o remoto
+  // falhar. Sem isso, um remoto quebrado se disfarca de conversa normal.
+  //
+  // Carimbar no retorno em vez de passar por dez pontos de saida: `ask` embrulha
+  // o fluxo e anexa a origem do turno. Uma conversa por vez, que e como a tela
+  // funciona.
+  let origemDoTurno = null
+
+  async function ask(params) {
+    origemDoTurno = null
+    const out = await executarTurno(params)
+    return out && typeof out === 'object' ? { ...out, interpretation_source: origemDoTurno } : out
+  }
+
+  async function executarTurno({ text, identity, categories = [], conversationId }) {
     if (!identity?.workspaceId || !identity?.userId) {
       throw new Error('Sessao/workspace ausente.')
     }
@@ -105,6 +120,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
 
     const context = await contextEngine.build(identity, { categories, history: historyRows, pending })
     const interp = await providerManager.interpret(text, context)
+    origemDoTurno = interp?.source || null
 
     // ------------------------------------------------------------------
     // CONSULTA sobre a entidade ativa — vale em QUALQUER fase com rascunho.

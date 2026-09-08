@@ -1,20 +1,98 @@
 // ---------------------------------------------------------------------------
-// Provider Manager — decide COMO interpretar o texto:
-//   - flag ai.remote DESLIGADA (padrao) OU sem Supabase -> provider MOCK (local);
-//   - flag ai.remote LIGADA -> chama a Edge Function `ai-interpret` (JWT + chaves
-//     ficam no servidor; NENHUMA chave secreta no frontend).
+// Provider Manager — a PONTE entre a conversa e quem interpreta (CP6.4).
 //
-// Fallback seguro: se a chamada remota falhar, cai no mock (nunca quebra a UX).
-// Os "adapters reais" (OpenAI/Anthropic) vivem DENTRO da Edge Function.
+//   flag ai.remote DESLIGADA (padrao) ou sem Supabase -> interpretador LOCAL;
+//   flag LIGADA -> Edge Function `ai-interpret` (JWT do usuario; a chave do
+//   provider nunca sai do servidor).
+//
+// O QUE ESTE ARQUIVO PASSOU A FAZER, E POR QUE.
+//
+// Ate aqui a chamada remota mandava `{ text, context }` — um formato que a
+// Function v2 nao le. Ligar a flag hoje daria 400 em toda chamada, o fallback
+// silencioso entraria, e a conversa pareceria funcionar com o NLU local: o
+// pior tipo de defeito, o que se disfarca de sucesso.
+//
+// Agora a ponte tem TRES passos, e cada um usa a peca canonica que ja existia
+// em vez de improvisar a sua:
+//
+//   1. `buildInterpreterInput` (CP6.1) monta o pacote de entrada — input, now,
+//      draft ESTRUTURADO, awaiting, categorias (so nomes) e historico curto;
+//   2. `parseInterpretation` valida a resposta DE NOVO deste lado. A Function
+//      ja validou; isso nao e desperdicio, e a regra de nunca confiar no que
+//      chega pela rede — inclusive num servidor nosso;
+//   3. `normalizeInterpretation` (CP6.1) traduz do que o modelo entendeu para
+//      o que o dominio consome: categoria por nome -> id real, hora do aviso ->
+//      antecedencia, especie -> exigencia.
+//
+// O RASCUNHO E O ITEM MAIS IMPORTANTE. Sem ele, "muda para 9h" e uma frase sem
+// sujeito e a conversa recomeca a cada turno — era esse o defeito do QA do
+// CP6.0. Ele viaja em `context.pending`, que o `contextEngine` ja preenche.
+//
+// ORIGEM VISIVEL. Toda interpretacao volta com `source`: 'remote', 'local' ou
+// 'remote_fallback'. Fallback silencioso e veneno para QA — quem testa precisa
+// saber se leu o Gemini ou o interpretador local.
+//
+// NENHUMA CHAVE AQUI. Este arquivo vai para o bundle do browser; o que ele
+// conhece e o NOME de uma Edge Function.
 // ---------------------------------------------------------------------------
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { featureFlags, FLAGS } from './featureFlags'
 import { mockInterpret } from './providers/mockProvider'
+import { buildInterpreterInput } from './contracts/input'
+import { parseInterpretation, TURN_KIND } from './contracts/interpretation'
+import { normalizeInterpretation } from './contracts/normalizeInterpretation'
 
-const MAX_TEXT = 1000 // limite de tamanho (defesa em profundidade; a Edge tambem limita)
+const MAX_TEXT = 1000 // defesa em profundidade; a Edge tambem limita
+
+// De onde veio a leitura deste turno. Nao e enfeite: e o que distingue
+// "o remoto respondeu" de "o remoto caiu e ninguem viu".
+export const SOURCE = {
+  REMOTE: 'remote',
+  LOCAL: 'local',
+  FALLBACK: 'remote_fallback',
+}
+
+// O runtime de hoje consome `{ intent, confidence, data, ... }`. A
+// Interpretation v1 e mais rica. A traducao acontece AQUI, num lugar so — uma
+// conversao ad hoc em cada chamador seria a forma mais rapida de fazer os dois
+// formatos divergirem em silencio.
+function paraORuntime(interp, { patch, requires, notes }, source) {
+  // `intent` pode vir null num turno que o modelo classificou como criacao
+  // (o contrato permite: `turn_kind` e a classificacao, `intent` e a acao).
+  // O runtime precisa de uma intencao para achar a tool, entao deduz-se a
+  // unica que `create` + patch com conteudo pode significar. Deduzir isto e
+  // diferente de inventar dado: nenhum campo da atividade sai daqui.
+  const intent =
+    interp.intent ||
+    (interp.turn_kind === TURN_KIND.CREATE && Object.keys(patch).length > 0 ? 'create_task' : 'unknown')
+
+  return {
+    // --- o que o runtime ja esperava ---
+    intent,
+    confidence: interp.confidence,
+    needs_clarification: interp.needs_clarification,
+    clarification: interp.clarification,
+    ambiguities: interp.ambiguities,
+    data: patch,
+    // --- o que o contrato v1 acrescenta, para quem souber usar ---
+    turn_kind: interp.turn_kind,
+    refers_to_draft: interp.refers_to_draft,
+    requires,
+    notes,
+    rejected: interp.rejected,
+    // --- proveniencia ---
+    provider: interp.provider || 'remote',
+    source,
+  }
+}
+
+function localComOrigem(text, context, source, extra = {}) {
+  const base = mockInterpret(text, context)
+  return { ...base, provider: base.provider || 'local', source, ...extra }
+}
 
 export function createProviderManager({ flags = featureFlags, edgeInvoke } = {}) {
-  // edgeInvoke injetavel (testes). Padrao: supabase.functions.invoke.
+  // `edgeInvoke` injetavel (testes). Padrao: supabase.functions.invoke.
   const invokeEdge = edgeInvoke || (async (name, body) => {
     if (!isSupabaseConfigured) throw new Error('supabase-nao-configurado')
     const { data, error } = await supabase.functions.invoke(name, { body })
@@ -34,25 +112,47 @@ export function createProviderManager({ flags = featureFlags, edgeInvoke } = {})
         clarification: 'Digite um comando.',
         data: {},
         ambiguities: [],
-        provider: 'mock',
+        provider: 'local',
+        source: SOURCE.LOCAL,
       }
     }
 
-    if (isRemoteEnabled()) {
-      try {
-        const result = await invokeEdge('ai-interpret', { text: clean, context })
-        return { ...result, provider: result.provider || 'remote' }
-      } catch (err) {
-        // Fallback seguro para o mock (log discreto; sem vazar detalhes).
-        console.warn('[providerManager] remoto falhou, usando mock:', err?.message)
-        return { ...mockInterpret(clean, context), provider: 'mock-fallback' }
-      }
-    }
+    if (!isRemoteEnabled()) return localComOrigem(clean, context, SOURCE.LOCAL)
 
-    return { ...mockInterpret(clean, context), provider: 'mock' }
+    // O rascunho vivo e a pergunta em aberto: e o que transforma um turno solto
+    // ("muda para 9h") numa revisao daquilo que a pessoa esta olhando.
+    const draft = context.pending || null
+
+    try {
+      const entrada = buildInterpreterInput({
+        text: clean,
+        context,
+        draft,
+        awaiting: draft?.awaiting || null,
+      })
+      const bruto = await invokeEdge('ai-interpret', entrada)
+      // Fronteira, de novo, deste lado. A Function ja validou; a rede entre nos
+      // nao e parte do contrato.
+      const interp = parseInterpretation(bruto, { provider: bruto?.provider || 'remote' })
+      const normal = normalizeInterpretation(interp, {
+        categories: context.categories || [],
+        draft,
+      })
+      return paraORuntime(interp, normal, SOURCE.REMOTE)
+    } catch (err) {
+      // FALLBACK VISIVEL. A conversa continua — a captura nunca se perde — mas
+      // o turno sai CARIMBADO como fallback, e a causa vai junto de forma
+      // classificada, sem mensagem interna de provider.
+      const motivo = err?.message === 'supabase-nao-configurado' ? 'nao_configurado' : 'falha_remota'
+      console.warn('[providerManager] remoto indisponivel, usando interpretador local:', motivo)
+      return localComOrigem(clean, context, SOURCE.FALLBACK, { fallback_reason: motivo })
+    }
   }
 
-  return { interpret, activeProvider: () => (isRemoteEnabled() ? 'remote' : 'mock') }
+  return {
+    interpret,
+    activeProvider: () => (isRemoteEnabled() ? 'remote' : 'local'),
+  }
 }
 
 export const providerManager = createProviderManager()

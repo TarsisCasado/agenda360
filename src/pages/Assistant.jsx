@@ -14,6 +14,18 @@ import { tipoDaProposta, destinoDaProposta } from '../lib/capture'
 import { conversaAberta, guardarConversa, esquecerConversa } from '../lib/conversationSession'
 import { PRIORITY_META } from '../lib/constants'
 import { formatShort } from '../lib/date'
+import { SOURCE } from '../agent/providerManager'
+
+// De onde veio a leitura do ultimo turno (CP6.4). O rotulo era fixo — "Interpretação
+// local" — e continuaria dizendo isso com o provider remoto ligado, ou caido. Tres
+// estados, porque os tres significam coisas diferentes para quem testa: leu o
+// modelo, leu o interpretador local por configuracao, ou leu o local porque o
+// remoto falhou. Nenhuma mensagem tecnica, nenhum alarme: e uma legenda.
+const ORIGEM_IA = {
+  [SOURCE.REMOTE]: 'Interpretação por IA',
+  [SOURCE.LOCAL]: 'Interpretação local',
+  [SOURCE.FALLBACK]: 'Interpretação local (IA indisponível)',
+}
 import { cx } from '../lib/utils'
 
 // --- Copy de concierge (humanizada, curta, elegante) -----------------------
@@ -240,6 +252,9 @@ export default function Assistant() {
   // fala da MESMA atividade.
   // -------------------------------------------------------------------------
   const [retomando, setRetomando] = useState(true)
+  // De onde veio a ultima interpretacao (CP6.4). Comeca nulo: antes do primeiro
+  // turno nao ha o que afirmar, e afirmar sem saber e o que se quer evitar aqui.
+  const [origemIA, setOrigemIA] = useState(null)
   useEffect(() => {
     let vivo = true
     const id = conversaAberta({ workspaceId })
@@ -313,6 +328,7 @@ export default function Assistant() {
     setBusy(true)
     try {
       const res = await agentKernel.assistant.ask({ text: content, identity, categories, conversationId: convRef.current })
+      if (res?.interpretation_source) setOrigemIA(res.interpretation_source)
       handleOutcome(res)
     } catch (err) {
       push({ role: 'assistant', text: 'Ops, tive um problema para processar. Pode tentar de novo?' })
@@ -365,7 +381,7 @@ export default function Assistant() {
         <div className="min-w-0">
           <h1 className="text-display">Copiloto</h1>
           <p className="text-caption mt-1">
-            Interpretação local · {workspace?.name || 'Pessoal'}
+            {ORIGEM_IA[origemIA] || ORIGEM_IA.local} · {workspace?.name || 'Pessoal'}
           </p>
         </div>
         {messages.length > 0 && (
