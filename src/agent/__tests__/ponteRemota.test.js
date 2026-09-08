@@ -18,6 +18,9 @@ import { createAgentRuntime } from '../agentRuntime'
 import { createAssistant } from '../assistant'
 import { createEventBus } from '../eventBus'
 import { applyPatch } from '../slots'
+import { resolveTemporal } from '../nlu/temporal'
+import { interpretLocal } from '../nlu/localNlu'
+import { buildSystemPrompt } from '../../../supabase/functions/_shared/prompt.js'
 
 // ---------------------------------------------------------------------------
 // A PONTE (CP6.4) — do Copiloto ate a Interpretation v1 remota e de volta.
@@ -405,5 +408,127 @@ describe('segurança: nada de chave no cliente', () => {
     await pm.interpret('marca reuniao amanha', CONTEXTO)
     const enviado = JSON.stringify(edgeInvoke.mock.calls[0][1])
     expect(enviado).not.toMatch(/api[_-]?key|authorization|bearer|secret/i)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// CP6.4.2 — "9h" e 09:00, e quem decide isso e a camada deterministica.
+//
+// O QA real de "Marca uma reunião amanhã às 9h" voltou com
+// `ambiguities: ["horario"]`, e o slot-filling perguntou "09:00 da manhã ou
+// 21:00 da noite?" — fazendo exatamente o que lhe foi dito. A instrucao errada
+// era nossa: a regra 2 do prompt dizia "hora sem periodo e ambigua", e `9h` nao
+// tem periodo.
+//
+// Nenhum teste aqui afirma que o Gemini vai obedecer a regra corrigida. O que
+// eles guardam e que, se ele desobedecer, a bandeira cai do nosso lado.
+// ---------------------------------------------------------------------------
+
+const NOTACAO = [
+  ['Marca uma reunião amanhã às 9h', '09:00', false],
+  ['reuniao as 09h', '09:00', false],
+  ['reuniao as 21h', '21:00', false],
+  ['reuniao as 9 da manha', '09:00', false],
+  ['reuniao as 9 da noite', '21:00', false],
+  ['reuniao as 9:00', '09:00', false],
+  ['reuniao as 15', '15:00', false],
+  ['reuniao as 9', '09:00', true],   // hora NUA de 1 a 11 sem periodo: ambigua de verdade
+]
+
+describe('a notação brasileira de horas (CP6.4.2)', () => {
+  it('a camada determinística já sabe o que é ambíguo — e o que não é', () => {
+    for (const [texto, hora, ambiguo] of NOTACAO) {
+      const r = resolveTemporal(texto, { today: '2026-09-08', now: '10:00' })
+      expect(r.time, texto).toBe(hora)
+      expect(r.timeAmbiguous, texto).toBe(ambiguo)
+    }
+  })
+
+  it('a regra 2 do prompt diz a notação, não "hora sem período"', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toMatch(/"9h".*"21h"/)
+    expect(prompt).toMatch(/NAO sao ambiguos/)
+    expect(prompt).toMatch(/NUA/)
+    // A redacao que causou o defeito nao pode voltar.
+    expect(prompt).not.toContain('Hora sem periodo ("as 8") e ambigua')
+  })
+
+  it('remoto marcou "horario" em "9h": a bandeira cai, e o descarte fica registrado', async () => {
+    const { pm } = remoto(v1({
+      patch: { title: 'Reunião', date: '2026-09-09', start_time: '09:00' },
+      ambiguities: ['horario'],
+    }))
+    const r = await pm.interpret('Marca uma reunião amanhã às 9h', CONTEXTO)
+    expect(r.ambiguities).toEqual([])
+    expect(r.data.start_time).toBe('09:00')
+    expect(r.notes.join(' ')).toMatch(/ambiguidade "horario" descartada/)
+  })
+
+  it('em "às 9" a ambiguidade é real e PERMANECE', async () => {
+    const { pm } = remoto(v1({
+      patch: { title: 'Reunião', date: '2026-09-09', start_time: '09:00' },
+      ambiguities: ['horario'],
+    }))
+    const r = await pm.interpret('Marca uma reunião amanhã às 9', CONTEXTO)
+    expect(r.ambiguities).toEqual(['horario'])
+    expect(r.notes.join(' ')).not.toMatch(/descartada/)
+  })
+
+  it('as outras ambiguidades passam intactas', async () => {
+    const { pm } = remoto(v1({
+      patch: { title: 'Reunião', start_time: '09:00' },
+      ambiguities: ['data', 'horario'],
+    }))
+    const r = await pm.interpret('Marca uma reunião às 9h', CONTEXTO)
+    expect(r.ambiguities).toEqual(['data'])
+  })
+
+  it('sem hora no patch não há o que conferir — a bandeira permanece', async () => {
+    const { pm } = remoto(v1({ patch: { title: 'Reunião' }, ambiguities: ['horario'] }))
+    const r = await pm.interpret('Marca uma reunião amanhã às 9h', CONTEXTO)
+    expect(r.ambiguities).toEqual(['horario'])
+  })
+
+  it('hora local diferente da remota: não mexemos — as camadas discordam', async () => {
+    // Discordancia nao e licenca para escolher: quem sinalizou ambiguidade
+    // continua sinalizando, e o slot-filling pergunta.
+    const { pm } = remoto(v1({
+      patch: { title: 'Reunião', start_time: '21:00' },
+      ambiguities: ['horario'],
+    }))
+    const r = await pm.interpret('Marca uma reunião amanhã às 9h', CONTEXTO)
+    expect(r.ambiguities).toEqual(['horario'])
+  })
+
+  it('fim a fim: "amanhã às 9h" vira proposta de 09:00, sem perguntar manhã ou noite', async () => {
+    const { assistant } = montarConversa([v1({
+      patch: { title: 'Reunião', date: '2026-09-09', start_time: '09:00' },
+      ambiguities: ['horario'],
+    })])
+    const r = await assistant.ask({
+      text: 'Marca uma reunião amanhã às 9h', identity: IDENTITY, categories: CATEGORIAS,
+    })
+    expect(r.kind).toBe('proposal')
+    expect(r.proposal.payload.start_time).toBe('09:00')
+    expect(JSON.stringify(r)).not.toMatch(/da manhã ou/)
+  })
+
+  it('fim a fim: "amanhã às 9" AINDA pergunta — o caso legítimo continua vivo', async () => {
+    const { assistant } = montarConversa([v1({
+      patch: { title: 'Reunião', date: '2026-09-09', start_time: '09:00' },
+      ambiguities: ['horario'],
+    })])
+    const r = await assistant.ask({
+      text: 'Marca uma reunião amanhã às 9', identity: IDENTITY, categories: CATEGORIAS,
+    })
+    expect(r.kind).toBe('clarification')
+    expect(r.message).toMatch(/da manhã ou/)
+  })
+
+  it('o caminho local continua intocado', () => {
+    const local = interpretLocal('Marca uma reunião amanhã às 9h', { today: '2026-09-08', now: '10:00', categories: [] })
+    expect(local.data.start_time).toBe('09:00')
+    expect(local.data.time_ambiguous).toBeFalsy()
+    expect(local.ambiguities || []).not.toContain('horario')
   })
 })

@@ -41,6 +41,7 @@ import { mockInterpret } from './providers/mockProvider'
 import { buildInterpreterInput } from './contracts/input'
 import { parseInterpretation, TURN_KIND } from './contracts/interpretation'
 import { normalizeInterpretation } from './contracts/normalizeInterpretation'
+import { resolveTemporal } from './nlu/temporal'
 
 const MAX_TEXT = 1000 // defesa em profundidade; a Edge tambem limita
 
@@ -52,11 +53,47 @@ export const SOURCE = {
   FALLBACK: 'remote_fallback',
 }
 
+// ---------------------------------------------------------------------------
+// QUEM DECIDE SE A NOTACAO E AMBIGUA E A CAMADA DETERMINISTICA (CP6.4.2).
+//
+// O QA real de "Marca uma reunião amanhã às 9h" recebeu de volta
+// `ambiguities: ["horario"]`, e o slot-filling — fazendo o seu trabalho —
+// perguntou "09:00 da manhã ou 21:00 da noite?". Em portugues, `9h` E 09:00:
+// "h" e notacao de 24 horas, e quem quer 21:00 escreve 21h.
+//
+// A regra do prompt foi corrigida, mas prompt e pedido, nao garantia. E a
+// resposta certa ja existe do nosso lado: `resolveTemporal` resolve `9h`,
+// `09h`, `21h`, `9:00`, `9 da manha` e `9 da noite` sem ambiguidade nenhuma, e
+// levanta a bandeira exatamente onde ela cabe — a hora NUA de 1 a 11 sem
+// periodo ("as 9").
+//
+// Entao a divisao que o `assistant.js` declara no cabecalho vale tambem aqui:
+// SEMANTICO e do provider, DETERMINISTICO e nosso. Se o modelo disser que a
+// hora e ambigua e a camada temporal resolver a MESMA hora com seguranca, a
+// bandeira cai — e o descarte fica registrado em `notes`, porque uma decisao
+// silenciosa e uma decisao que ninguem audita.
+//
+// Nenhum padrao temporal novo nasce aqui: isto CHAMA o que ja existe e ja e
+// testado. As outras ambiguidades passam intactas — a regra e so sobre horario.
+// ---------------------------------------------------------------------------
+function conferirAmbiguidadeDeHorario(ambiguities = [], { text, context, patch, notes }) {
+  if (!ambiguities.includes('horario')) return ambiguities
+
+  const hora = patch?.start_time
+  if (!hora) return ambiguities   // sem hora resolvida, nao ha o que conferir
+
+  const local = resolveTemporal(text, { today: context.today, now: context.now })
+  if (local.timeAmbiguous || local.time !== hora) return ambiguities
+
+  notes.push(`ambiguidade "horario" descartada: ${hora} e inequivoco no texto`)
+  return ambiguities.filter((a) => a !== 'horario')
+}
+
 // O runtime de hoje consome `{ intent, confidence, data, ... }`. A
 // Interpretation v1 e mais rica. A traducao acontece AQUI, num lugar so — uma
 // conversao ad hoc em cada chamador seria a forma mais rapida de fazer os dois
 // formatos divergirem em silencio.
-function paraORuntime(interp, { patch, requires, notes }, source) {
+function paraORuntime(interp, { patch, requires, notes }, source, ambiguities = interp.ambiguities) {
   // `intent` pode vir null num turno que o modelo classificou como criacao
   // (o contrato permite: `turn_kind` e a classificacao, `intent` e a acao).
   // O runtime precisa de uma intencao para achar a tool, entao deduz-se a
@@ -72,7 +109,7 @@ function paraORuntime(interp, { patch, requires, notes }, source) {
     confidence: interp.confidence,
     needs_clarification: interp.needs_clarification,
     clarification: interp.clarification,
-    ambiguities: interp.ambiguities,
+    ambiguities,
     data: patch,
     // --- o que o contrato v1 acrescenta, para quem souber usar ---
     turn_kind: interp.turn_kind,
@@ -138,7 +175,13 @@ export function createProviderManager({ flags = featureFlags, edgeInvoke } = {})
         categories: context.categories || [],
         draft,
       })
-      return paraORuntime(interp, normal, SOURCE.REMOTE)
+      const ambiguities = conferirAmbiguidadeDeHorario(interp.ambiguities, {
+        text: clean,
+        context,
+        patch: normal.patch,
+        notes: normal.notes,
+      })
+      return paraORuntime(interp, normal, SOURCE.REMOTE, ambiguities)
     } catch (err) {
       // FALLBACK VISIVEL. A conversa continua — a captura nunca se perde — mas
       // o turno sai CARIMBADO como fallback, e a causa vai junto de forma

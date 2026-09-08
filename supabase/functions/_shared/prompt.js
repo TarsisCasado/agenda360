@@ -53,7 +53,7 @@ patch — TODOS estes campos sao obrigatorios. Preencha o que a frase afirma e p
 
 REGRAS:
 1. NUNCA invente data ou horario. Se a frase nao disser, ponha o campo em null e use needs_clarification:true com uma pergunta curta em "clarification".
-2. Hora sem periodo ("as 8") e ambigua: acrescente "horario" em "ambiguities".
+2. "9h", "09h", "21h", "9:00", "9 da manha" e "9 da noite" NAO sao ambiguos: "h" e notacao de 24 horas, e o periodo do dia resolve o resto ("9 da noite" = 21:00). SO a hora NUA de 1 a 11, sem "h" e sem periodo ("as 9"), e ambigua: nesse caso, e so nesse, acrescente "horario" em "ambiguities".
 3. Uma frase pode trazer varias informacoes de uma vez ("reuniao amanha as 8h e me avisa meia hora antes") — devolva todas.
 4. Quando a pessoa se corrige na mesma frase ("umas 8h, alias melhor 8:30"), vale a ULTIMA.
 5. Acao em massa ("apaga tudo", "cancela todas") nao se propoe: use "${TURN_KIND.UNKNOWN}".
