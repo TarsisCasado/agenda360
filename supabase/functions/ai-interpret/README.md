@@ -36,7 +36,7 @@ literais (prioridades e status) espelhando `src/lib/constants.js`, vigiadas por
 `src/agent/contracts/contract.compat.test.js`: se o domínio mudar e o contrato
 não, a suíte fica vermelha.
 
-O miolo é **puro JS testável em Node** — por isso os 43 testes desta Function
+O miolo é **puro JS testável em Node** — por isso os 55 testes desta Function
 rodam na suíte normal, sem rede, sem chave e sem Deno.
 
 ## Providers
@@ -182,6 +182,42 @@ A resposta da Interactions API é uma **linha do tempo de passos**, não um
 é falha de provider — não se inventa resposta. Daí o JSON segue pelo **mesmo**
 `parseInterpretation` de sempre.
 
+### Patch tri-estado: o fio obriga, a fronteira traduz (CP6.3.7)
+
+O QA seguinte ao CP6.3.5 repetiu o defeito **byte a byte**: `patch: { title,
+url: "America/Fortaleza" }`. Descrição não bastou — e a razão é estrutural, não
+de redação: **nenhum campo do patch era obrigatório**, então `{ title, url }`
+*satisfazia o esquema*. Omitir `start_time` e `alert_minutes_before` era uma
+resposta válida. Descrição orienta; `required` obriga.
+
+Agora todo campo é obrigatório e aceita `null`, na forma documentada de JSON
+Schema (`type: ["string","null"]` — `nullable` é OpenAPI, e nesta rota era
+apenas ignorado). Isso cria uma colisão que precisa de resposta: se "ausente"
+deixa de existir, `null` não pode significar ao mesmo tempo "não falei disso" e
+"apaga isso". Então o fio tem uma regra só, e a fronteira traduz:
+
+| fio (provider) | contrato (domínio) |
+|---|---|
+| `null` | campo **ausente** — não alterar |
+| valor | valor — definir |
+| nome em `clear` | **`null`** — apagar |
+
+`clear` é detalhe de protocolo: é traduzido em `parseInterpretation` e **nunca
+sobrevive ao contrato**. Quem consome continua vendo os mesmos três estados de
+sempre, e o **contrato público Interpretation v1 não mudou**.
+
+O enum de `clear` é **derivado** de `PATCH_FIELDS` (`CLEARABLE_FIELD_NAMES`), não
+escrito à mão: se um campo ganhar ou perder `nullable`, os dois lados se movem
+juntos, e um teste de paridade guarda o resto.
+
+`additionalProperties: false` fecha o saco contra campo inventado. E `wire` é
+**opt-in**: o adaptador local não fala este protocolo, e para ele `null` continua
+apagando — consertar o provider não pode mudar a semântica do domínio.
+
+Custo a observar no QA: com 18 chaves obrigatórias por turno, a saída sai de ~26
+tokens para algumas centenas. `max_output_tokens: 1024` cobre, mas passou a ser
+um número que importa.
+
 ### Descrições no esquema (CP6.3.5)
 
 O QA real de 07/09/2026 devolveu **200, em 2.290 ms, no contrato** — e mesmo
@@ -304,7 +340,7 @@ texto da captura, os valores do patch, chaves, nem dado pessoal.
 npx vitest run supabase/functions/ai-interpret/interpret.test.js
 ```
 
-43 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
+55 testes, **sem internet e sem chave** — todo HTTP é mockado. Provam o que
 pedimos ao provider e como recebemos cada forma de resposta ruim.
 
 Contra a API real (exige chave, **não faça em CI**):

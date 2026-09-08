@@ -114,7 +114,11 @@ export async function interpretTurn({ body, provider, log = () => {} }) {
 
   // A MESMA fronteira do front, no mesmo arquivo de contrato. Um provider que
   // respondeu 200 nao e um provider em quem se confia.
-  const interp = parseInterpretation(resultado?.raw, { provider: provider.id })
+  //
+  // `wire: true` porque o esquema que mandamos ao provider exige todo campo e
+  // aceita `null` como "a frase nao falou disso" — a fronteira traduz isso de
+  // volta para os tres estados do dominio. Ver contract.js.
+  const interp = parseInterpretation(resultado?.raw, { provider: provider.id, wire: true })
 
   const inutil = interp.turn_kind === 'unknown' && Object.keys(interp.patch).length === 0
   const outcome = inutil ? OUTCOME.INVALID : OUTCOME.OK

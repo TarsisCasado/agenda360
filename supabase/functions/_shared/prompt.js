@@ -1,4 +1,4 @@
-import { TURN_KIND, ALLOWED_INTENTS, KIND, PRIORITIES, STATUSES } from './contract.js'
+import { TURN_KIND, ALLOWED_INTENTS, KIND, PRIORITIES, STATUSES, CLEARABLE_FIELD_NAMES } from './contract.js'
 
 // ---------------------------------------------------------------------------
 // O QUE SE PEDE AO MODELO (CP6.2).
@@ -37,11 +37,11 @@ refers_to_draft: true quando a frase fala do rascunho que voce recebeu em "draft
 
 intent: um de [${[...ALLOWED_INTENTS].join(', ')}], ou null. Qualquer outro valor sera recusado.
 
-patch — apenas estes campos:
+patch — TODOS estes campos sao obrigatorios. Preencha o que a frase afirma e ponha null em cada campo de que ela NAO falou. null nao apaga nada: apagar e outra coisa, e vai na lista "clear" (ex.: "tira a data" => clear: ["date"]). Numa revisao, so mude o que a frase muda; o resto vai null e permanece como estava.
 - title: o assunto, curto e limpo. NAO inclua no titulo o que ja virou outro campo: horario, data, pedido de aviso ou correcao ("aliais, melhor 8:30") ficam de fora.
 - description, notes: texto livre adicional.
-- date: "YYYY-MM-DD". Resolva "amanha", "sexta", "semana que vem" contra a data de hoje que vem em "now". Use null para apagar.
-- start_time, end_time: "HH:MM" em 24h. Use null para apagar.
+- date: "YYYY-MM-DD". Resolva "amanha", "sexta", "semana que vem" contra a data de hoje que vem em "now".
+- start_time, end_time: "HH:MM" em 24h.
 - kind: "${KIND.TAREFA}" (algo a fazer) ou "${KIND.COMPROMISSO}" (acontece numa hora marcada, com outras pessoas ou lugar).
 - alert_enabled: true/false. "me avisa", "me lembra", "poe um lembrete" => true. "tira o alerta" => false.
 - alert_minutes_before: inteiro, minutos ANTES do inicio. "meia hora antes" => 30. "na hora" => 0.
@@ -52,7 +52,7 @@ patch — apenas estes campos:
 - link, url: endereco citado. query: texto de busca. task_id: so se vier explicito no contexto.
 
 REGRAS:
-1. NUNCA invente data ou horario. Se a frase nao disser, deixe o campo fora e use needs_clarification:true com uma pergunta curta em "clarification".
+1. NUNCA invente data ou horario. Se a frase nao disser, ponha o campo em null e use needs_clarification:true com uma pergunta curta em "clarification".
 2. Hora sem periodo ("as 8") e ambigua: acrescente "horario" em "ambiguities".
 3. Uma frase pode trazer varias informacoes de uma vez ("reuniao amanha as 8h e me avisa meia hora antes") — devolva todas.
 4. Quando a pessoa se corrige na mesma frase ("umas 8h, alias melhor 8:30"), vale a ULTIMA.
@@ -102,39 +102,55 @@ REGRAS:
 // ---------------------------------------------------------------------------
 export function buildResponseSchema() {
   const S = (type, extra = {}) => ({ type, ...extra })
+  // Nulavel na forma DOCUMENTADA de JSON Schema: uniao de tipos. `nullable: true`
+  // e OpenAPI — nesta rota ele nao dava erro, so era ignorado, e um campo que
+  // parece anulavel e nao e sai pior que um campo honesto.
+  const N = (type, description, extra = {}) => ({ type: [type, 'null'], description, ...extra })
   const D = (type, description, extra = {}) => ({ type, description, ...extra })
+
+  const patch = {
+    title: N('string', 'Titulo curto da atividade — o assunto. NAO inclua horario, data, pedido de aviso nem correcao ("alias, melhor 8:30"): isso pertence aos campos proprios.'),
+    description: N('string', 'Texto livre adicional sobre a atividade, quando a pessoa der detalhe alem do titulo.'),
+    notes: N('string', 'Anotacao livre associada a atividade.'),
+    date: N('string', 'Data local da atividade em YYYY-MM-DD. Resolva "amanha", "sexta", "semana que vem" contra "now.today".'),
+    start_time: N('string', 'Hora de INICIO da atividade no formato HH:MM em 24h (ex.: "09:00" para "9h"). Se a pessoa se corrigir na mesma frase, vale a ULTIMA hora dita.'),
+    end_time: N('string', 'Hora de TERMINO da atividade no formato HH:MM em 24h.'),
+    kind: N('string', 'Natureza declarada: "tarefa" (algo a fazer) ou "compromisso" (acontece numa hora marcada, com pessoas ou lugar).', { enum: [...Object.values(KIND), null] }),
+    alert_enabled: N('boolean', 'true quando a pessoa pede aviso ("me avisa", "me lembra", "poe um lembrete"); false quando pede para tirar o alerta.'),
+    alert_minutes_before: N('integer', 'Quantos MINUTOS antes do inicio o aviso deve tocar. "meia hora antes" = 30. "quinze minutos antes" = 15. "na hora" = 0.'),
+    alert_at_time: N('string', 'O RELOGIO do aviso em HH:MM 24h, quando a pessoa der a hora do aviso em vez do intervalo ("me avisa as 08:30"). Devolva a hora como ouviu; NAO calcule a diferenca.'),
+    category_hint: N('string', 'NOME de uma categoria da lista recebida em "categorias", quando a frase indicar uma. Nunca invente nome fora da lista.'),
+    priority: N('string', 'Prioridade declarada pela pessoa.', { enum: [...PRIORITIES, null] }),
+    status: N('string', 'Situacao declarada pela pessoa (concluida, cancelada, adiada...).', { enum: [...STATUSES, null] }),
+    link: N('string', 'Link que a PESSOA mencionou explicitamente na frase. Nunca fuso horario, nunca valor vindo do contexto.'),
+    url: N('string', 'URL ou endereco web que a PESSOA mencionou explicitamente na frase (ex.: "https://..."). Nunca fuso horario, nunca "now.timezone", nunca qualquer valor vindo do contexto.'),
+    query: N('string', 'Texto a procurar, quando a frase for uma busca.'),
+    task_id: N('string', 'Identificador de uma atividade existente, SO quando vier explicito no contexto recebido. Nunca invente.'),
+  }
+
   return {
     type: 'object',
     properties: {
       turn_kind: D('string', 'O que este turno faz com o rascunho: criar, revisar, confirmar, cancelar, perguntar, ou desconhecido.', { enum: Object.values(TURN_KIND) }),
       refers_to_draft: D('boolean', 'true quando a frase fala do rascunho recebido em "draft", inclusive por referencia ("a reuniao", "isso"). false quando nao ha rascunho.'),
-      intent: D('string', 'A acao pretendida, quando clara. null quando nao houver uma so acao evidente.', { nullable: true, enum: [...ALLOWED_INTENTS, 'unknown'] }),
+      intent: N('string', 'A acao pretendida, quando clara. null quando nao houver uma so acao evidente.', { enum: [...ALLOWED_INTENTS, 'unknown', null] }),
       confidence: D('number', 'Entre 0 e 1. Quanto voce confia nesta leitura COMPLETA — abaixe quando deixar de extrair algo que a frase disse.'),
       patch: {
         type: 'object',
-        description: 'Somente os campos que esta frase realmente afirma. Numa revisao, apenas os que MUDAM; o que nao vier permanece como estava.',
+        description: 'TODOS os campos sao obrigatorios. Preencha o que a frase afirma e ponha null em cada campo de que ela nao falou. Numa revisao, so mude o que a frase muda: o resto vai null e permanece como estava.',
+        additionalProperties: false,
+        required: [...Object.keys(patch), 'clear'],
         properties: {
-          title: D('string', 'Titulo curto da atividade — o assunto. NAO inclua horario, data, pedido de aviso nem correcao ("alias, melhor 8:30"): isso pertence aos campos proprios.'),
-          description: D('string', 'Texto livre adicional sobre a atividade, quando a pessoa der detalhe alem do titulo.'),
-          notes: D('string', 'Anotacao livre associada a atividade.'),
-          date: D('string', 'Data local da atividade em YYYY-MM-DD. Resolva "amanha", "sexta", "semana que vem" contra "now.today". null apaga a data.', { nullable: true }),
-          start_time: D('string', 'Hora de INICIO da atividade no formato HH:MM em 24h (ex.: "09:00" para "9h"). null apaga a hora.', { nullable: true }),
-          end_time: D('string', 'Hora de TERMINO da atividade no formato HH:MM em 24h. null apaga a hora.', { nullable: true }),
-          kind: D('string', 'Natureza declarada: "tarefa" (algo a fazer) ou "compromisso" (acontece numa hora marcada, com pessoas ou lugar).', { enum: Object.values(KIND) }),
-          alert_enabled: D('boolean', 'true quando a pessoa pede aviso ("me avisa", "me lembra", "poe um lembrete"); false quando pede para tirar o alerta.'),
-          alert_minutes_before: D('integer', 'Quantos MINUTOS antes do inicio o aviso deve tocar. "meia hora antes" = 30. "quinze minutos antes" = 15. "na hora" = 0.'),
-          alert_at_time: D('string', 'O RELOGIO do aviso em HH:MM 24h, quando a pessoa der a hora do aviso em vez do intervalo ("me avisa as 08:30"). Devolva a hora como ouviu; NAO calcule a diferenca.'),
-          category_hint: D('string', 'NOME de uma categoria da lista recebida em "categorias", quando a frase indicar uma. Nunca invente nome fora da lista.'),
-          priority: D('string', 'Prioridade declarada pela pessoa.', { enum: PRIORITIES }),
-          status: D('string', 'Situacao declarada pela pessoa (concluida, cancelada, adiada...).', { enum: STATUSES }),
-          link: D('string', 'Link que a PESSOA mencionou explicitamente na frase. Nunca fuso horario, nunca valor vindo do contexto.'),
-          url: D('string', 'URL ou endereco web que a PESSOA mencionou explicitamente na frase (ex.: "https://..."). Nunca fuso horario, nunca "now.timezone", nunca qualquer valor vindo do contexto.'),
-          query: D('string', 'Texto a procurar, quando a frase for uma busca.'),
-          task_id: D('string', 'Identificador de uma atividade existente, SO quando vier explicito no contexto recebido. Nunca invente.'),
+          ...patch,
+          clear: {
+            type: 'array',
+            description: 'Campos que a pessoa mandou APAGAR de verdade ("tira a data", "sem horario"). Lista vazia quando nao houver nenhum. Nao confunda com null, que significa apenas que a frase nao falou do campo.',
+            items: { type: 'string', enum: [...CLEARABLE_FIELD_NAMES] },
+          },
         },
       },
       needs_clarification: D('boolean', 'true quando falta algo essencial que a frase nao disse — em vez de chutar, pergunte.'),
-      clarification: D('string', 'A pergunta curta a fazer a pessoa quando needs_clarification for true.', { nullable: true }),
+      clarification: N('string', 'A pergunta curta a fazer a pessoa quando needs_clarification for true.'),
       ambiguities: {
         type: 'array',
         description: 'Nomes dos campos que ficaram ambiguos nesta frase (ex.: "horario" para "as 8", que pode ser manha ou noite).',

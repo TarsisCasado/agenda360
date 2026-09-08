@@ -6,7 +6,7 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS, INTERACTIONS_URL, extrairModelOutput,
 } from '../_shared/providers.js'
 import { buildSystemPrompt, buildResponseSchema } from '../_shared/prompt.js'
-import { PATCH_FIELD_NAMES } from '../_shared/contract.js'
+import { PATCH_FIELD_NAMES, CLEARABLE_FIELD_NAMES, parseInterpretation } from '../_shared/contract.js'
 
 // ---------------------------------------------------------------------------
 // AI-INTERPRET v2 — provado SEM internet e SEM chave (CP6.2).
@@ -525,7 +525,7 @@ describe('o esquema diz o que cada campo é (CP6.3.5)', () => {
     // Paridade nos dois sentidos: campo no contrato sem slot no esquema nunca
     // seria gerado; slot no esquema sem campo no contrato seria descartado na
     // fronteira depois de ter custado tokens.
-    expect(Object.keys(patch).sort()).toEqual([...PATCH_FIELD_NAMES].sort())
+    expect(Object.keys(patch).filter((n) => n !== 'clear').sort()).toEqual([...PATCH_FIELD_NAMES].sort())
   })
 
   it('a ordem de declaração espelha a ordem do system prompt', () => {
@@ -533,8 +533,8 @@ describe('o esquema diz o que cada campo é (CP6.3.5)', () => {
     // ordem; hoje isso e verdade, e sem este teste continuaria verdade por
     // acaso. Vale como reforco de ordenacao — NAO resolve semantica.
     const prompt = buildSystemPrompt()
-    const lista = prompt.slice(prompt.indexOf('patch — apenas estes campos'), prompt.indexOf('REGRAS:'))
-    const posicoes = Object.keys(patch).map((n) => {
+    const lista = prompt.slice(prompt.indexOf('- title:'), prompt.indexOf('REGRAS:'))
+    const posicoes = Object.keys(patch).filter((n) => n !== 'clear').map((n) => {
       const i = lista.search(new RegExp(`\\b${n}\\b`))
       expect(i, `${n} não aparece na lista de campos do prompt`).toBeGreaterThan(-1)
       return i
@@ -559,5 +559,121 @@ describe('o esquema diz o que cada campo é (CP6.3.5)', () => {
     const enviado = JSON.parse(fetchImpl.mock.calls[0][1].body).response_format.schema
     expect(enviado.properties.patch.properties.url.description).toMatch(/timezone|fuso/i)
     expect(enviado.properties.patch.properties.start_time.description).toContain('HH:MM')
+  })
+})
+
+describe('patch tri-estado: o fio obriga, a fronteira traduz (CP6.3.7)', () => {
+  // O defeito real do QA nao era falta de descricao: era que `{ title, url }`
+  // SATISFAZIA o esquema. Nenhum campo era obrigatorio, entao omitir
+  // `start_time` e `alert_minutes_before` era uma resposta valida.
+  //
+  // Agora todo campo e obrigatorio e aceita null — e isso cria uma colisao que
+  // precisa de resposta: se "ausente" deixa de existir, `null` nao pode
+  // significar ao mesmo tempo "nao falei disso" e "apaga isso". No fio, null e
+  // so o primeiro; apagar vai numa lista propria.
+  //
+  // NENHUM teste aqui afirma que o Gemini vai entender a frase. Isso e QA real.
+  const schema = buildResponseSchema()
+  const patch = schema.properties.patch
+  const wire = (p) => parseInterpretation({ turn_kind: 'create', confidence: 0.9, patch: p }, { provider: 'gemini', wire: true })
+
+  it('todo campo do patch é obrigatório, e `clear` também', () => {
+    expect([...patch.required].sort()).toEqual([...PATCH_FIELD_NAMES, 'clear'].sort())
+    expect(patch.additionalProperties).toBe(false)
+  })
+
+  it('a nulabilidade é a documentada — união de tipos, nunca `nullable`', () => {
+    expect(JSON.stringify(schema)).not.toContain('nullable')
+    for (const nome of PATCH_FIELD_NAMES) {
+      expect(patch.properties[nome].type, nome).toEqual([expect.any(String), 'null'])
+    }
+    expect(patch.properties.alert_minutes_before.type).toEqual(['integer', 'null'])
+    expect(patch.properties.alert_enabled.type).toEqual(['boolean', 'null'])
+  })
+
+  it('o enum de `clear` é DERIVADO do contrato, não escrito à mão', () => {
+    // Se um campo ganhar ou perder `nullable` no contrato, os dois lados se
+    // movem juntos — e este teste e o que garante que ninguem esqueceu um.
+    expect(patch.properties.clear.items.enum).toEqual([...CLEARABLE_FIELD_NAMES])
+    expect(CLEARABLE_FIELD_NAMES.length).toBeGreaterThan(0)
+    for (const nome of CLEARABLE_FIELD_NAMES) expect(PATCH_FIELD_NAMES).toContain(nome)
+  })
+
+  it('patch todo null vira patch canônico VAZIO — nada alterado, nada apagado', () => {
+    const cheio = Object.fromEntries(PATCH_FIELD_NAMES.map((n) => [n, null]))
+    const { payload } = { payload: wire({ ...cheio, clear: [] }) }
+    expect(payload.patch).toEqual({})
+    expect(payload.rejected).toEqual([])
+  })
+
+  it('valor entre nulls: só o valor sobrevive', () => {
+    const cheio = Object.fromEntries(PATCH_FIELD_NAMES.map((n) => [n, null]))
+    const r = wire({ ...cheio, start_time: '08:30', alert_minutes_before: 30, clear: [] })
+    expect(r.patch).toEqual({ start_time: '08:30', alert_minutes_before: 30 })
+  })
+
+  it('`clear` vira o null canônico — o apagamento continua exprimível', () => {
+    const r = wire({ title: 'Reunião', date: null, start_time: null, clear: ['date'] })
+    expect(r.patch.date).toBeNull()
+    expect('date' in r.patch).toBe(true)          // apagar e diferente de nao mencionar
+    expect('start_time' in r.patch).toBe(false)   // este a frase nao mencionou
+    expect(r.patch.title).toBe('Reunião')
+  })
+
+  it('`clear` nunca escapa para o contrato canônico', () => {
+    const r = wire({ title: 'X', clear: ['date'] })
+    expect(r.patch.clear).toBeUndefined()
+    expect(JSON.stringify(r)).not.toContain('"clear"')
+  })
+
+  it('nome inválido em `clear` é descartado e REGISTRADO', () => {
+    // Observabilidade de fronteira, nao estado novo do Copiloto: o turno segue.
+    const r = wire({ title: 'X', clear: ['title', 'drop_table', 42] })
+    expect(r.patch.title).toBe('X')
+    expect(r.patch.drop_table).toBeUndefined()
+    expect(r.rejected.filter((x) => x.field === 'patch.clear')).toHaveLength(3)
+    expect(r.turn_kind).toBe('create')
+
+    const naoLista = wire({ title: 'X', clear: 'date' })
+    expect(naoLista.rejected.some((x) => x.field === 'patch.clear')).toBe(true)
+  })
+
+  it('sem `wire`, o contrato interno não muda: null continua apagando', () => {
+    // O adaptador local nao fala este protocolo. Consertar o provider nao pode
+    // mudar a semantica do dominio.
+    const local = parseInterpretation(
+      { turn_kind: 'revise', confidence: 0.8, patch: { date: null, start_time: '09:00' } },
+      { provider: 'local' },
+    )
+    expect(local.patch.date).toBeNull()
+    expect(local.patch.start_time).toBe('09:00')
+  })
+
+  it('resposta antiga/incompleta continua sendo aceita defensivamente', () => {
+    // Um provider que ignore o esquema e mande o patch curto de antes nao pode
+    // derrubar o turno — so nao vai trazer o que nao trouxe.
+    const r = wire({ title: 'Reunião com os gerentes', url: 'America/Fortaleza' })
+    expect(r.turn_kind).toBe('create')
+    expect(r.patch.title).toBe('Reunião com os gerentes')
+    expect(r.patch.url).toBe('America/Fortaleza')   // o esquema e que passou a exigir; a fronteira nao adivinha
+    expect(r.rejected).toEqual([])
+  })
+
+  it('o esquema novo chega íntegro no corpo enviado', async () => {
+    const fetchImpl = vi.fn(async () => respostaGemini(CRIAR_OK))
+    await createGeminiAdapter({ env: ENV({ GEMINI_API_KEY: 'k' }), fetchImpl }).interpret(ENTRADA)
+    const enviado = JSON.parse(fetchImpl.mock.calls[0][1].body).response_format.schema.properties.patch
+    expect(enviado.additionalProperties).toBe(false)
+    expect(enviado.required).toContain('clear')
+    expect(enviado.required).toContain('alert_minutes_before')
+    expect(enviado.properties.start_time.type).toEqual(['string', 'null'])
+    expect(enviado.properties.clear.items.enum).toEqual([...CLEARABLE_FIELD_NAMES])
+  })
+
+  it('o prompt explica a regra do fio — senão o esquema pede uma coisa e o texto outra', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('clear')
+    expect(prompt).toMatch(/null nao apaga nada/i)
+    expect(prompt).not.toContain('Use null para apagar')
   })
 })

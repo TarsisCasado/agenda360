@@ -135,6 +135,14 @@ const PATCH_FIELDS = {
 
 export const PATCH_FIELD_NAMES = Object.freeze(Object.keys(PATCH_FIELDS))
 
+// Os campos que o dominio aceita APAGAR — derivados de `nullable` acima, nunca
+// escritos a mao. O protocolo do provider (CP6.3.7) publica esta lista como o
+// enum de `clear`; se um campo ganhar ou perder `nullable`, os dois lados se
+// movem juntos e um teste de paridade guarda o resto.
+export const CLEARABLE_FIELD_NAMES = Object.freeze(
+  Object.entries(PATCH_FIELDS).filter(([, spec]) => spec.nullable).map(([nome]) => nome),
+)
+
 function coerceField(spec, value) {
   if (value === null) return spec.nullable ? { ok: true, value: null } : { ok: false }
   switch (spec.type) {
@@ -174,7 +182,30 @@ function coerceField(spec, value) {
 // `rejected` lista o que foi descartado e por que — e o que permite testar que
 // um campo hostil foi mesmo recusado, em vez de ter passado despercebido.
 // ---------------------------------------------------------------------------
-export function parseInterpretation(raw, { provider = 'unknown' } = {}) {
+// -------------------- MODO `wire` (CP6.3.7) --------------------------------
+//
+// O esquema enviado ao provider passou a exigir TODOS os campos do patch, cada
+// um aceitando `null`. Isso resolve o defeito real medido no QA — um patch
+// `{ title, url }` satisfazia o esquema antigo, entao omitir `start_time` e
+// `alert_minutes_before` era resposta VALIDA — mas cria uma colisao: se todo
+// campo e obrigatorio, "ausente" deixa de existir, e `null` passaria a
+// significar duas coisas.
+//
+// Entao o fio tem uma regra so, e ela e diferente da do contrato:
+//
+//   FIO (provider)                        CONTRATO (dominio)
+//   null                       ------>    campo ausente   (nao alterar)
+//   valor                      ------>    valor           (definir)
+//   nome em `clear`            ------>    null            (APAGAR)
+//
+// `clear` e detalhe de protocolo: e traduzido aqui e NUNCA sobrevive ao
+// contrato. Quem consome continua vendo os mesmos tres estados de sempre.
+//
+// `wire` e opt-in de proposito. O adaptador local nao fala este protocolo, e
+// para ele `null` continua significando apagamento — mudar isso seria alterar
+// a semantica do dominio para consertar um problema que e do provider.
+// ---------------------------------------------------------------------------
+export function parseInterpretation(raw, { provider = 'unknown', wire = false } = {}) {
   const rejected = []
   const base = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
   if (base !== raw) rejected.push({ field: '(raiz)', reason: 'nao e um objeto' })
@@ -206,7 +237,17 @@ export function parseInterpretation(raw, { provider = 'unknown' } = {}) {
   if (base.patch !== undefined && base.patch !== rawPatch) {
     rejected.push({ field: 'patch', reason: 'nao e um objeto' })
   }
+  // No fio, `clear` viaja DENTRO do patch e e a unica chave que nao e campo.
+  const clear = wire && Array.isArray(rawPatch.clear) ? rawPatch.clear : null
+  if (wire && rawPatch.clear !== undefined && !clear) {
+    rejected.push({ field: 'patch.clear', reason: 'nao e uma lista' })
+  }
+
   for (const [key, value] of Object.entries(rawPatch)) {
+    if (wire && key === 'clear') continue
+    // No fio, `null` e "a frase nao falou disso" — nao e apagamento, e nao e
+    // erro. Sai calado, como sairia um campo ausente.
+    if (wire && value === null) continue
     const spec = PATCH_FIELDS[key]
     if (!spec) {
       // Campo desconhecido nao derruba o turno: some, e fica registrado.
@@ -219,6 +260,19 @@ export function parseInterpretation(raw, { provider = 'unknown' } = {}) {
       continue
     }
     patch[key] = r.value
+  }
+
+  // O apagamento chega por `clear`, depois dos valores: se o modelo mandar
+  // valor E apagamento para o mesmo campo, apagar e a instrucao mais explicita
+  // das duas — foi escrita numa lista que so serve para isso.
+  if (clear) {
+    for (const nome of clear) {
+      if (typeof nome !== 'string' || !CLEARABLE_FIELD_NAMES.includes(nome)) {
+        rejected.push({ field: 'patch.clear', reason: 'campo nao anulavel' })
+        continue
+      }
+      patch[nome] = null
+    }
   }
 
   const ambiguities = Array.isArray(base.ambiguities)
