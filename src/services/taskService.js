@@ -4,6 +4,7 @@ import { logService } from './logService'
 import { reminderService } from './reminderService'
 import { uid } from '../lib/utils'
 import { LOG_ACTIONS, STATUS, STATUS_META } from '../lib/constants'
+import { CANAL_PADRAO, validarAlerta, mudancaMexeNoAlerta } from '../lib/alertRules'
 
 // Campos da task que afetam os reminders. So sincronizamos quando o patch toca
 // um deles (edicao de titulo/descricao/etc. nao dispara reconciliacao).
@@ -16,6 +17,17 @@ const REMINDER_KEYS = new Set([
   'status',
   'assignee_id',
 ])
+
+// Erro de REGRA (nao de infraestrutura): a interface sabe converte-lo em uma
+// pergunta ("Que horas?") em vez de um "erro ao salvar" generico.
+export class AlertaInvalidoError extends Error {
+  constructor({ mensagem, motivo }) {
+    super(mensagem)
+    this.name = 'AlertaInvalidoError'
+    this.code = 'alerta_invalido'
+    this.motivo = motivo
+  }
+}
 
 // Sincroniza reminders SEM derrubar a operacao principal (task ja persistida).
 // A falha e observada (console.warn) e sinalizada ao chamador, que exibe o
@@ -50,7 +62,10 @@ const TASK_DEFAULTS = {
   link: '',
   notes: '',
   alert_enabled: false,
-  alert_type: 'in_app',
+  // CP5.8.1 — o padrao passa a ser PUSH. Era `in_app`, e o worker de entrega
+  // so leva `channel='push'`: o alerta de uma atividade criada normalmente
+  // nunca chegava a lugar nenhum. Ver lib/alertRules.js.
+  alert_type: CANAL_PADRAO,
   alert_minutes_before: 15,
   alert_sent: false,
   reschedule_count: 0,
@@ -201,6 +216,12 @@ export const taskService = {
       assignee_id: payload.assignee_id ?? userId,
     })
 
+    // A REGRA DO ALERTA vale para TODA porta de entrada — formulario, captura,
+    // Copiloto, conversao da Caixa. Falhar aqui, alto e claro, e melhor que
+    // gravar um alerta que nunca tocaria (ver lib/alertRules.js).
+    const alerta = validarAlerta(task)
+    if (!alerta.ok) throw new AlertaInvalidoError(alerta)
+
     let saved
     if (!isSupabaseConfigured) {
       saved = { id: uid(), created_at: now, updated_at: now, ...task }
@@ -236,6 +257,15 @@ export const taskService = {
     // Se o patch mexe na data, aplica a invariante sem-data -> sem-horarios.
     const { origin: _origin, ...rest } = patch
     const safePatch = normalizeTaskFields(rest)
+
+    // So validamos quando a mudanca MEXE no alerta (liga o aviso, ou tira a
+    // hora com o aviso ligado). Uma atividade antiga que ja carrega um alerta
+    // sem horario nao pode travar a edicao do titulo dela: a regra vale a
+    // partir de agora, nao retroativamente.
+    if (mudancaMexeNoAlerta(safePatch)) {
+      const alerta = validarAlerta({ ...task, ...safePatch })
+      if (!alerta.ok) throw new AlertaInvalidoError(alerta)
+    }
 
     let saved
     if (!isSupabaseConfigured) {

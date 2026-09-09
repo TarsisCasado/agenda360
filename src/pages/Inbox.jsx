@@ -3,9 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Inbox as InboxIcon, Send, Trash2, Archive, ArchiveRestore, Lightbulb,
   ListChecks, FileText, Eye, EyeOff, Plus, X, History,
-  FilePlus, Pencil, ArrowRight, Check, Sparkles, CalendarPlus, CheckCircle2,
+  FilePlus, Pencil, ArrowRight, Check, CalendarPlus, CheckCircle2,
 } from 'lucide-react'
 import { EmptyState, ErrorState } from '../components/ui/Common'
+import { Page, PageHeader } from '../components/layout/Page'
+import ViewSwitcher from '../components/ui/ViewSwitcher'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
 import TaskModal from '../components/tasks/TaskModal'
 import { useInbox } from '../hooks/useInbox'
@@ -26,7 +28,7 @@ import {
 // Filtros simples (tudo dentro da Caixa de Entrada — uma unica tela).
 const FILTERS = [
   { key: 'all', label: 'Todos', status: null },
-  { key: 'inbox', label: 'Caixa de Entrada', status: 'inbox' },
+  { key: 'inbox', label: 'Na caixa', status: 'inbox' },
   { key: 'to_think', label: 'Para pensar', status: 'to_think' },
   { key: 'archived', label: 'Arquivadas', status: 'archived' },
 ]
@@ -169,7 +171,7 @@ function NoteBody({ note, editable, onSave }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Escape') cancel() }}
-          placeholder="Titulo (opcional)"
+          placeholder="Título (opcional)"
           aria-label="Titulo da nota"
         />
         <textarea
@@ -745,64 +747,44 @@ export default function Inbox() {
   const isToThink = filter === 'to_think'
 
   return (
-    <div className="mx-auto max-w-2xl">
-      {/* Cabecalho com identidade propria (tile em gradiente da marca). */}
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm">
-          <InboxIcon size={22} />
-        </div>
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
-            Caixa de Entrada
-          </h1>
-          <p className="text-sm text-slate-500">Capture agora, organize depois.</p>
-        </div>
-      </div>
+    <Page width="content">
+      {/* CP5.7 — o titulo perdeu o azulejo em gradiente: era o unico da
+          aplicacao, e um cabecalho diferente em cada tela e justamente o que
+          faz o produto parecer montado por partes. */}
+      <PageHeader title="Caixa de entrada" subtitle="Ainda não processado" />
 
       {/* Composer PROTAGONISTA — fixo no topo mesmo com scroll. */}
-      <div className="sticky top-0 z-10 -mt-1 bg-slate-50 pb-3 pt-1 dark:bg-slate-950">
-        <div className="card p-3 shadow-sm">
-          {/* Tipo (Nota / Checklist) */}
-          <div className="mb-2 inline-flex gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
-            {[
-              { key: 'note', label: 'Nota', icon: FileText },
-              { key: 'checklist', label: 'Checklist', icon: ListChecks },
-            ].map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setComposerType(t.key)}
-                aria-pressed={composerType === t.key}
-                className={cx(
-                  'press flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
-                  composerType === t.key
-                    ? 'bg-white text-brand-600 shadow-sm dark:bg-slate-900 dark:text-brand-300'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300',
-                )}
-              >
-                <t.icon size={13} /> {t.label}
-              </button>
-            ))}
-          </div>
+      <div className="sticky top-0 z-10 -mt-1 bg-canvas pb-3 pt-1">
+        <div className="surface-line p-3">
+          <ViewSwitcher
+            value={composerType}
+            onChange={setComposerType}
+            options={[
+              { value: 'note', label: 'Nota' },
+              { value: 'checklist', label: 'Checklist' },
+            ]}
+            className="mb-2"
+          />
           <input
-            className="input mb-1 border-0 bg-transparent p-2 pb-0 text-sm font-semibold focus:ring-0"
-            placeholder="Titulo (opcional)"
+            className="field mb-1 px-2 pt-1 text-[15px] font-semibold"
+            placeholder="Título (opcional)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={onComposerKey}
-            aria-label="Titulo da nova nota"
+            aria-label="Título da nova nota"
           />
           <textarea
             ref={contentRef}
-            className="input min-h-[52px] resize-none border-0 bg-transparent p-2 pt-0 focus:ring-0"
+            className="field min-h-[52px] resize-none px-2 pb-2 text-[15px] leading-relaxed"
             placeholder={
               composerType === 'checklist'
-                ? 'Um item por linha... (Enter para salvar)'
-                : 'Capture algo... (Enter para salvar, Shift+Enter para nova linha)'
+                ? 'Um item por linha… (Enter para salvar)'
+                : 'Capture algo… (Enter salva, Shift+Enter quebra a linha)'
             }
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onComposerKey}
-            aria-label="Conteudo da nova nota"
+            aria-label="Conteúdo da nova nota"
             autoFocus
           />
           <div className="flex justify-end">
@@ -814,7 +796,7 @@ export default function Inbox() {
         </div>
       </div>
 
-      {/* Filtros simples */}
+      {/* Filtros — as mesmas pilulas do Fluxo, nao um terceiro estilo. */}
       <div className="mb-4 flex gap-1.5 overflow-x-auto no-scrollbar">
         {FILTERS.map((f) => (
           <button
@@ -822,10 +804,8 @@ export default function Inbox() {
             onClick={() => setFilter(f.key)}
             aria-pressed={filter === f.key}
             className={cx(
-              'press shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
-              filter === f.key
-                ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
-                : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800',
+              'press min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/45',
+              filter === f.key ? 'pill-on' : 'pill-off',
             )}
           >
             {f.label}
@@ -835,16 +815,16 @@ export default function Inbox() {
 
       {/* Banner criativo do "Para pensar" (espaco separado, visual distinto) */}
       {isToThink && (
-        <div className="animate-in mb-4 flex items-start gap-3.5 overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 via-fuchsia-50/60 to-amber-50/40 p-5 dark:border-violet-900/40 dark:from-violet-950/25 dark:via-fuchsia-950/15 dark:to-slate-900">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-sm">
-            <Lightbulb size={22} />
-          </div>
+        // Espaco com identidade propria, mas dentro da gramatica: superficie do
+        // sistema e um acento — nao um degrade de tres cores que nao existe em
+        // nenhuma outra tela.
+        <div className="animate-in surface mb-4 flex items-start gap-3 p-4">
+          <Lightbulb size={18} className="mt-0.5 shrink-0 text-accent" />
           <div className="min-w-0">
-            <h2 className="flex items-center gap-1.5 font-bold text-violet-700 dark:text-violet-200">
-              Para pensar <Sparkles size={14} className="text-fuchsia-400" />
-            </h2>
-            <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
-              Onde as ideias descansam ate amadurecer — projetos, negocios, viagens, sonhos. Sem pressa, sem prazo.
+            <h2 className="text-title">Para pensar</h2>
+            <p className="text-secondary-sm mt-0.5">
+              Onde as ideias descansam até amadurecer — projetos, negócios, viagens, sonhos. Sem
+              pressa, sem prazo.
             </p>
           </div>
         </div>
@@ -868,16 +848,15 @@ export default function Inbox() {
               : isToThink ? 'Mova uma nota para ca quando quiser incubar uma ideia. Sem pressa, sem prazo.'
                 : 'Capture uma ideia, um lembrete ou uma lista. Sem data, sem prioridade.'
           }
+          // Em "Para pensar" e "Arquivadas" a acao leva de volta; na Caixa
+          // vazia nao ha acao nenhuma — o campo de captura esta logo acima,
+          // aberto e com o cursor. Um botao repetindo isso seria ruido.
           action={
             isToThink || filter === 'archived' ? (
               <button onClick={() => setFilter('inbox')} className="btn-secondary press">
                 <InboxIcon size={16} /> Ir para a Caixa
               </button>
-            ) : (
-              <button onClick={() => contentRef.current?.focus()} className="btn-primary press">
-                <Send size={16} /> Capturar agora
-              </button>
-            )
+            ) : null
           }
         />
       ) : (
@@ -923,6 +902,6 @@ export default function Inbox() {
         task={editingTask}
         onClose={() => { setEditingTask(null); loadConverted() }}
       />
-    </div>
+    </Page>
   )
 }

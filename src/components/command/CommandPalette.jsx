@@ -24,14 +24,19 @@ import { STATUS_META } from '../../lib/constants'
 import { formatShort } from '../../lib/date'
 import { cx, sanitizeUrl } from '../../lib/utils'
 
+// Os recortes continuam buscaveis pelo nome que o usuario conhece — so que
+// levam a visao dentro da tela, nao a um destino separado (CP5.2).
 const NAV = [
   { id: 'nav-hoje', label: 'Hoje', icon: Sun, to: '/' },
-  { id: 'nav-caixa', label: 'Caixa de Entrada', icon: Inbox, to: '/caixa' },
   { id: 'nav-dia', label: 'Agenda do dia', icon: CalendarDays, to: '/dia' },
-  { id: 'nav-semana', label: 'Kanban semanal', icon: KanbanSquare, to: '/semana' },
-  { id: 'nav-mes', label: 'Calendario', icon: Calendar, to: '/mes' },
+  { id: 'nav-semana-agenda', label: 'Agenda da semana', icon: CalendarDays, to: '/dia?visao=semana' },
+  { id: 'nav-mes', label: 'Calendario do mes', icon: Calendar, to: '/dia?visao=mes' },
+  { id: 'nav-tarefas', label: 'Tarefas', icon: KanbanSquare, to: '/tarefas' },
+  { id: 'nav-semana', label: 'Tarefas da semana (kanban)', icon: KanbanSquare, to: '/tarefas?visao=semana' },
+  { id: 'nav-ideias', label: 'Ideias', icon: Sparkles, to: '/ideias' },
+  { id: 'nav-ia', label: 'Copiloto', icon: Sparkles, to: '/assistente' },
+  { id: 'nav-caixa', label: 'Caixa de Entrada', icon: Inbox, to: '/caixa' },
   { id: 'nav-links', label: 'Central de links', icon: Link2, to: '/links' },
-  { id: 'nav-ia', label: 'Assistente IA', icon: Sparkles, to: '/assistente' },
   { id: 'nav-rel', label: 'Relatorios', icon: BarChart3, to: '/relatorios' },
   { id: 'nav-cfg', label: 'Configuracoes', icon: SettingsIcon, to: '/config' },
 ]

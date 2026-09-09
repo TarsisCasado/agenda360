@@ -6,18 +6,15 @@ export function Skeleton({ className }) {
   return <div className={cx('skeleton', className)} />
 }
 
-// Esqueleto de um card de tarefa (usado nas listas enquanto carrega).
+// Esqueleto de uma LINHA de tarefa — espelha o layout real (circulo + titulo
+// + meta), entao a lista nao "pula" quando os dados chegam.
 export function TaskCardSkeleton() {
   return (
-    <div className="card p-3">
-      <div className="flex items-start justify-between gap-2">
-        <Skeleton className="h-4 w-2/3" />
-        <Skeleton className="h-4 w-4 rounded" />
-      </div>
-      <div className="mt-3 flex gap-1.5">
-        <Skeleton className="h-4 w-16 rounded-full" />
-        <Skeleton className="h-4 w-20 rounded-full" />
-        <Skeleton className="h-4 w-14 rounded-full" />
+    <div className="flex items-center gap-3 bg-surface px-3 py-3">
+      <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <Skeleton className="h-[13px] w-1/2" />
+        <Skeleton className="h-[10px] w-20" />
       </div>
     </div>
   )
@@ -26,7 +23,7 @@ export function TaskCardSkeleton() {
 // Lista de skeletons de tarefa.
 export function TaskListSkeleton({ count = 4 }) {
   return (
-    <div className="space-y-2.5">
+    <div className="list">
       {Array.from({ length: count }).map((_, i) => (
         <TaskCardSkeleton key={i} />
       ))}

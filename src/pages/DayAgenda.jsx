@@ -1,39 +1,107 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Plus, Inbox, MoonStar } from 'lucide-react'
-import { PageHeader, ErrorState } from '../components/ui/Common'
-import TaskCard from '../components/tasks/TaskCard'
+import MonthCalendar from './MonthCalendar'
+import WeekAgenda from '../components/agenda/WeekAgenda'
+import ViewSwitcher from '../components/ui/ViewSwitcher'
+import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
+import { ErrorState, EmptyState } from '../components/ui/Common'
+import TaskRow from '../components/tasks/TaskRow'
 import TaskModal from '../components/tasks/TaskModal'
+import { COMPROMISSO } from '../lib/activityKind'
+import Section from '../components/ui/Section'
+import { useData } from '../context/DataContext'
 import { useTasks } from '../hooks/useTasks'
-import {
-  toISODate,
-  addDays,
-  formatLong,
-  isToday,
-  fromISODate,
-} from '../lib/date'
+import { toISODate, addDays, formatLong, isToday, fromISODate, getWeekDays } from '../lib/date'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { DAY_START_HOUR, DAY_END_HOUR } from '../lib/constants'
-import { partitionDayTasks, timeToHour, resolveDayDate } from '../lib/dayView'
+import { partitionDayTasks, resolveDayDate } from '../lib/dayView'
+import { blockGeometry } from '../lib/agendaTime'
+import { cx } from '../lib/utils'
+
+const HOUR_PX = 60
+const GUTTER = 46
 
 // ---------------------------------------------------------------------------
-// DECISAO DE PRODUTO (navegacao) — B5/RC-1B. NAO implementar agora; apenas
-// documentado para evitar regressoes:
-//  - Agenda do Dia aberta pelo MENU LATERAL (NavLink "/dia", sem query) deve
-//    SEMPRE abrir em Hoje. Isso ja acontece: sem ?date, o dia inicial e hoje.
-//  - No Calendario havera, no FUTURO, uma acao "Abrir agenda deste dia" que
-//    navegara para: /agenda-do-dia?date=YYYY-MM-DD
-//    (rota atual e "/dia?date=..."; o alias "/agenda-do-dia" e uma evolucao
-//     planejada). Nao criar essa acao nesta sprint.
+// AGENDA — o eixo TEMPO do produto, em tres recortes: Dia · Semana · Mês.
+//
+// CP5.2: "Calendário" deixou de ser um destino separado no menu. Ver o mês
+// nunca foi outro lugar — e o mesmo eixo com outro zoom, e agora custa um
+// toque no seletor. A rota /mes continua existindo e redireciona para ca.
+//
+// A distincao que a Agenda preserva em todos os recortes:
+//   COMPROMISSO = acontece em horario definido -> ocupa lugar na linha do tempo.
+//   TAREFA      = precisa ser feita, com ou sem data -> aparece como item do
+//                 dia, nunca inventada num horario.
+//
 // ---------------------------------------------------------------------------
+// DIA — timeline, nao planilha.
+//
+// Refinamentos desta fase:
+//   - a grade perdeu a linha continua em toda hora: agora a hora e um rotulo
+//     leve e a regua e um hairline curto que comeca depois do gutter;
+//   - o bloco de evento nao tem sombra — ele se define pela COR da categoria
+//     (faixa solida a esquerda + fundo tenue), como num calendario nativo;
+//   - blocos curtos (<40min) viram uma linha compacta com hora inline, em vez
+//     de uma caixa espremida com texto cortado;
+//   - a linha do "agora" carrega a hora atual num pill, e a tela rola sozinha
+//     ate ela quando o dia e hoje.
+// ---------------------------------------------------------------------------
+function EventBlock({ task, top, height, color, onOpen }) {
+  const short = height < 40
+  const start = String(task.start_time).slice(0, 5)
+  const end = task.end_time ? String(task.end_time).slice(0, 5) : null
+
+  return (
+    <button
+      onClick={() => onOpen(task)}
+      style={{ top, height: Math.max(height, 22), left: GUTTER }}
+      // bg-surface e a BASE: sem ela, uma categoria de cor clara a 10% some
+      // no canvas e o bloco fica invisivel (visto no QA em 390px).
+      className="press absolute right-0 z-10 flex overflow-hidden rounded-[10px] bg-surface text-left transition-transform"
+    >
+      <span className="absolute inset-0 opacity-[0.14]" style={{ backgroundColor: color }} />
+      <span className="absolute inset-y-0 left-0 w-[3px] rounded-full" style={{ backgroundColor: color }} />
+      <span
+        className={cx(
+          'relative flex min-w-0 flex-1 gap-1.5 px-2.5',
+          short ? 'items-center py-0.5' : 'flex-col justify-center py-1',
+        )}
+      >
+        <span className="truncate text-[13px] font-medium leading-tight text-primary">
+          {task.title}
+        </span>
+        <span className="text-caption shrink-0 tabular-nums">
+          {start}
+          {end && !short ? `–${end}` : ''}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+const VISOES = [
+  { value: 'dia', label: 'Dia' },
+  { value: 'semana', label: 'Semana' },
+  { value: 'mes', label: 'Mês' },
+]
+
 export default function DayAgenda() {
-  const [searchParams] = useSearchParams()
-  // Permite abrir um dia especifico (ex.: vindo da Command Palette: /dia?date=...)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { categoryById } = useData()
+  const visao = VISOES.some((v) => v.value === searchParams.get('visao'))
+    ? searchParams.get('visao')
+    : 'dia'
+  const trocarVisao = (v) => {
+    const next = new URLSearchParams(searchParams)
+    if (v === 'dia') next.delete('visao')
+    else next.set('visao', v)
+    setSearchParams(next, { replace: true })
+  }
   const [date, setDate] = useState(() =>
     resolveDayDate(searchParams.get('date'), toISODate(new Date())),
   )
 
-  // Mantem o dia exibido em sincronia com o parametro ?date (ex.: navegar para
-  // /dia?date=... ja estando na tela, vindo da Command Palette).
   const dateParam = searchParams.get('date')
   useEffect(() => {
     if (dateParam) setDate(dateParam)
@@ -43,10 +111,6 @@ export default function DayAgenda() {
   const { tasks, error, reload } = useTasks(range)
   const [modal, setModal] = useState({ open: false, task: null, defaults: null })
 
-  // Deep link vindo do clique numa notificacao push (?task=<id>): abre a
-  // atividade correspondente automaticamente. `autoOpenedRef` evita reabrir
-  // o modal sozinho depois que o usuario ja fechou (tasks recarrega apos
-  // qualquer edicao, o que rodaria este efeito de novo sem essa guarda).
   const taskParam = searchParams.get('task')
   const autoOpenedRef = useRef(null)
   useEffect(() => {
@@ -58,161 +122,243 @@ export default function DayAgenda() {
     }
   }, [taskParam, tasks])
 
-  const hours = []
-  for (let h = DAY_START_HOUR; h <= DAY_END_HOUR; h += 1) hours.push(h)
-
-  // Particiona garantindo que tarefas fora da grade (ex.: antes das 06:00) nao
-  // fiquem invisiveis.
   const { untimed, timed, outOfGrid } = useMemo(
     () => partitionDayTasks(tasks, { startHour: DAY_START_HOUR, endHour: DAY_END_HOUR }),
     [tasks],
   )
 
-  const tasksAtHour = (h) => timed.filter((t) => timeToHour(t.start_time) === h)
+  const hours = []
+  for (let h = DAY_START_HOUR; h <= DAY_END_HOUR; h += 1) hours.push(h)
+  const gridStartMin = DAY_START_HOUR * 60
+  const gridHeight = (DAY_END_HOUR - DAY_START_HOUR + 1) * HOUR_PX
 
-  const go = (delta) => setDate(toISODate(addDays(fromISODate(date), delta)))
-
+  const go = (delta) => setDate(toISODate(addDays(fromISODate(date) || new Date(), delta)))
+  const openTask = (task) => setModal({ open: true, task, defaults: null })
   const openNew = (hour) =>
     setModal({
       open: true,
       task: null,
-      defaults: {
-        date,
-        start_time: hour != null ? `${String(hour).padStart(2, '0')}:00` : '',
-      },
+      defaults: { date, start_time: hour != null ? `${String(hour).padStart(2, '0')}:00` : '' },
     })
 
+  const semanaLabel = useMemo(() => {
+    const dias = getWeekDays(fromISODate(date) || new Date())
+    return `${format(dias[0], "d 'de' MMM", { locale: ptBR })} – ${format(dias[6], "d 'de' MMM", { locale: ptBR })}`
+  }, [date])
+
+  const today = isToday(fromISODate(date) || new Date())
+  const nowDate = new Date()
+  const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes()
+  const nowTop = ((nowMin - gridStartMin) / 60) * HOUR_PX
+  const nowVisible = today && nowMin >= gridStartMin && nowMin <= (DAY_END_HOUR + 1) * 60
+  const nowLabel = `${String(nowDate.getHours()).padStart(2, '0')}:${String(nowDate.getMinutes()).padStart(2, '0')}`
+
+  // Leva a vista ate o "agora" quando o dia aberto e hoje.
+  const nowRef = useRef(null)
+  useEffect(() => {
+    if (!nowVisible) return
+    const id = setTimeout(
+      () => nowRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+      120,
+    )
+    return () => clearTimeout(id)
+  }, [nowVisible, date])
+
+  const emptyDay = timed.length === 0 && untimed.length === 0 && outOfGrid.length === 0
+
+  // Mês e Semana pedem largura; a timeline do Dia, nao — uma linha do tempo
+  // esticada em 1100px vira planilha, que e exatamente o que evitamos.
+  // CP5.7 — a moldura EXTERNA e a mesma de todas as telas (max-w-5xl): e o
+  // eixo em que o titulo se alinha. A coluna do Dia continua estreita por
+  // dentro; so deixou de arrastar o cabecalho 176px para a direita quando se
+  // vinha de Hoje.
   return (
-    <div>
-      <PageHeader
-        title="Agenda do dia"
-        subtitle={formatLong(date)}
-        actions={
-          <div className="flex items-center gap-1">
-            <button onClick={() => go(-1)} className="btn-secondary p-2" aria-label="Dia anterior">
-              <ChevronLeft size={16} />
-            </button>
+    <div className="mx-auto w-full max-w-5xl">
+    <div className={cx(visao === 'dia' ? 'max-w-2xl' : '')}>
+      {/* O cabecalho segue o RECORTE: no Dia titula o dia; na Semana, a semana;
+          no Mes quem titula e o proprio calendario, entao aqui fica so o nome
+          da area — e a navegacao de mes e dele, nao daqui. */}
+      {/* GRUDADO NO TOPO. O Dia rola sozinho ate a hora atual; sem isto, o
+          titulo e o seletor saiam de cena junto e a tela passava a nao dizer
+          que dia estava sendo visto — pego no QA do CP5.5. */}
+      <div className="sticky top-0 z-20 -mx-3 bg-canvas/90 px-3 pt-1 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+      <header className="mb-3 flex items-end justify-between gap-3 px-2">
+        <div className="min-w-0">
+          <h1 className="text-display">
+            {visao === 'dia' ? (today ? 'Hoje' : formatLong(date).split(',')[0]) : 'Agenda'}
+          </h1>
+          <p className="text-caption mt-1">
+            {visao === 'dia' ? formatLong(date) : visao === 'semana' ? semanaLabel : 'Mês'}
+          </p>
+        </div>
+        {visao !== 'mes' && (
+          <div className="flex shrink-0 items-center gap-0.5">
             <button
-              onClick={() => setDate(toISODate(new Date()))}
-              className="btn-secondary"
+              onClick={() => go(visao === 'semana' ? -7 : -1)}
+              className="icon-btn"
+              aria-label={visao === 'semana' ? 'Semana anterior' : 'Dia anterior'}
             >
-              Hoje
+              <ChevronLeft size={19} />
             </button>
-            <button onClick={() => go(1)} className="btn-secondary p-2" aria-label="Proximo dia">
-              <ChevronRight size={16} />
-            </button>
-            <button onClick={() => openNew(null)} className="btn-primary ml-1 hidden sm:inline-flex">
-              <Plus size={16} /> Nova
+            {!today && (
+              <button
+                onClick={() => setDate(toISODate(new Date()))}
+                className="press rounded-full px-3 py-1.5 text-[13px] font-semibold text-accent-text"
+              >
+                Hoje
+              </button>
+            )}
+            <button
+              onClick={() => go(visao === 'semana' ? 7 : 1)}
+              className="icon-btn"
+              aria-label={visao === 'semana' ? 'Próxima semana' : 'Próximo dia'}
+            >
+              <ChevronRight size={19} />
             </button>
           </div>
-        }
-      />
+        )}
+      </header>
 
-      {isToday(fromISODate(date)) && (
-        <p className="mb-3 text-xs font-medium text-brand-600">● Hoje</p>
-      )}
+      <div className="mb-3 px-2">
+        <ViewSwitcher value={visao} options={VISOES} onChange={trocarVisao} />
+      </div>
+      </div>
 
-      {error ? (
+      {visao === 'mes' ? (
+        <MonthCalendar embedded />
+      ) : visao === 'semana' ? (
+        <WeekAgenda date={date} onOpenTask={openTask} onPickDay={(iso) => { setDate(iso); trocarVisao('dia') }} />
+      ) : error ? (
         <ErrorState onRetry={reload} />
       ) : (
         <>
-      {/* Sem horario */}
-      {untimed.length > 0 && (
-        <div className="card mb-4 p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <Inbox size={16} /> Sem horario definido
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {untimed.map((t) => (
-              <TaskCard
-                key={t.id}
-                task={t}
-                onEdit={(task) => setModal({ open: true, task, defaults: null })}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+          {emptyDay ? (
+            <EmptyState
+              icon={CalendarDays}
+              title="Dia livre"
+              description="Nenhum compromisso marcado. Toque em um horário abaixo para criar."
+            />
+          ) : null}
 
-      {/* Fora da grade (ex.: antes das 06:00 ou apos as 23:00): garante que
-          nenhuma tarefa com horario fique invisivel. */}
-      {outOfGrid.length > 0 && (
-        <div className="card mb-4 p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <MoonStar size={16} /> Fora da grade (antes das{' '}
-            {String(DAY_START_HOUR).padStart(2, '0')}:00 ou apos as{' '}
-            {String(DAY_END_HOUR).padStart(2, '0')}:00)
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {outOfGrid.map((t) => (
-              <TaskCard
-                key={t.id}
-                task={t}
-                onEdit={(task) => setModal({ open: true, task, defaults: null })}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Grade horaria */}
-      <div className="card divide-y divide-slate-100 dark:divide-slate-800">
-        {hours.map((h) => {
-          const items = tasksAtHour(h)
-          const isNow =
-            isToday(fromISODate(date)) && new Date().getHours() === h
-          return (
-            <div key={h} className="group flex gap-2 px-2 py-1.5 sm:gap-3 sm:px-3 sm:py-2">
-              <button
-                onClick={() => openNew(h)}
-                className={
-                  'w-11 shrink-0 pt-1 text-right text-xs font-bold sm:w-14 ' +
-                  (isNow ? 'text-brand-600' : 'text-slate-400 hover:text-brand-600')
-                }
-                title="Criar atividade neste horario"
-              >
-                {String(h).padStart(2, '0')}:00
-              </button>
-              <div
-                className={
-                  'min-w-0 flex-1 space-y-2 border-l pl-2 sm:pl-3 ' +
-                  (isNow
-                    ? 'border-brand-300 dark:border-brand-700'
-                    : 'border-slate-100 dark:border-slate-800')
-                }
-              >
-                {items.length === 0 ? (
-                  <button
-                    onClick={() => openNew(h)}
-                    className="flex h-7 w-full items-center gap-1 rounded-lg px-2 text-xs text-slate-300 transition-colors hover:bg-slate-50 hover:text-brand-500 dark:text-slate-600 dark:hover:bg-slate-800/60"
-                  >
-                    <Plus size={13} />
-                  </button>
-                ) : (
-                  items.map((t) => (
-                    <TaskCard
-                      key={t.id}
-                      task={t}
-                      onEdit={(task) =>
-                        setModal({ open: true, task, defaults: null })
-                      }
-                    />
-                  ))
-                )}
-              </div>
+          {timed.length > 0 && (
+            <div className="mb-1 flex items-baseline gap-1.5 px-2">
+              <h2 className="text-section">Compromissos</h2>
+              <span className="text-[11px] font-semibold tabular-nums text-faint">
+                {timed.length}
+              </span>
+              <span className="text-caption ml-auto">com horário</span>
             </div>
-          )
-        })}
-      </div>
+          )}
+
+          {/* TIMELINE proporcional */}
+          <div className="relative px-2" style={{ height: gridHeight }} data-testid="dia-timeline">
+            {hours.map((h, i) => (
+              <div
+                key={h}
+                className="absolute inset-x-0"
+                style={{ top: i * HOUR_PX, height: HOUR_PX }}
+              >
+                <span
+                  className="absolute left-0 top-[-6px] w-9 text-right text-[11px] font-medium tabular-nums text-faint"
+                  style={{ width: GUTTER - 10 }}
+                >
+                  {String(h).padStart(2, '0')}
+                </span>
+                <div
+                  className="absolute right-0 top-0 border-t hair opacity-60"
+                  style={{ left: GUTTER }}
+                />
+                <button
+                  onClick={() => openNew(h)}
+                  className="absolute right-0 top-0 h-full rounded-[10px] transition-colors hover:bg-surface-2/60"
+                  style={{ left: GUTTER }}
+                  aria-label={`Criar às ${h}:00`}
+                />
+              </div>
+            ))}
+
+            {/* linha do agora, com a hora */}
+            {nowVisible && (
+              <div
+                ref={nowRef}
+                className="pointer-events-none absolute inset-x-0 z-20 flex items-center gap-1.5"
+                style={{ top: nowTop }}
+              >
+                <span
+                  className="shrink-0 rounded-full bg-danger px-1.5 py-[1px] text-[10px] font-bold tabular-nums text-white"
+                  style={{ width: GUTTER - 6 }}
+                >
+                  {nowLabel}
+                </span>
+                <span className="h-px flex-1 bg-danger/60" />
+              </div>
+            )}
+
+            {timed.map((t) => {
+              const { top, height } = blockGeometry(t.start_time, t.end_time, {
+                startHour: DAY_START_HOUR,
+                hourPx: HOUR_PX,
+              })
+              return (
+                <EventBlock
+                  key={t.id}
+                  task={t}
+                  top={top}
+                  height={height}
+                  color={categoryById(t.category_id)?.color || '#6366f1'}
+                  onOpen={openTask}
+                />
+              )
+            })}
+          </div>
+
+          {/* COMPROMISSO fora da faixa 06–23. Continua sendo compromisso: tem
+              hora, so nao cabe na regua. Por isso vem logo depois dela, e nao
+              junto das tarefas. */}
+          {outOfGrid.length > 0 && (
+            <Section label="Fora da grade" count={outOfGrid.length} className="mt-6">
+              {outOfGrid.map((t) => (
+                <TaskRow key={t.id} task={t} onOpen={openTask} onChanged={reload} />
+              ))}
+            </Section>
+          )}
+
+          {/* TAREFAS DO DIA — depois da regua, e nunca dentro dela.
+              A regua e feita de COMPROMISSOS: coisas que acontecem numa hora.
+              Uma tarefa com data e sem hora precisa ser feita hoje e nao
+              acontece as 14h — coloca-la na regua exigiria inventar um horario,
+              que e a unica coisa que a Agenda nao pode fazer. Entao ela vive
+              abaixo, com rotulo proprio e sem coluna de hora. */}
+          {untimed.length > 0 && (
+            <section className="mt-7" data-testid="dia-tarefas">
+              <div className="mb-1 flex items-baseline gap-1.5 px-2">
+                <h2 className="text-section">Tarefas do dia</h2>
+                <span className="text-[11px] font-semibold tabular-nums text-faint">
+                  {untimed.length}
+                </span>
+                <span className="text-caption ml-auto">sem horário</span>
+              </div>
+              <div className="list">
+                {untimed.map((t) => (
+                  <TaskRow key={t.id} task={t} onOpen={openTask} onChanged={reload} />
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
 
+      {/* CP5.9.1 — criar a partir de uma faixa de hora da Agenda ja E criar um
+          compromisso: a acao carrega o horario. O contexto antecipa a intencao,
+          entao o editor abre com esse nome em vez de perguntar de novo. */}
       <TaskModal
         open={modal.open}
         task={modal.task}
         defaults={modal.defaults}
+        kind={modal.task ? undefined : COMPROMISSO}
         onClose={() => setModal({ open: false, task: null, defaults: null })}
       />
+    </div>
     </div>
   )
 }

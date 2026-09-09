@@ -1,58 +1,72 @@
 import { useMemo } from 'react'
-import {
-  ListTodo,
-  CheckCircle2,
-  XCircle,
-  Share2,
-  Ban,
-  TrendingUp,
-  TrendingDown,
-} from 'lucide-react'
-import { PageHeader, StatCard, EmptyState, ErrorState } from '../components/ui/Common'
+import { TrendingUp } from 'lucide-react'
+import { EmptyState, ErrorState } from '../components/ui/Common'
+import { Page, PageHeader } from '../components/layout/Page'
 import { Skeleton } from '../components/ui/Skeleton'
+import { cx } from '../lib/utils'
 import { useTasks } from '../hooks/useTasks'
 import { useData } from '../context/DataContext'
 import { STATUS, WEEK_DAYS } from '../lib/constants'
 import { percent } from '../lib/utils'
 import { fromISODate } from '../lib/date'
 
+// ---------------------------------------------------------------------------
+// CP5.7 — POLISH, sem KPI novo e sem grafico decorativo.
+//
+// O que muda e o PESO. Os numeros vinham em cartoes com icone dentro de um
+// quadrado colorido: a gramatica de painel corporativo, que o produto nao e.
+// Aqui um numero e um numero grande com o nome embaixo — a mesma peca das
+// quatro entradas de foco da tela Hoje. Duas telas diferentes falando a mesma
+// lingua e exatamente o que faltava.
+// ---------------------------------------------------------------------------
+function Numero({ rotulo, valor, tom = 'neutro' }) {
+  return (
+    <div className="surface px-3 py-2.5">
+      <p
+        className={cx(
+          'text-[22px] font-bold leading-none tabular-nums',
+          tom === 'danger' ? 'text-danger' : tom === 'positive' ? 'text-positive' : 'text-primary',
+        )}
+      >
+        {valor}
+      </p>
+      <p className="text-caption mt-1">{rotulo}</p>
+    </div>
+  )
+}
+
 function BarList({ title, items, colorKey, emptyLabel }) {
   const max = Math.max(1, ...items.map((i) => i.value))
   return (
-    <div className="card p-5">
-      <h3 className="mb-4 font-bold text-slate-800 dark:text-slate-100">{title}</h3>
+    <section className="surface p-4">
+      <h3 className="text-title mb-3">{title}</h3>
       {items.length === 0 ? (
-        <p className="text-sm text-slate-400">{emptyLabel}</p>
+        <p className="text-caption">{emptyLabel}</p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {items.map((i) => (
             <div key={i.label}>
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2 text-[14px] font-medium text-primary">
                   {i.color && (
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: i.color }}
-                    />
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: i.color }} />
                   )}
-                  {i.label}
+                  <span className="truncate">{i.label}</span>
                 </span>
-                <span className="font-semibold text-slate-500">{i.value}</span>
+                <span className="text-caption shrink-0 tabular-nums">{i.value}</span>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              {/* A barra e leitura, nao enfeite: trilho rebaixado, sem sombra. */}
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
                 <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${(i.value / max) * 100}%`,
-                    backgroundColor: i.color || colorKey,
-                  }}
+                  className="h-full rounded-full transition-[width] duration-500"
+                  style={{ width: `${(i.value / max) * 100}%`, backgroundColor: i.color || colorKey }}
                 />
               </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </section>
   )
 }
 
@@ -82,8 +96,9 @@ export default function Reports() {
     const dayCount = {}
     const dayMiss = {}
     for (const t of tasks) {
-      if (!t.date) continue
-      const dow = fromISODate(t.date).getDay()
+      const day = fromISODate(t.date)
+      if (!day) continue
+      const dow = day.getDay()
       dayCount[dow] = (dayCount[dow] || 0) + 1
       if (t.status === STATUS.MISSED) dayMiss[dow] = (dayMiss[dow] || 0) + 1
     }
@@ -127,81 +142,75 @@ export default function Reports() {
     }
   }, [tasks, categories, categoryById])
 
+  const cabecalho = <PageHeader title="Relatórios" subtitle="O que os seus dados dizem" />
+
   if (error) {
     return (
-      <div>
-        <PageHeader title="Relatorios" subtitle="Metricas da sua produtividade" />
+      <Page width="form">
+        {cabecalho}
         <ErrorState onRetry={reload} />
-      </div>
+      </Page>
     )
   }
 
   if (loading && tasks.length === 0) {
     return (
-      <div>
-        <PageHeader title="Relatorios" subtitle="Metricas da sua produtividade" />
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Page width="form">
+        {cabecalho}
+        {/* O esqueleto tem a forma do que vem: quatro numeros pequenos e duas
+            listas. Um bloco cinza gigante prometeria outra coisa. */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card p-4">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="mt-3 h-7 w-12" />
+            <div key={i} className="surface px-3 py-2.5">
+              <Skeleton className="h-5 w-10" />
+              <Skeleton className="mt-2 h-3 w-16" />
             </div>
           ))}
         </div>
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="card p-5">
+            <div key={i} className="surface p-4">
               <Skeleton className="h-4 w-40" />
-              <div className="mt-4 space-y-3">
+              <div className="mt-3 space-y-2.5">
                 {Array.from({ length: 4 }).map((_, j) => (
-                  <Skeleton key={j} className="h-6 w-full" />
+                  <Skeleton key={j} className="h-5 w-full" />
                 ))}
               </div>
             </div>
           ))}
         </div>
-      </div>
+      </Page>
     )
   }
 
   if (tasks.length === 0) {
     return (
-      <div>
-        <PageHeader title="Relatorios" subtitle="Metricas da sua produtividade" />
+      <Page width="form">
+        {cabecalho}
         <EmptyState
           icon={TrendingUp}
-          title="Sem dados ainda"
-          description="Crie e conclua atividades para ver seus relatorios aqui."
+          title="Ainda não há o que medir"
+          description="Conforme você cria e conclui atividades, o padrão aparece aqui."
         />
-      </div>
+      </Page>
     )
   }
 
   return (
-    <div>
-      <PageHeader title="Relatorios" subtitle="Metricas da sua produtividade" />
+    <Page width="form">
+      {cabecalho}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Total criadas" value={m.total} icon={ListTodo} tone="brand" />
-        <StatCard label="Concluidas" value={m.done} icon={CheckCircle2} tone="emerald" />
-        <StatCard label="Furadas" value={m.missed} icon={XCircle} tone="red" />
-        <StatCard label="Delegadas" value={m.delegated} icon={Share2} tone="violet" />
-        <StatCard label="Nao necessarias" value={m.notNeeded} icon={Ban} tone="slate" />
-        <StatCard
-          label="Taxa de conclusao"
-          value={`${m.completion}%`}
-          icon={TrendingUp}
-          tone="emerald"
-        />
-        <StatCard
-          label="Taxa de furo"
-          value={`${m.missRate}%`}
-          icon={TrendingDown}
-          tone="red"
-        />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Numero rotulo="Criadas" valor={m.total} />
+        <Numero rotulo="Concluídas" valor={m.done} tom="positive" />
+        <Numero rotulo="Furadas" valor={m.missed} tom={m.missed > 0 ? 'danger' : 'neutro'} />
+        <Numero rotulo="Delegadas" valor={m.delegated} />
+        <Numero rotulo="Não necessárias" valor={m.notNeeded} />
+        <Numero rotulo="Conclusão" valor={`${m.completion}%`} tom="positive" />
+        <Numero rotulo="Furo" valor={`${m.missRate}%`} tom={m.missRate > 0 ? 'danger' : 'neutro'} />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BarList
           title="Categorias com mais tarefas"
           items={m.catCount}
@@ -226,13 +235,13 @@ export default function Reports() {
         />
         <div className="lg:col-span-2">
           <BarList
-            title="Ranking de atividades mais reagendadas"
+            title="Atividades mais reagendadas"
             items={m.rescheduled}
             colorKey="#f59e0b"
             emptyLabel="Nenhuma atividade reagendada"
           />
         </div>
       </div>
-    </div>
+    </Page>
   )
 }

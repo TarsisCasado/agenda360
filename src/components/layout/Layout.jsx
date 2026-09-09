@@ -1,32 +1,57 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Outlet } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import BottomNav from './BottomNav'
+import ErrorBoundary from '../ErrorBoundary'
 import TaskModal from '../tasks/TaskModal'
 import QuickTaskModal from '../tasks/QuickTaskModal'
+import CaptureSheet from '../capture/CaptureSheet'
+import NovaAtividadeMenu from '../tasks/NovaAtividadeMenu'
 import CommandPalette from '../command/CommandPalette'
 import OnboardingFlow from '../onboarding/OnboardingFlow'
 import WorkspaceMissing from '../workspace/WorkspaceMissing'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { isOnboarded } from '../../lib/preferences'
 import { workspaceGate } from '../../lib/uiState'
+import { useTimezone } from '../../hooks/useTimezone'
+import { TAREFA, COMPROMISSO, defaultsDeCriacao } from '../../lib/activityKind'
 
 export default function Layout() {
   const { workspaceId, workspaces, loading: wsLoading } = useWorkspace()
+  const { pathname } = useLocation()
   const gate = workspaceGate({ loading: wsLoading, workspaces })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [fullTaskOpen, setFullTaskOpen] = useState(false)
+  const [fullTaskDefaults, setFullTaskDefaults] = useState(undefined)
   const [quickTaskOpen, setQuickTaskOpen] = useState(false)
   const [quickDefaults, setQuickDefaults] = useState(undefined)
+  const [captureOpen, setCaptureOpen] = useState(false)
+  const [menuNovaOpen, setMenuNovaOpen] = useState(false)
+  const [novoTipo, setNovoTipo] = useState(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+
+  // CP5.8.1 — o fuso do usuario e o que transforma "14:00" no instante certo
+  // do lembrete. Sincronizado aqui, uma vez por sessao, e so quando e seguro
+  // (ver hooks/useTimezone).
+  useTimezone()
 
   // Onboarding conversacional no primeiro acesso (uma vez por workspace).
   useEffect(() => {
     if (workspaceId) setShowOnboarding(!isOnboarded(workspaceId))
   }, [workspaceId])
+
+  // CP5.9.1 — "Nova atividade" deixa de significar "fale com o Copiloto".
+  // Quem ja sabe o que quer criar entra direto no editor; quem tem algo solto
+  // na cabeca continua tendo a captura.
+  const escolherCriacao = useCallback((chave) => {
+    if (chave === 'capturar') { setCaptureOpen(true); return }
+    const tipo = chave === 'compromisso' ? COMPROMISSO : TAREFA
+    setNovoTipo(tipo)
+    setFullTaskDefaults(defaultsDeCriacao(tipo))
+    setFullTaskOpen(true)
+  }, [])
 
   const openQuickTask = useCallback((defaults) => {
     setQuickDefaults(defaults)
@@ -46,33 +71,47 @@ export default function Layout() {
   }, [])
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-[100dvh] overflow-hidden bg-canvas">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* UMA PORTA SO: "Nova atividade" (desktop) e o `+` (mobile) abrem a
+            MESMA superficie de captura. Antes o desktop abria o formulario
+            completo — duas gramaticas para dizer a mesma coisa, dependendo do
+            tamanho da tela. O formulario continua alcancavel pelo "Ajustar" da
+            proposta e pela edicao de uma atividade existente. */}
         <Topbar
           onMenu={() => setSidebarOpen(true)}
-          onNewTask={() => setFullTaskOpen(true)}
+          onNewTask={() => setMenuNovaOpen(true)}
           onOpenPalette={() => setPaletteOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-8">
+        <main className="flex-1 overflow-y-auto px-3 pb-safe-nav pt-4 sm:px-6 lg:px-10 lg:pb-10">
           {/* Portao de workspace: sem workspace -> estado de recuperacao (nunca
               loading eterno nem excecao). 'loading'/'ready' seguem para as rotas. */}
-          {gate === 'empty' ? <WorkspaceMissing /> : <Outlet />}
+          {/* Boundary POR-ROTA: uma falha de render de uma pagina NAO derruba o
+              app inteiro — o shell/nav continua. key=pathname reseta ao navegar. */}
+          <ErrorBoundary key={pathname} compact>
+            {gate === 'empty' ? <WorkspaceMissing /> : <Outlet />}
+          </ErrorBoundary>
         </main>
       </div>
 
-      {/* Botao flutuante de criacao rapida (mobile) */}
-      <button
-        onClick={() => openQuickTask(undefined)}
-        className="fab press lg:hidden"
-        aria-label="Nova atividade"
-      >
-        <Plus size={26} />
-      </button>
+      {/* Menu inferior fixo com Captura central (mobile) */}
+      <BottomNav onCreate={() => setMenuNovaOpen(true)} />
 
-      {/* Menu inferior fixo (mobile) */}
-      <BottomNav />
+      {/* Escolha rapida: Tarefa | Compromisso | Capturar com o Copiloto. */}
+      <NovaAtividadeMenu
+        open={menuNovaOpen}
+        onClose={() => setMenuNovaOpen(false)}
+        onEscolher={escolherCriacao}
+      />
+
+      {/* CAPTURA UNIVERSAL — entrada principal (linguagem natural + IA real). */}
+      <CaptureSheet
+        open={captureOpen}
+        onClose={() => setCaptureOpen(false)}
+        onEditDetails={(payload) => { setFullTaskDefaults(payload); setFullTaskOpen(true) }}
+      />
 
       {/* Command Palette (Cmd/Ctrl + K) */}
       <CommandPalette
@@ -81,8 +120,14 @@ export default function Layout() {
         onNewTask={openQuickTask}
       />
 
-      {/* Formulario completo (desktop / topbar) */}
-      <TaskModal open={fullTaskOpen} onClose={() => setFullTaskOpen(false)} task={null} />
+      {/* Formulario completo (desktop / topbar / "Editar detalhes" da Captura) */}
+      <TaskModal
+        open={fullTaskOpen}
+        defaults={fullTaskDefaults}
+        kind={novoTipo}
+        onClose={() => { setFullTaskOpen(false); setFullTaskDefaults(undefined); setNovoTipo(null) }}
+        task={null}
+      />
       {/* Formulario rapido (FAB mobile / palette) */}
       <QuickTaskModal
         open={quickTaskOpen}

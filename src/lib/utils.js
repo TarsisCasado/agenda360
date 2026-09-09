@@ -6,6 +6,19 @@ export function cx(...args) {
     .join(' ')
 }
 
+// Primeira letra maiuscula, o RESTO intacto.
+//
+// Existe porque `text-transform: capitalize` (CSS) capitaliza TODA palavra e,
+// em pt-BR, produz "24 De Agosto De 2026" / "Agosto De 2026". Datas em
+// portugues sao escritas em caixa baixa com a inicial maiuscula so quando a
+// expressao abre a frase — que e exatamente o caso dos titulos e rotulos do
+// app. Por isso a capitalizacao acontece na FONTE (lib/date), nao no CSS.
+export function capitalizeFirst(text) {
+  const str = String(text ?? '')
+  if (!str) return str
+  return str.charAt(0).toUpperCase() + str.slice(1)
+}
+
 // Gera id compativel com o Postgres (uuid) para o modo demo.
 export function uid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {

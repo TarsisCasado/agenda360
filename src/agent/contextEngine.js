@@ -9,10 +9,13 @@ import { STATUS } from '../lib/constants'
 import { contextPreferences } from '../lib/preferences'
 
 export function createContextEngine({ tasks = taskService } = {}) {
-  async function build(identity, { categories = [] } = {}) {
+  async function build(identity, { categories = [], history = [], pending = null, now = new Date() } = {}) {
     if (!identity?.workspaceId) throw new Error('workspace ausente no contexto')
 
-    const today = toISODate(new Date())
+    const today = toISODate(now)
+    // Hora local atual (HH:MM) — necessaria para "daqui a duas horas" e para
+    // decidir o que ainda cabe hoje. Sem isso o interpretador teria que chutar.
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     // timezone do dispositivo (o "amanha"/"sexta" sao resolvidos com base nele)
     const timezone =
       Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo'
@@ -37,7 +40,12 @@ export function createContextEngine({ tasks = taskService } = {}) {
       // user_id NAO e enviado ao provider (desnecessario); fica so na identidade.
       workspaceId: identity.workspaceId,
       today,
+      now: currentTime,
       timezone,
+      // Memoria conversacional: ultimos turnos + intencao pendente. O provider
+      // local usa pouco; um LLM usa muito. Ambos recebem o mesmo contexto.
+      history: (history || []).map((m) => ({ role: m.role, content: m.content })),
+      pending: pending ? { intent: pending.intent, data: pending.data, awaiting: pending.awaiting } : null,
       categories: categories.map((c) => ({ id: c.id, name: c.name })),
       recentTasks,
       overdueTasks,
