@@ -264,6 +264,10 @@ export default function Assistant() {
       .resume({ conversationId: id })
       .then((r) => {
         if (!vivo) return
+        // Origem da ultima interpretacao sobrevive ao remount (CP6.4.4): sem
+        // isso, reconectar recomeca em "Interpretação local" e esconde que o
+        // remoto havia caido.
+        if (r.source) setOrigemIA(r.source)
         const falas = (r.messages || [])
           .filter((m) => m.role === 'user' || m.role === 'assistant')
           .map((m) => ({ id: ++idRef.current, role: m.role, at: m.created_at || now(), text: m.content }))

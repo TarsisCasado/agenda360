@@ -95,7 +95,9 @@ describe('resume — o refresh não apaga a conversa', () => {
   it('sem conversa, devolve vazio (e não inventa nada)', async () => {
     const { assistant } = build()
     const r = await assistant.resume({ conversationId: null })
-    expect(r).toEqual({ conversationId: null, messages: [], pending: null })
+    // CP6.4.4: resume passou a devolver tambem `source` (origem da ultima
+    // interpretacao) para o rotulo sobreviver ao remount.
+    expect(r).toEqual({ conversationId: null, messages: [], pending: null, source: null })
   })
 
   it('devolve as falas já salvas', async () => {
@@ -174,7 +176,8 @@ describe('resume — o refresh não apaga a conversa', () => {
     const { assistant, memory } = build()
     memory.history.mockRejectedValueOnce(new Error('offline'))
     memory.getPending.mockRejectedValueOnce(new Error('offline'))
+    memory.getContext.mockRejectedValueOnce(new Error('offline'))
     const r = await assistant.resume({ conversationId: 'conv-1' })
-    expect(r).toEqual({ conversationId: 'conv-1', messages: [], pending: null })
+    expect(r).toEqual({ conversationId: 'conv-1', messages: [], pending: null, source: null })
   })
 })

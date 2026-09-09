@@ -122,6 +122,13 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     const interp = await providerManager.interpret(text, context)
     origemDoTurno = interp?.source || null
 
+    // ORIGEM SOBREVIVE AO REMOUNT. Persiste SO o enum ('remote' | 'local' |
+    // 'remote_fallback') no contexto da conversa — nunca `fallback_reason` nem
+    // mensagem de provider. Fire-and-forget: nao bloqueia nem quebra o turno.
+    if (origemDoTurno && memory.setContext) {
+      memory.setContext(convId, { last_source: origemDoTurno }).catch(() => {})
+    }
+
     // ------------------------------------------------------------------
     // CONSULTA sobre a entidade ativa — vale em QUALQUER fase com rascunho.
     // Perguntar nao e mandar: nao altera, nao propoe, nao executa, nao
@@ -462,9 +469,10 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
   // ler `memory` direto da interface seria furar a camada do agente.
   // ------------------------------------------------------------------------
   async function resume({ conversationId }) {
-    if (!conversationId) return { conversationId: null, messages: [], pending: null }
+    if (!conversationId) return { conversationId: null, messages: [], pending: null, source: null }
     let messages = []
     let pending = null
+    let source = null
     try {
       messages = (await memory.history(conversationId)) || []
     } catch {
@@ -475,7 +483,15 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     } catch {
       pending = null
     }
-    return { conversationId, messages, pending }
+    try {
+      // Origem da ultima interpretacao (so o enum) — para o rotulo sobreviver
+      // ao remount que a reconexao provoca.
+      const ctx = memory.getContext ? await memory.getContext(conversationId) : null
+      source = ctx?.last_source || null
+    } catch {
+      source = null
+    }
+    return { conversationId, messages, pending, source }
   }
 
   return { ask, resolveSelection, confirm, cancel, resume }
