@@ -172,13 +172,13 @@ export const taskService = {
         .filter((t) => t.workspace_id === workspaceId && t.date == null)
         .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
     }
-    const { data, error } = await supabase
+    const { data, error, status } = await supabase
       .from('tasks')
       .select('*')
       .eq('workspace_id', workspaceId)
       .is('date', null)
       .order('created_at', { ascending: false })
-    if (error) throw error
+    if (error) throw erroDeBanco(error, status)
     return data
   },
 
@@ -193,13 +193,13 @@ export const taskService = {
           .find((t) => t.id === id && t.workspace_id === workspaceId) || null
       )
     }
-    const { data, error } = await supabase
+    const { data, error, status } = await supabase
       .from('tasks')
       .select('*')
       .eq('id', id)
       .eq('workspace_id', workspaceId)
       .maybeSingle()
-    if (error) throw error
+    if (error) throw erroDeBanco(error, status)
     return data || null
   },
 
@@ -230,8 +230,8 @@ export const taskService = {
       rows.push(saved)
       localStore.setTable('tasks', rows)
     } else {
-      const { data, error } = await supabase.from('tasks').insert(task).select().single()
-      if (error) throw error
+      const { data, error, status } = await supabase.from('tasks').insert(task).select().single()
+      if (error) throw erroDeBanco(error, status)
       saved = data
     }
 
@@ -279,13 +279,13 @@ export const taskService = {
     } else {
       // Remove campos imutaveis/gerados do UPDATE.
       const { id: _id, created_at: _c, workspace_id: _w, created_by: _cb, ...clean } = safePatch
-      const { data, error } = await supabase
+      const { data, error, status } = await supabase
         .from('tasks')
         .update({ ...clean, updated_at })
         .eq('id', task.id)
         .select()
         .single()
-      if (error) throw error
+      if (error) throw erroDeBanco(error, status)
       saved = data
     }
 
@@ -386,8 +386,8 @@ export const taskService = {
         localStore.table('tasks').filter((t) => t.id !== task.id),
       )
     } else {
-      const { error } = await supabase.from('tasks').delete().eq('id', task.id)
-      if (error) throw error
+      const { error, status } = await supabase.from('tasks').delete().eq('id', task.id)
+      if (error) throw erroDeBanco(error, status)
     }
     // Reminders: Supabase remove via ON DELETE CASCADE; demo remove manualmente.
     try {

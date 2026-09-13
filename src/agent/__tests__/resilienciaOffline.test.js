@@ -362,3 +362,84 @@ describe('CP6.4.6 · online continua identico (nao-regressao)', () => {
     expect(edgeInvoke).toHaveBeenCalledTimes(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// CP6.4.6.1 — A FORMA QUE O SAFARI REALMENTE PRODUZ.
+//
+// O QA real confirmou offline em tudo, menos no texto: confirmar sem rede
+// mostrou "Não consegui executar: TypeError: Load failed". A regra de
+// "load failed" ja existia — e mesmo assim nao pegou.
+//
+// O motivo esta aqui embaixo: o que chega NAO e um TypeError. O postgrest
+// embrulha a falha de fetch num OBJETO cujo `message` e a string
+// `"<Nome>: <mensagem>"`. Um `instanceof TypeError` nunca casa com isso, e o
+// `status: 0` — que casaria — era descartado no `throw error` cru da escrita
+// (so a LEITURA `list` tinha sido corrigida no CP6.4.6).
+// ---------------------------------------------------------------------------
+const safariCru = () => ({
+  // Exatamente o que `{ data, error } = await supabase...insert()` entrega e o
+  // servico relancava sem tocar: sem `status`, sem `name`, nao e Error.
+  message: 'TypeError: Load failed',
+  details: 'TypeError: Load failed',
+  hint: '',
+  code: '',
+})
+
+const embrulhado = (bruto) => {
+  const e = new Error(bruto.message)
+  e.name = 'AgentError'
+  e.code = 'execution_failed'
+  e.cause = bruto
+  return e
+}
+
+describe('CP6.4.6.1 · Safari na confirmacao offline', () => {
+  it('23. o objeto cru do postgrest (Safari) e reconhecido como transitorio', () => {
+    const cru = safariCru()
+    expect(cru instanceof TypeError).toBe(false) // e por isso que a regra antiga nao pegava
+    expect(ehIndisponibilidadeTransitoria(cru)).toBe(true)
+  })
+
+  it('24. o mesmo objeto DENTRO de um AgentError tambem e reconhecido', () => {
+    expect(ehIndisponibilidadeTransitoria(embrulhado(safariCru()))).toBe(true)
+  })
+
+  it('25. RLS na mesma forma crua NAO vira offline', () => {
+    const rlsCru = { message: 'new row violates row-level security policy', code: '42501', hint: '' }
+    expect(ehIndisponibilidadeTransitoria(rlsCru)).toBe(false)
+    expect(ehIndisponibilidadeTransitoria(embrulhado(rlsCru))).toBe(false)
+  })
+
+  it('26. um Error qualquer sem code continua fora da allowlist', () => {
+    expect(ehIndisponibilidadeTransitoria({ message: 'TypeError: Load failed' })).toBe(false)
+    expect(ehIndisponibilidadeTransitoria(new Error('Load failed'))).toBe(false)
+  })
+
+  it('27. o servico de escrita preserva o status do transporte', async () => {
+    // Sem isto, `create` relancava o objeto cru e a classificacao dependia so
+    // da mensagem. Agora o proprio servico entrega um Error com status 0.
+    const { erroDeBanco: fabricar } = await import('../../lib/indisponibilidade')
+    const err = fabricar(safariCru(), 0)
+    expect(err).toBeInstanceOf(Error)
+    expect(err.status).toBe(0)
+    expect(ehIndisponibilidadeTransitoria(err)).toBe(true)
+  })
+
+  it('28. QA do Safari ponta a ponta: nada criado, cartao preservado, erro classificavel', async () => {
+    // `tasks.create` falhando como o Safari falha de verdade.
+    const services = servicos({ tasks: { create: vi.fn(async () => { throw safariCru() }) } })
+    const { assistant } = montar({ memory: memoriaOffline(), services })
+    const res = await perguntar(assistant, 'marca dentista sexta 15h')
+    expect(res.kind).toBe('proposal')
+
+    let capturado
+    try {
+      await assistant.confirm({ proposal: res.proposal, identity: IDENTITY, conversationId: null })
+    } catch (err) {
+      capturado = err
+    }
+    // E ISTO que a tela usa para trocar o texto cru pela frase humana.
+    expect(ehIndisponibilidadeTransitoria(capturado)).toBe(true)
+    expect(services.tasks.create).toHaveBeenCalledTimes(1)
+  })
+})

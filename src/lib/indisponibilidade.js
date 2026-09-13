@@ -28,9 +28,17 @@
 // ---------------------------------------------------------------------------
 
 // Mensagens de falha de fetch dos motores reais, ancoradas no inicio para nao
-// capturar um bug nosso que por acaso cite a palavra.
+// capturar um bug nosso que por acaso cite a palavra. Sao quatro dialetos para
+// a mesma coisa: Chrome diz "Failed to fetch", Safari diz "Load failed",
+// Firefox diz "NetworkError...", o undici do Node diz "fetch failed".
 const MENSAGEM_DE_REDE =
   /^(failed to fetch|networkerror|network request failed|load failed|fetch failed)/i
+
+// O postgrest nao propaga o erro original: ele monta `"<Nome>: <mensagem>"`
+// numa string. Entao "TypeError: Load failed" e TEXTO, nao um TypeError — foi
+// exatamente por isso que a regra de mensagem, sozinha, nao reconheceu o
+// Safari no QA do CP6.4.6. Aqui o prefixo e removido antes de comparar.
+const semPrefixoDeNome = (mensagem) => String(mensagem || '').replace(/^[A-Za-z]*Error:\s*/, '')
 
 export function ehIndisponibilidadeTransitoria(err, profundidade = 0) {
   if (!err) return false
@@ -45,7 +53,16 @@ export function ehIndisponibilidadeTransitoria(err, profundidade = 0) {
   if (err.name === 'AbortError' || err.code === 'ABORT_ERR') return true
 
   // 4. fetch do browser lancando de verdade (fora do wrapper do postgrest).
-  if (err instanceof TypeError && MENSAGEM_DE_REDE.test(String(err.message || ''))) return true
+  if (err instanceof TypeError && MENSAGEM_DE_REDE.test(semPrefixoDeNome(err.message))) return true
+
+  // 5. O objeto cru do postgrest, quando o `status` nao chegou ate aqui (um
+  //    servico que ainda relance `error` direto). A assinatura e estreita de
+  //    proposito: `code` VAZIO — string vazia, nao ausente — e so o postgrest
+  //    produz isso, e so no caminho de transporte. Todo erro de aplicacao vem
+  //    com code preenchido (42501, 23503, PGRST301...), e um Error comum tem
+  //    `code` undefined. Isto NAO alarga a allowlist: acrescenta uma forma
+  //    conhecida, nao uma heuristica.
+  if (err.code === '' && MENSAGEM_DE_REDE.test(semPrefixoDeNome(err.message))) return true
 
   // Erro embrulhado (o `toolRegistry` padroniza falhas de service em
   // AgentError para nao vazar stack, mas preserva a causa). Um nivel basta; o
