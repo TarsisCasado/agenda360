@@ -24,6 +24,11 @@ const Links = lazyRoute(() => import('./pages/Links'))
 const Assistant = lazyRoute(() => import('./pages/Assistant'))
 const Reports = lazyRoute(() => import('./pages/Reports'))
 const Settings = lazyRoute(() => import('./pages/Settings'))
+// UX1 — PROTOTIPO do Agenda 360 2.0. Isolado de proposito: rota propria, fora
+// do Layout, com estado 100% mockado em memoria (ver src/prototype/). Nao toca
+// dado real, nao chama servico e so abre com VITE_PROTOTIPO=true (ou em dev).
+// Remover o prototipo e apagar a pasta e estas duas linhas.
+const Prototipo = lazyRoute(() => import('./prototype/PrototypeApp'))
 
 // CP5.7 — trocar de rota nao pode parecer "carregando um site". Um spinner
 // grande no meio da tela e a imagem do carregamento de pagina; um esqueleto com
@@ -78,6 +83,7 @@ export default function App() {
               {/* Editor de Ideias em TELA CHEIA (fora do Layout: sem
                   sidebar/bottom-nav, viewport inteira, teclado/safe-area). */}
               <Route path="/ideias/:id" element={<IdeaEditor />} />
+              <Route path="/prototipo/*" element={<Prototipo />} />
               <Route path="/" element={<Layout />}>
                 <Route index element={<Today />} />
                 <Route path="tarefas" element={<Tasks />} />

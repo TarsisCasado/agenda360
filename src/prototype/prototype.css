@@ -1,0 +1,140 @@
+/* ---------------------------------------------------------------------------
+   AGENDA 360 2.0 — direcao visual do prototipo.
+
+   Nao e um Design System novo. Sao os tokens que ja existem (roxo, superficies,
+   hairlines, escala de texto) organizados sob outra regra de composicao:
+
+     . uma familia SERIF do sistema para titulos e horas — e o que faz a tela
+       parecer uma agenda editorial e nao um painel de gestao. Zero rede: pilha
+       de fontes do proprio aparelho;
+     . linhas com fio de separacao no lugar de cards. Card so quando ha motivo
+       estrutural (uma proposta, uma coluna de quadro);
+     . rotulo de secao em caixa alta, pequeno, espacado — o ritmo de uma pagina
+       impressa;
+     . numeros tabulares nas horas, para a coluna da agenda ficar alinhada;
+     . o roxo aparece POUCO, e onde aparece significa alguma coisa.
+--------------------------------------------------------------------------- */
+
+.px-serif {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua',
+    Georgia, 'Times New Roman', serif;
+  font-feature-settings: 'liga' 1, 'kern' 1;
+  letter-spacing: -0.015em;
+}
+
+.px-hero {
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  line-height: 1.1;
+  font-weight: 600;
+}
+
+.px-titulo {
+  font-size: clamp(1.375rem, 3.6vw, 1.75rem);
+  line-height: 1.15;
+  font-weight: 600;
+}
+
+/* Rotulo de secao — o ritmo editorial da pagina. */
+.px-secao {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--c-text-3));
+}
+
+.px-hora {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Linha: a unidade de conteudo do produto. Sem moldura, com fio. */
+.px-linha {
+  display: flex;
+  gap: 0.875rem;
+  padding: 0.8125rem 0;
+  border-top: 1px solid rgb(var(--c-hairline));
+}
+.px-linha:first-child { border-top: 0; }
+
+.px-toque {
+  border-radius: 12px;
+  margin-inline: -0.625rem;
+  padding-inline: 0.625rem;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .px-toque:hover { background: rgb(var(--c-surface-2)); }
+}
+
+/* Motivo pelo qual algo aparece — discreto, mas sempre presente. */
+.px-motivo {
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  color: rgb(var(--c-text-3));
+}
+
+/* A unica peca que e mesmo um cartao: a proposta que espera confirmacao. */
+.px-proposta {
+  border: 1px solid rgb(var(--c-hairline));
+  border-radius: 18px;
+  background: rgb(var(--c-surface));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -22px rgb(0 0 0 / 0.35);
+}
+
+.px-marca-agora {
+  box-shadow: inset 2px 0 0 rgb(var(--c-accent));
+}
+
+.px-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--c-hairline));
+  padding: 0.2rem 0.6rem;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgb(var(--c-text-2));
+  white-space: nowrap;
+}
+.px-chip-on {
+  border-color: transparent;
+  background: rgb(var(--c-accent-soft));
+  color: rgb(var(--c-accent-text));
+  font-weight: 600;
+}
+
+/* Barra colorida que distingue as tres especies temporais. */
+.px-especie {
+  width: 3px;
+  border-radius: 999px;
+  flex: none;
+}
+.px-compromisso { background: rgb(var(--c-accent)); }
+.px-reserva {
+  background: repeating-linear-gradient(
+    135deg,
+    rgb(var(--c-accent) / 0.55) 0 3px,
+    transparent 3px 6px
+  );
+}
+.px-planejada { background: rgb(var(--c-hairline)); }
+
+.px-aviso {
+  animation: px-subir var(--dur-base) var(--ease-out);
+}
+@keyframes px-subir {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.px-entra { animation: px-fade var(--dur-base) var(--ease-out); }
+@keyframes px-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .px-aviso, .px-entra { animation: none; }
+}
