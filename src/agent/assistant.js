@@ -43,12 +43,53 @@ import {
 } from './slots'
 import { classifyTurn, isDraftQuery, TURN } from './turnClassifier'
 import { describeDraft } from './draftSummary'
+import { contextoBase } from './contextEngine'
+import { ehIndisponibilidadeTransitoria } from '../lib/indisponibilidade'
 
 const READ_INTENTS = new Set(['search_tasks', 'list_schedule'])
 const TARGET_INTENTS = new Set([
   'complete_task', 'mark_missed', 'reschedule_task', 'cancel_task', 'delete_task', 'update_task',
 ])
 const CONFIDENCE_THRESHOLD = 0.5
+
+// ---------------------------------------------------------------------------
+// CP6.4.6 — O QUE E O TURNO, E O QUE E REGISTRO DO TURNO.
+//
+// O QA de rede desligada mostrou o turno morrendo antes de interpretar: o
+// `append` do historico falhava e a excecao subia ate a tela ("Ops, tive um
+// problema..."), sem proposta nenhuma. O fallback remoto->local estava correto
+// e nunca chegou a ser chamado.
+//
+// A fronteira que faltava, dita uma vez: INTERPRETAR e PROPOR sao o turno;
+// historico, contexto vindo do banco e auditoria sao REGISTRO do turno. Sem
+// rede, o registro espera; a conversa nao.
+//
+// `tolerante` aplica isso — e so isso. Ele nao e um `catch` generico: consulta
+// o classificador e RELANCA tudo que nao for transporte, porque um erro de RLS
+// ou de payload disfarcado de "offline" e um defeito que ninguem descobre.
+// ---------------------------------------------------------------------------
+async function tolerante(promessa, valorPadrao = null) {
+  try {
+    return await promessa
+  } catch (err) {
+    if (!ehIndisponibilidadeTransitoria(err)) throw err
+    return valorPadrao
+  }
+}
+
+// Depois de a atividade ter sido criada, NADA pode transformar o turno em
+// falha: a escrita ja aconteceu, e dizer "nao consegui" e um convite a que a
+// pessoa tente de novo e duplique. Um erro de aplicacao aqui nao e engolido em
+// silencio — ele vai para o console —, mas tambem nao desfaz o que foi feito.
+async function registroPosEscrita(promessa, ondeFalhou) {
+  try {
+    await promessa
+  } catch (err) {
+    if (!ehIndisponibilidadeTransitoria(err)) {
+      console.error(`[assistant] escrita concluida, mas ${ondeFalhou} falhou:`, err)
+    }
+  }
+}
 
 export function createAssistant({ registry, runtime, providerManager, contextEngine, memory }) {
   // Resolve a tarefa-alvo (por task_id direto ou por texto). Retorna:
@@ -108,17 +149,34 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     if (!identity?.workspaceId || !identity?.userId) {
       throw new Error('Sessao/workspace ausente.')
     }
-    // Conversa (memory) — inicia se necessario.
-    const convId = conversationId || (await memory.startConversation(identity.workspaceId, identity.userId))
+    // Conversa (memory) — inicia se necessario. Sem banco alcancavel o turno
+    // segue SEM id: `ai_messages.conversation_id` tem FK NOT NULL para
+    // `ai_conversations`, entao um uuid inventado aqui viraria violacao 23503
+    // permanente naquela conversa — e o ponteiro fantasma ainda sobreviveria ao
+    // F5 no localStorage. Nulo e honesto: a memoria apenas nao grava (todas as
+    // funcoes de `memory` ja retornam cedo com id falsy) e o turno seguinte,
+    // com rede, abre uma conversa de verdade.
+    const convId =
+      conversationId ||
+      (await tolerante(memory.startConversation(identity.workspaceId, identity.userId), null))
 
     // MEMORIA: historico recente + intencao pendente ANTES de interpretar.
     const [historyRows, pending] = await Promise.all([
       memory.history(convId).catch(() => []),
       memory.getPending ? memory.getPending(convId).catch(() => null) : Promise.resolve(null),
     ])
-    await memory.append(convId, 'user', text)
+    await tolerante(memory.append(convId, 'user', text))
 
-    const context = await contextEngine.build(identity, { categories, history: historyRows, pending })
+    // Contexto: o grounding vindo do banco (recentes/atrasadas) e desejavel,
+    // nunca requisito. O que NAO pode faltar — data de hoje, hora, fuso — nao
+    // depende de rede e continua identico offline.
+    let context
+    try {
+      context = await contextEngine.build(identity, { categories, history: historyRows, pending })
+    } catch (err) {
+      if (!ehIndisponibilidadeTransitoria(err)) throw err
+      context = contextoBase(identity, { categories, history: historyRows, pending })
+    }
     const interp = await providerManager.interpret(text, context)
     origemDoTurno = interp?.source || null
 
@@ -158,7 +216,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
       if (decision.kind === TURN.AMBIGUOUS) {
         // Perguntar e melhor que adivinhar: o rascunho continua vivo.
         const msg = `Isso é sobre "${draft.data?.title || 'a atividade'}" que preparei, ou algo novo?`
-        await memory.append(convId, 'assistant', msg, { phase: 'awaiting_confirmation' })
+        await tolerante(memory.append(convId, 'assistant', msg, { phase: 'awaiting_confirmation' }))
         return {
           conversationId: convId,
           ...clarify(msg, { intent: draft.intent, data: draft.data }),
@@ -168,7 +226,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
       // TURN.NEW_INTENT: substituicao inequivoca — o rascunho e descartado
       // (com registro) e o turno segue o fluxo normal, do zero.
       await runtime.cancel(draft.proposal).catch(() => {})
-      await memory.clearPending?.(convId)
+      await tolerante(memory.clearPending?.(convId))
       draft = null
     }
 
@@ -184,7 +242,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     const blocked = !turn.continued && interp.needs_clarification && !FILLABLE_INTENTS.has(turn.intent)
     if (!turn.continued && (unusable || blocked)) {
       const msg = interp.clarification || 'Nao consegui entender com seguranca. Pode reformular?'
-      await memory.append(convId, 'assistant', msg)
+      await tolerante(memory.append(convId, 'assistant', msg))
       return { conversationId: convId, confidence: interp.confidence, ...clarify(msg) }
     }
 
@@ -200,7 +258,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
           : 'Não consegui entender essa parte.'
       const msg = `${reason} ${slotQuestion(turn.unresolvedSlot, turn.data)}`
       await savePending(convId, turn, turn.unresolvedSlot)
-      await memory.append(convId, 'assistant', msg, { slot: turn.unresolvedSlot })
+      await tolerante(memory.append(convId, 'assistant', msg, { slot: turn.unresolvedSlot }))
       return { conversationId: convId, ...clarify(msg, { slot: turn.unresolvedSlot, intent: turn.intent }) }
     }
 
@@ -212,7 +270,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
       const slot = missing[0]
       const question = slotQuestion(slot, data)
       await savePending(convId, { ...turn, data }, slot)
-      await memory.append(convId, 'assistant', question, { slot })
+      await tolerante(memory.append(convId, 'assistant', question, { slot }))
       return {
         conversationId: convId,
         confidence: interp.confidence,
@@ -222,7 +280,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
 
     // Interpretador pediu esclarecimento e nao ha slot a preencher: repassa.
     if (!turn.continued && interp.needs_clarification && interp.clarification) {
-      await memory.append(convId, 'assistant', interp.clarification)
+      await tolerante(memory.append(convId, 'assistant', interp.clarification))
       return { conversationId: convId, ...clarify(interp.clarification) }
     }
 
@@ -231,13 +289,13 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
       const r = await resolveTarget(data, identity)
       if (!r.ok && r.reason === 'none') {
         const msg = `Nao encontrei a tarefa "${data.query || data.title || ''}".`
-        await memory.clearPending?.(convId)
-        await memory.append(convId, 'assistant', msg)
+        await tolerante(memory.clearPending?.(convId))
+        await tolerante(memory.append(convId, 'assistant', msg))
         return { conversationId: convId, ...clarify(msg) }
       }
       if (!r.ok && r.reason === 'many') {
         const msg = 'Encontrei mais de uma tarefa. Qual delas?'
-        await memory.append(convId, 'assistant', msg)
+        await tolerante(memory.append(convId, 'assistant', msg))
         return {
           conversationId: convId,
           kind: 'selection',
@@ -264,7 +322,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
         err?.code === 'invalid_payload'
           ? 'Faltaram informacoes para essa acao. Pode detalhar melhor?'
           : err?.message || 'Nao consegui preparar a acao.'
-      await memory.append(convId, 'assistant', msg)
+      await tolerante(memory.append(convId, 'assistant', msg))
       return { conversationId: convId, ...clarify(msg) }
     }
 
@@ -273,14 +331,14 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     if (outcome.kind === 'proposal') {
       await saveDraft(convId, { intent: turn.intent, data, asked: turn.asked }, outcome.proposal)
     } else {
-      await memory.clearPending?.(convId)
+      await tolerante(memory.clearPending?.(convId))
     }
 
     const assistantMsg =
       outcome.kind === 'result'
         ? `Encontrei ${Array.isArray(outcome.result) ? outcome.result.length : 0} item(ns).`
         : previewMessage(turn.intent, outcome.proposal?.payload, data)
-    await memory.append(convId, 'assistant', assistantMsg)
+    await tolerante(memory.append(convId, 'assistant', assistantMsg))
     return {
       conversationId: convId,
       confidence: interp.confidence,
@@ -350,7 +408,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
       : 'Se estiver certo, é só confirmar.'
 
     const msg = `${answer} ${tail}`
-    await memory.append(conversationId, 'assistant', msg, { inspect: true })
+    await tolerante(memory.append(conversationId, 'assistant', msg, { inspect: true }))
     return {
       conversationId,
       kind: 'answer',
@@ -363,18 +421,19 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
   }
 
   async function confirmDraft(conversationId, draft, identity) {
-    const result = await runtime.confirm(draft.proposal, identity)
-    await memory.clearPending?.(conversationId)
+    const result = await runtime.confirm(draft.proposal, identity, { conversationId })
+    // Dai para baixo e registro: a atividade ja existe.
+    await registroPosEscrita(memory.clearPending?.(conversationId), 'limpar o rascunho')
     const msg = 'Pronto, salvei.'
-    await memory.append(conversationId, 'assistant', msg)
+    await registroPosEscrita(memory.append(conversationId, 'assistant', msg), 'gravar o historico')
     return { conversationId, kind: 'confirmed', message: msg, intent: draft.intent, result }
   }
 
   async function cancelDraft(conversationId, draft) {
     await runtime.cancel(draft.proposal).catch(() => {})
-    await memory.clearPending?.(conversationId)
+    await tolerante(memory.clearPending?.(conversationId))
     const msg = 'Tudo bem, descartei.'
-    await memory.append(conversationId, 'assistant', msg)
+    await tolerante(memory.append(conversationId, 'assistant', msg))
     return { conversationId, kind: 'cancelled', message: msg, intent: draft.intent }
   }
 
@@ -395,7 +454,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
       const question = slotQuestion(slot, data)
       await runtime.cancel(draft.proposal).catch(() => {})
       await savePending(conversationId, { intent: draft.intent, data, asked }, slot)
-      await memory.append(conversationId, 'assistant', question, { slot })
+      await tolerante(memory.append(conversationId, 'assistant', question, { slot }))
       return {
         conversationId,
         ...clarify(question, { slot, intent: draft.intent, data }),
@@ -409,7 +468,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     } catch (err) {
       // O ajuste deixou o rascunho invalido: nao perde nada, so avisa.
       const msg = `Não consegui aplicar esse ajuste (${err?.message || 'dado inválido'}). O que preparei continua aqui.`
-      await memory.append(conversationId, 'assistant', msg)
+      await tolerante(memory.append(conversationId, 'assistant', msg))
       return { conversationId, ...clarify(msg), proposal: draft.proposal }
     }
 
@@ -424,7 +483,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
 
     const what = decision.fields?.length ? listar(decision.fields) : 'a atividade'
     const msg = `Ajustei ${what}. Confira e confirme. 👇`
-    await memory.append(conversationId, 'assistant', msg)
+    await tolerante(memory.append(conversationId, 'assistant', msg))
     return {
       conversationId,
       confidence: interp?.confidence,
@@ -444,16 +503,20 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
   }
 
   async function confirm({ proposal, identity, conversationId }) {
-    const result = await runtime.confirm(proposal, identity)
-    await memory.clearPending?.(conversationId)
-    await memory.append(conversationId, 'assistant', 'Acao confirmada e executada.')
+    const result = await runtime.confirm(proposal, identity, { conversationId })
+    // A atividade existe a partir daqui. Historico e rascunho sao registro.
+    await registroPosEscrita(memory.clearPending?.(conversationId), 'limpar o rascunho')
+    await registroPosEscrita(
+      memory.append(conversationId, 'assistant', 'Acao confirmada e executada.'),
+      'gravar o historico',
+    )
     return { kind: 'confirmed', result }
   }
 
   async function cancel({ proposal, conversationId }) {
     await runtime.cancel(proposal)
-    await memory.clearPending?.(conversationId)
-    await memory.append(conversationId, 'assistant', 'Acao cancelada.')
+    await tolerante(memory.clearPending?.(conversationId))
+    await tolerante(memory.append(conversationId, 'assistant', 'Acao cancelada.'))
     return { kind: 'cancelled' }
   }
 

@@ -5,6 +5,7 @@ import { reminderService } from './reminderService'
 import { uid } from '../lib/utils'
 import { LOG_ACTIONS, STATUS, STATUS_META } from '../lib/constants'
 import { CANAL_PADRAO, validarAlerta, mudancaMexeNoAlerta } from '../lib/alertRules'
+import { erroDeBanco } from '../lib/indisponibilidade'
 
 // Campos da task que afetam os reminders. So sincronizamos quando o patch toca
 // um deles (edicao de titulo/descricao/etc. nao dispara reconciliacao).
@@ -156,8 +157,8 @@ export const taskService = {
       .order('start_time', { ascending: true, nullsFirst: true })
     if (range.start) query = query.gte('date', range.start)
     if (range.end) query = query.lte('date', range.end)
-    const { data, error } = await query
-    if (error) throw error
+    const { data, error, status } = await query
+    if (error) throw erroDeBanco(error, status)
     return data
   },
 

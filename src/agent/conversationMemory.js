@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { localStore } from '../services/localStore'
 import { uid } from '../lib/utils'
+import { erroDeBanco } from '../lib/indisponibilidade'
 
 // ---------------------------------------------------------------------------
 // Conversation Memory — uso real de ai_conversations / ai_messages.
@@ -24,12 +25,12 @@ export function createConversationMemory() {
       localStore.setTable('ai_conversations', [...localStore.table('ai_conversations'), row])
       return row.id
     }
-    const { data, error } = await supabase
+    const { data, error, status } = await supabase
       .from('ai_conversations')
       .insert({ workspace_id: workspaceId, user_id: userId, title })
       .select('id')
       .single()
-    if (error) throw error
+    if (error) throw erroDeBanco(error, status)
     return data.id
   }
 
@@ -50,12 +51,12 @@ export function createConversationMemory() {
       localStore.setTable('ai_messages', [...localStore.table('ai_messages'), row])
       return row
     }
-    const { data, error } = await supabase
+    const { data, error, status } = await supabase
       .from('ai_messages')
       .insert({ conversation_id: conversationId, role, content: safeContent, metadata })
       .select()
       .single()
-    if (error) throw error
+    if (error) throw erroDeBanco(error, status)
     return data
   }
 
@@ -90,11 +91,11 @@ export function createConversationMemory() {
       localStore.setTable('ai_conversations', rows)
       return next
     }
-    const { error } = await supabase
+    const { error, status } = await supabase
       .from('ai_conversations')
       .update({ context: next, updated_at: new Date().toISOString() })
       .eq('id', conversationId)
-    if (error) throw error
+    if (error) throw erroDeBanco(error, status)
     return next
   }
 
@@ -122,13 +123,13 @@ export function createConversationMemory() {
     }
     // Ordena DESC + limit para pegar as mensagens MAIS RECENTES (com
     // ascending:true o limit devolvia o inicio da conversa) e reinverte.
-    const { data, error } = await supabase
+    const { data, error, status } = await supabase
       .from('ai_messages')
       .select('role, content, created_at')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: false })
       .limit(limit)
-    if (error) throw error
+    if (error) throw erroDeBanco(error, status)
     return (data || []).slice().reverse()
   }
 

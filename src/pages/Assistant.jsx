@@ -15,6 +15,7 @@ import { conversaAberta, guardarConversa, esquecerConversa } from '../lib/conver
 import { PRIORITY_META } from '../lib/constants'
 import { formatShort } from '../lib/date'
 import { SOURCE } from '../agent/providerManager'
+import { ehIndisponibilidadeTransitoria } from '../lib/indisponibilidade'
 
 // De onde veio a leitura do ultimo turno (CP6.4). O rotulo era fixo — "Interpretação
 // local" — e continuaria dizendo isso com o provider remoto ligado, ou caido. Tres
@@ -26,6 +27,16 @@ const ORIGEM_IA = {
   [SOURCE.LOCAL]: 'Interpretação local',
   [SOURCE.FALLBACK]: 'Interpretação local (IA indisponível)',
 }
+
+// CP6.4.6 — antes do primeiro turno nao ha origem, e o default de antes dizia
+// "Interpretação local" com a mesma confianca com que diria a verdade. Legenda
+// que afirma o que ninguem verificou e pior que legenda nenhuma.
+const legendaDeOrigem = (origem) => ORIGEM_IA[origem] || null
+
+// Sem conexao, quem confirma precisa saber duas coisas: nao salvou, e nao
+// perdeu. Mensagem humana, nunca o texto cru do Supabase/fetch.
+const SEM_CONEXAO =
+  'Não consegui concluir agora — parece que você está sem conexão. Deixei o que preparei aqui: é só confirmar quando reconectar.'
 import { cx } from '../lib/utils'
 
 // --- Copy de concierge (humanizada, curta, elegante) -----------------------
@@ -350,8 +361,16 @@ export default function Assistant() {
       toast('Ação executada')
       reload()
     } catch (err) {
-      push({ role: 'assistant', text: 'Não consegui executar: ' + err.message })
-      toast('Erro: ' + err.message, 'error')
+      // Backend fora do ar: NADA foi criado e o cartao continua na tela (o
+      // `setPending(null)` acima so roda no caminho de sucesso). A pessoa
+      // confirma de novo quando voltar — sem duplicar, porque nao houve escrita.
+      if (ehIndisponibilidadeTransitoria(err)) {
+        push({ role: 'assistant', text: SEM_CONEXAO })
+        toast('Sem conexão no momento', 'error')
+      } else {
+        push({ role: 'assistant', text: 'Não consegui executar: ' + err.message })
+        toast('Erro: ' + err.message, 'error')
+      }
     } finally { setBusy(false) }
   }
 
@@ -385,7 +404,7 @@ export default function Assistant() {
         <div className="min-w-0">
           <h1 className="text-display">Copiloto</h1>
           <p className="text-caption mt-1">
-            {ORIGEM_IA[origemIA] || ORIGEM_IA.local} · {workspace?.name || 'Pessoal'}
+            {[legendaDeOrigem(origemIA), workspace?.name || 'Pessoal'].filter(Boolean).join(' · ')}
           </p>
         </div>
         {messages.length > 0 && (
