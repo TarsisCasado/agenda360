@@ -39,7 +39,12 @@ export function missingSlots(intent, data = {}, { asked = [] } = {}) {
     const dateWaived = data.date_skipped && !data.start_time
     if (data.date_range && !data.date) missing.push('dia_da_semana')
     else if (!data.date && !dateWaived) missing.push('data')
-    if (data.time_ambiguous) missing.push('periodo')
+    // A guarda `asked` e a mesma que `horario` ja tinha: uma pergunta
+    // respondida nao volta. Sem ela, qualquer caminho que reacenda
+    // `time_ambiguous` — por exemplo um provider que repita a ambiguidade no
+    // turno seguinte — faria a pergunta se repetir para sempre, e um laco que
+    // nao avisa que e um laco e o pior tipo de defeito de conversa.
+    if (data.time_ambiguous && !asked.includes('periodo')) missing.push('periodo')
     else if (
       !data.start_time &&
       !data.daypart &&
@@ -225,6 +230,47 @@ export function mergeTurn({ pending, interp, text, context = {} }) {
     interp.intent !== 'unknown' &&
     interp.confidence >= CONFIDENCE_THRESHOLD &&
     !interp.needs_clarification
+
+  // Trocar de assunto continua sendo trocar de assunto: "o que tenho amanha?"
+  // no meio de uma pergunta em aberto e uma consulta, nao a resposta dela. O
+  // sinal que separa os dois casos e a INTENCAO — outra intencao, entendida com
+  // seguranca, abandona a pendente (a regra do ramo de baixo, preservada).
+  const mudouDeAssunto = interpretedAsNew && interp.intent !== pending.intent
+
+  // ------------------------------------------------------------------
+  // O SLOT ABERTO VEM ANTES DA CONFIANCA DO PROVIDER (CP6.5.1).
+  //
+  // O QA real: "reuniao amanha as 08 com os gerentes" -> "08:00 da manha ou
+  // 20:00 da noite?" -> "manha" -> a MESMA pergunta de novo.
+  //
+  // O ramo de baixo presumia que um fragmento chega como `unknown` — verdade
+  // do NLU local, que devolve "manha" com confianca 0.2. O provider REMOTO
+  // recebe o rascunho junto, entao entende o fragmento e responde com intencao
+  // confiante; com isso `applyAnswer` nunca rodava, `time_ambiguous` seguia
+  // herdado do pendente e a pergunta voltava. A reproducao mostrou o pior caso:
+  // mesmo o modelo respondendo CERTO (start_time 08:00, sem ambiguidade) a
+  // pergunta se repetia — logo o defeito era nosso, nao dele.
+  //
+  // A regra que faltava: havendo pergunta em aberto, uma resposta CURTA e
+  // primeiro uma resposta. So se ela nao servir o turno volta a ser avaliado
+  // como frase nova. Duas coisas nao passam por aqui: frase longa ("na verdade
+  // muda o titulo para...") e mudanca clara de assunto — quem pergunta "o que
+  // tenho amanha?" com um slot aberto esta consultando, nao respondendo.
+  //
+  // Nada novo nasce aqui: `isShortAnswer` e `applyAnswer` ja existiam, e a
+  // resolucao temporal continua sendo a de sempre.
+  // ------------------------------------------------------------------
+  if (!mudouDeAssunto && pending.awaiting && isShortAnswer(text)) {
+    const resposta = applyAnswer({ slot: pending.awaiting, data: pending.data, text, context })
+    if (resposta.resolved) {
+      return {
+        intent: pending.intent,
+        data: resposta.data,
+        asked: [...(pending.asked || []), pending.awaiting],
+        continued: true,
+      }
+    }
+  }
 
   // Frase interpretada com seguranca por si so:
   //  - mesma intencao -> complementa a pendente (o turno novo tem prioridade);
