@@ -66,7 +66,7 @@ export default function Copiloto() {
 
       <header>
         <p className="px-secao">Copiloto</p>
-        <h1 className="px-serif px-titulo mt-1.5">
+        <h1 className="px-titulo-tela mt-1">
           {contexto === 'semana' ? 'Sobre esta semana' : 'Conversa'}
         </h1>
         {contexto === 'semana' && (

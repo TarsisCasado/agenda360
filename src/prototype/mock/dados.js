@@ -87,10 +87,10 @@ export function semearEstado(hojeDate = diaDaDemonstracao()) {
     pessoa: 'Tarsis',
 
     compromissos: [
-      { id: 'c-diretoria', titulo: 'Reunião de diretoria', data: hoje, inicio: '09:00', fim: '10:30', local: 'Sala 2' },
-      { id: 'c-almoco', titulo: 'Almoço com fornecedor', data: hoje, inicio: '11:30', fim: '13:00', local: 'Bendito' },
-      { id: 'c-seminovos', titulo: 'Reunião Seminovos', data: hoje, inicio: '15:00', fim: '16:00' },
-      { id: 'c-dentista', titulo: 'Dentista', data: amanha, inicio: '16:00', fim: '17:00' },
+      { id: 'c-diretoria', titulo: 'Reunião de diretoria', data: hoje, inicio: '09:00', fim: '10:30', local: 'Sala 2', categoria: 'Diretoria', alerta: 15, notas: 'Levar os números de giro.' },
+      { id: 'c-almoco', titulo: 'Almoço com fornecedor', data: hoje, inicio: '11:30', fim: '13:00', local: 'Bendito', categoria: 'Comercial', alerta: 30 },
+      { id: 'c-seminovos', titulo: 'Reunião Seminovos', data: hoje, inicio: '15:00', fim: '16:00', categoria: 'Operação' },
+      { id: 'c-dentista', titulo: 'Dentista', data: amanha, inicio: '16:00', fim: '17:00', categoria: 'Pessoal', alerta: 60 },
       { id: 'c-repasse', titulo: 'Alinhamento de repasse', data: d(3), inicio: '10:00', fim: '11:00' },
     ],
 
@@ -157,6 +157,8 @@ export function semearEstado(hojeDate = diaDaDemonstracao()) {
         reserva: null,
         prioridade: 'media',
         contexto: 'Diretoria',
+        descricao: 'Giro, margem por linha e o plano de compra do próximo trimestre.',
+        alerta: null,
         origemId: null,
         subtarefas: [],
         grande: true,            // candidata a decomposicao pela IA

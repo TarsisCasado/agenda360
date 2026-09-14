@@ -59,6 +59,27 @@ describe('protótipo · isolamento', () => {
     expect(infratores, `${motivo} em: ${infratores.join(', ')}`).toEqual([])
   })
 
+  // UX1.1 — o protótipo passou a reaproveitar DUAS peças do produto, e é bom
+  // que isso seja uma lista fechada em vez de um hábito: `cx` (utilitário de
+  // classes) e `useTouchCardDrag` (o gesto de arrastar no toque, já validado no
+  // produto — UI pura, sem dado nenhum). Qualquer outro import para fora da
+  // pasta reprova aqui.
+  it('só reaproveita do produto o que está explicitamente permitido', () => {
+    const PERMITIDOS = [/lib\/utils/, /hooks\/useTouchCardDrag/]
+    const forasteiros = []
+    for (const f of lista) {
+      const codigo = semComentarios(readFileSync(f, 'utf8'))
+      for (const m of codigo.matchAll(/from\s+['"](\.\..*?)['"]/g)) {
+        const alvo = m[1]
+        // sai da pasta do protótipo?
+        if (!alvo.includes('../../')) continue
+        if (PERMITIDOS.some((p) => p.test(alvo))) continue
+        forasteiros.push(`${f.split('/prototype/')[1]} -> ${alvo}`)
+      }
+    }
+    expect(forasteiros, `imports fora da allowlist: ${forasteiros.join(', ')}`).toEqual([])
+  })
+
   it('o produto atual só ganhou a rota nova — nada foi removido', () => {
     const app = readFileSync(join(RAIZ, '..', 'App.jsx'), 'utf8')
     expect(app).toContain('/prototipo/*')

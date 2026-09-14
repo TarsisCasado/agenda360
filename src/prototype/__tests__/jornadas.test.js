@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { reducer, estadoInicial, paraHoje, atrasadas, porOrganizar, agendaDoDia, planejadasDoDia, tarefaPorId, memoriaPorId, buscar } from '../store/reducer'
+import { reducer, estadoInicial, paraHoje, atrasadas, porOrganizar, agendaDoDia, planejadasDoDia, tarefaPorId, memoriaPorId, buscar, colunaDe } from '../store/reducer'
 import { ESTADO, iso, somarDias, inicioDaSemana } from '../mock/dados'
 
 // ---------------------------------------------------------------------------
@@ -232,5 +232,181 @@ describe('a história dos mocks se sustenta', () => {
     expect(atrasadas(e).length).toBeGreaterThan(0)
     expect(porOrganizar(e).length).toBeGreaterThanOrEqual(3)
     expect(e.memoria.some((m) => m.referencia)).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// UX1.1 — CRIAÇÃO ESTRUTURADA, EDIÇÃO E MANIPULAÇÃO DIRETA.
+//
+// O UX1 provou que nada acontece sem confirmação. Faltava provar o contrário:
+// que dá para FAZER as coisas. Estes testes guardam a capacidade operacional
+// restituída — criar com campos, editar, mover, ordenar — e continuam
+// guardando o que não pode mudar junto: mover não apaga, filtrar não destrói,
+// confirmar continua sendo do humano.
+// ---------------------------------------------------------------------------
+describe('UX1.1 · criação estruturada', () => {
+  it('cria tarefa com os campos preenchidos, sem passar pela IA', () => {
+    const e0 = inicial()
+    const e1 = reducer(e0, {
+      tipo: 'criarTarefa',
+      dados: {
+        titulo: 'Negociar prazo com a seguradora',
+        descricao: 'Contrato vence dia 30.',
+        estado: ESTADO.FAZENDO,
+        planejadaPara: TERCA,
+        prazo: QUARTA,
+        prioridade: 'alta',
+        contexto: 'Financeiro',
+        alerta: 30,
+      },
+    })
+    const t = e1.tarefas[0]
+    expect(t.titulo).toBe('Negociar prazo com a seguradora')
+    expect(t.estado).toBe(ESTADO.FAZENDO)
+    expect(t.planejadaPara).toBe(TERCA)
+    expect(t.prazo).toBe(QUARTA)
+    expect(t.prioridade).toBe('alta')
+    expect(t.alerta).toBe(30)
+    expect(t.reserva).toBeNull()   // dia não é horário, nem aqui
+  })
+
+  it('criação contextual nasce no estado da coluna', () => {
+    const e1 = reducer(inicial(), {
+      tipo: 'criarTarefa',
+      dados: { titulo: 'Ligar para o despachante', estado: ESTADO.FAZENDO },
+    })
+    expect(e1.tarefas[0].estado).toBe(ESTADO.FAZENDO)
+  })
+
+  it('cria compromisso estruturado e ele aparece no dia e na hora certos', () => {
+    const e1 = reducer(inicial(), {
+      tipo: 'criarCompromisso',
+      dados: { titulo: 'Alinhar com a seguradora', data: TERCA, inicio: '14:00', fim: '15:00', categoria: 'Financeiro', alerta: 15 },
+    })
+    const c = agendaDoDia(e1, TERCA).find((x) => x.titulo === 'Alinhar com a seguradora')
+    expect(c).toBeTruthy()
+    expect(`${c.inicio}–${c.fim}`).toBe('14:00–15:00')
+    expect(c.especie).toBe('compromisso')
+  })
+
+  it('criação contextual de compromisso guarda o horário escolhido', () => {
+    const e1 = reducer(inicial(), {
+      tipo: 'criarCompromisso',
+      dados: { titulo: 'Visita de vistoria', data: QUARTA, inicio: '10:00', fim: '11:00' },
+    })
+    expect(agendaDoDia(e1, QUARTA).some((x) => x.inicio === '10:00')).toBe(true)
+  })
+})
+
+describe('UX1.1 · edição e exclusão', () => {
+  it('editar altera só o que veio no patch', () => {
+    const e0 = inicial()
+    const antes = tarefaPorId(e0, 't-porcino')
+    const e1 = reducer(e0, { tipo: 'editarTarefa', id: 't-porcino', patch: { prioridade: 'alta' } })
+    const depois = tarefaPorId(e1, 't-porcino')
+    expect(depois.prioridade).toBe('alta')
+    expect(depois.titulo).toBe(antes.titulo)
+    expect(depois.planejadaPara).toBe(antes.planejadaPara)
+  })
+
+  it('editar compromisso mantém os campos não tocados', () => {
+    const e1 = reducer(inicial(), { tipo: 'editarCompromisso', id: 'c-diretoria', patch: { inicio: '09:30', fim: '11:00' } })
+    const c = e1.compromissos.find((x) => x.id === 'c-diretoria')
+    expect(c.inicio).toBe('09:30')
+    expect(c.local).toBe('Sala 2')
+  })
+
+  it('excluir remove a atividade e nada mais', () => {
+    const e0 = inicial()
+    const e1 = reducer(e0, { tipo: 'excluirTarefa', id: 't-porcino' })
+    expect(tarefaPorId(e1, 't-porcino')).toBeNull()
+    expect(e1.tarefas).toHaveLength(e0.tarefas.length - 1)
+    expect(e1.memoria).toEqual(e0.memoria)
+  })
+})
+
+describe('UX1.1 · mover (arrasto, "Mover para…" e teclado usam a mesma regra)', () => {
+  it('mover muda a coluna e preserva a tarefa inteira', () => {
+    const e0 = inicial()
+    const antes = tarefaPorId(e0, 't-apresentacao')
+    const e1 = reducer(e0, { tipo: 'moverTarefa', id: 't-apresentacao', paraEstado: ESTADO.FAZENDO })
+    const depois = tarefaPorId(e1, 't-apresentacao')
+
+    expect(depois.estado).toBe(ESTADO.FAZENDO)
+    expect(depois.titulo).toBe(antes.titulo)
+    expect(depois.contexto).toBe(antes.contexto)
+    expect(e1.tarefas).toHaveLength(e0.tarefas.length)   // mover não apaga
+  })
+
+  it('soltar ENTRE atividades grava a posição pedida', () => {
+    const e0 = inicial()
+    const alvo = colunaDe(e0, ESTADO.A_FAZER)[0]
+    const e1 = reducer(e0, {
+      tipo: 'moverTarefa',
+      id: 't-higienizacao',          // vem de "Em andamento"
+      paraEstado: ESTADO.A_FAZER,
+      antesDe: alvo.id,
+    })
+    const coluna = colunaDe(e1, ESTADO.A_FAZER)
+    expect(coluna[0].id).toBe('t-higienizacao')
+    expect(coluna[1].id).toBe(alvo.id)
+  })
+
+  it('soltar numa coluna vazia funciona', () => {
+    let e = inicial()
+    // esvazia "Em andamento"
+    for (const t of e.tarefas.filter((x) => x.estado === ESTADO.FAZENDO)) {
+      e = reducer(e, { tipo: 'moverTarefa', id: t.id, paraEstado: ESTADO.A_FAZER })
+    }
+    expect(colunaDe(e, ESTADO.FAZENDO)).toHaveLength(0)
+
+    const e2 = reducer(e, { tipo: 'moverTarefa', id: 't-porcino', paraEstado: ESTADO.FAZENDO })
+    expect(colunaDe(e2, ESTADO.FAZENDO).map((t) => t.id)).toEqual(['t-porcino'])
+  })
+
+  it('a ordem inicial da coluna reproduz a política do produto de hoje', () => {
+    // atrasadas primeiro, depois por data, depois por prioridade
+    const ids = colunaDe(inicial(), ESTADO.A_FAZER).map((t) => t.id)
+    expect(ids[0]).toBe('t-consorcio')            // única com prazo vencido
+    expect(ids.indexOf('t-repasse')).toBeLessThan(ids.indexOf('t-apresentacao'))
+  })
+
+  it('mover para Concluído conclui; mover de volta reabre', () => {
+    const e1 = reducer(inicial(), { tipo: 'moverTarefa', id: 't-porcino', paraEstado: ESTADO.FEITO })
+    expect(tarefaPorId(e1, 't-porcino').estado).toBe(ESTADO.FEITO)
+    const e2 = reducer(e1, { tipo: 'moverTarefa', id: 't-porcino', paraEstado: ESTADO.A_FAZER })
+    expect(tarefaPorId(e2, 't-porcino').estado).toBe(ESTADO.A_FAZER)
+  })
+
+  it('mover NÃO mexe no dia planejado nem no horário reservado', () => {
+    const e0 = reducer(inicial(), { tipo: 'reservarHorario', id: 't-gerentes', data: TERCA, inicio: '14:00', fim: '15:00' })
+    const e1 = reducer(e0, { tipo: 'moverTarefa', id: 't-gerentes', paraEstado: ESTADO.FAZENDO })
+    const t = tarefaPorId(e1, 't-gerentes')
+    expect(t.planejadaPara).toBe(TERCA)
+    expect(t.reserva.inicio).toBe('14:00')
+  })
+})
+
+describe('UX1.1 · filtros não destroem nada', () => {
+  const filtrar = (e, f) =>
+    e.tarefas.filter((t) => {
+      if (f === 'sem-data') return !t.planejadaPara && !t.prazo
+      if (f === 'alta') return t.prioridade === 'alta'
+      return true
+    })
+
+  it('filtrar apenas recorta a visão; o estado continua inteiro', () => {
+    const e = inicial()
+    const semData = filtrar(e, 'sem-data')
+    expect(semData.length).toBeGreaterThan(0)
+    expect(semData.length).toBeLessThan(e.tarefas.length)
+    expect(e.tarefas).toHaveLength(inicial().tarefas.length)
+  })
+
+  it('"sem data" é propriedade, não estágio: existe tarefa em andamento e sem data', () => {
+    const e = inicial()
+    expect(
+      e.tarefas.some((t) => t.estado === ESTADO.FAZENDO && !t.planejadaPara && !t.prazo),
+    ).toBe(true)
   })
 })

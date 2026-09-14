@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import PrototypeStore from './store/PrototypeStore'
 import Shell from './shell/Shell'
 import CaptureOverlay from './capture/CaptureOverlay'
 import Busca from './screens/Busca'
+import TarefaForm from './forms/TarefaForm'
+import CompromissoForm from './forms/CompromissoForm'
 import Hoje from './screens/Hoje'
 import Agenda from './screens/Agenda'
 import Tarefas from './screens/Tarefas'
@@ -39,6 +41,10 @@ function liberado() {
 export default function PrototypeApp() {
   const [captura, setCaptura] = useState(false)
   const [busca, setBusca] = useState(false)
+  // Criacao estruturada global: acessivel de qualquer tela, tanto pela lateral
+  // do desktop quanto pelos atalhos da captura no telefone.
+  const [novaTarefa, setNovaTarefa] = useState(false)
+  const [novoCompromisso, setNovoCompromisso] = useState(false)
 
   // Atalhos de quem vai avaliar no desktop.
   useEffect(() => {
@@ -54,10 +60,35 @@ export default function PrototypeApp() {
 
   return (
     <PrototypeStore>
-      <Shell onCapturar={() => setCaptura(true)} onBuscar={() => setBusca(true)}>
+      <Rotas
+        onCapturar={() => setCaptura(true)}
+        onBuscar={() => setBusca(true)}
+        onNovaTarefa={() => setNovaTarefa(true)}
+        onNovoCompromisso={() => setNovoCompromisso(true)}
+      />
+      <CaptureOverlay
+        aberto={captura}
+        aoFechar={() => setCaptura(false)}
+        aoNovaTarefa={() => setNovaTarefa(true)}
+        aoNovoCompromisso={() => setNovoCompromisso(true)}
+      />
+      <Busca aberto={busca} aoFechar={() => setBusca(false)} />
+      <TarefaForm aberta={novaTarefa} aoFechar={() => setNovaTarefa(false)} />
+      <CompromissoForm aberta={novoCompromisso} aoFechar={() => setNovoCompromisso(false)} />
+    </PrototypeStore>
+  )
+}
+
+// As telas largas (agenda e quadro) e as estreitas (leitura) dividem o mesmo
+// shell, mas nao a mesma medida — por isso a rota precisa dizer qual e qual.
+function Rotas(props) {
+  const { pathname } = useLocation()
+  const largo = /\/(agenda|tarefas|memoria)$/.test(pathname)
+  return (
+    <Shell {...props} largo={largo}>
         <Routes>
           <Route index element={<Navigate to="hoje" replace />} />
-          <Route path="hoje" element={<Hoje onCapturar={() => setCaptura(true)} />} />
+          <Route path="hoje" element={<Hoje />} />
           <Route path="agenda" element={<Agenda />} />
           <Route path="tarefas" element={<Tarefas />} />
           <Route path="tarefas/:id" element={<TarefaDetalhe />} />
@@ -67,9 +98,6 @@ export default function PrototypeApp() {
           <Route path="revisao" element={<Revisao />} />
           <Route path="*" element={<Navigate to="hoje" replace />} />
         </Routes>
-      </Shell>
-      <CaptureOverlay aberto={captura} aoFechar={() => setCaptura(false)} />
-      <Busca aberto={busca} aoFechar={() => setBusca(false)} />
-    </PrototypeStore>
+    </Shell>
   )
 }

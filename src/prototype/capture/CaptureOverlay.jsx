@@ -5,6 +5,7 @@ import { useProto, useAcoes } from '../store/contexto'
 import { interpretar, espera } from '../mock/ia'
 import { somarDias, iso, rotuloDeData } from '../mock/dados'
 import { Botao } from '../parts/base'
+import { ListTodo, CalendarDays } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // CAPTURA — a peca mais importante do 2.0.
@@ -19,8 +20,13 @@ import { Botao } from '../parts/base'
 //
 // Fechar nao cria nada. O que foi escrito vira rascunho da sessao, para que
 // desistir nao seja o mesmo que perder.
+//
+// UX1.1 — CAPTURA NAO SUBSTITUI CRIACAO ESTRUTURADA. Quem ja SABE que quer uma
+// tarefa ou um compromisso nao deveria ter de escrever uma frase e torcer para
+// a interpretacao acertar. Entao, antes de digitar, dois atalhos diretos levam
+// ao formulario — e nenhum deles depende da IA.
 // ---------------------------------------------------------------------------
-export default function CaptureOverlay({ aberto, aoFechar }) {
+export default function CaptureOverlay({ aberto, aoFechar, aoNovaTarefa, aoNovoCompromisso }) {
   const { estado } = useProto()
   const acoes = useAcoes()
   const [texto, setTexto] = useState('')
@@ -84,9 +90,14 @@ export default function CaptureOverlay({ aberto, aoFechar }) {
         onClick={fechar}
         className="animate-backdrop absolute inset-0 bg-black/35 backdrop-blur-[2px]"
       />
-      <div className="animate-sheet relative w-full max-w-[560px] rounded-t-sheet border border-hairline bg-surface p-5 pb-7 shadow-float lg:rounded-sheet lg:p-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Capturar"
+        className="animate-sheet relative w-full max-w-[560px] rounded-t-sheet border border-hairline bg-surface p-5 pb-7 shadow-float lg:rounded-sheet lg:p-6"
+      >
         <div className="mb-4 flex items-start justify-between gap-4">
-          <h2 className="px-serif text-[19px] font-semibold leading-snug">
+          <h2 className="text-[17px] font-semibold leading-snug">
             O que você quer registrar?
           </h2>
           <button onClick={fechar} aria-label="Fechar" className="press -m-1 p-1 text-muted">
@@ -94,13 +105,34 @@ export default function CaptureOverlay({ aberto, aoFechar }) {
           </button>
         </div>
 
+        {/* Atalhos: so enquanto o campo esta vazio, para nao competir com o
+            que a pessoa esta escrevendo. */}
+        {!texto.trim() && (
+          <div className="mb-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => { aoFechar(); aoNovaTarefa?.() }}
+              className="press flex flex-1 items-center justify-center gap-1.5 rounded-control border border-hairline py-2 text-[13.5px] font-medium transition hover:border-accent hover:text-accent-text"
+            >
+              <ListTodo size={15} /> Tarefa
+            </button>
+            <button
+              type="button"
+              onClick={() => { aoFechar(); aoNovoCompromisso?.() }}
+              className="press flex flex-1 items-center justify-center gap-1.5 rounded-control border border-hairline py-2 text-[13.5px] font-medium transition hover:border-accent hover:text-accent-text"
+            >
+              <CalendarDays size={15} /> Compromisso
+            </button>
+          </div>
+        )}
+
         <textarea
           ref={campo}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           rows={3}
           placeholder="Uma frase basta. Organizo depois."
-          className="w-full resize-none bg-transparent text-[16.5px] leading-relaxed text-primary outline-none placeholder:text-faint"
+          className="w-full resize-none bg-transparent text-[16px] leading-relaxed text-primary outline-none placeholder:text-faint"
         />
 
         {/* GUARDAR e sempre a acao principal e nunca depende da IA. */}
@@ -117,9 +149,9 @@ export default function CaptureOverlay({ aberto, aoFechar }) {
             <p className="text-[13.5px] text-secondary">{sugestao.frase}</p>
 
             {sugestao.especie === 'compromisso' && (
-              <p className="px-serif mt-2 text-[15.5px] font-semibold">
+              <p className="mt-2 text-[15px] font-semibold">
                 {sugestao.dados.titulo}
-                <span className="px-hora ml-2 font-sans text-[13px] font-normal text-secondary">
+                <span className="px-hora ml-2 text-[13px] font-normal text-secondary">
                   {rotuloDeData(sugestao.dados.data, estado.hoje)} · {hora}
                 </span>
               </p>
@@ -132,7 +164,7 @@ export default function CaptureOverlay({ aberto, aoFechar }) {
                   id="px-hora-ajuste"
                   value={hora}
                   onChange={(e) => setHora(e.target.value)}
-                  className="w-[86px] rounded-control border border-hairline bg-surface px-2 py-1 text-[14px] outline-none focus:border-accent"
+                  className="px-campo w-[92px] py-1"
                 />
               </div>
             )}

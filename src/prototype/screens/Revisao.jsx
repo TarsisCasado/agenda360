@@ -38,8 +38,8 @@ export default function Revisao() {
   return (
     <div className="px-entra">
       <header>
-        <p className="px-secao">Revisão</p>
-        <h1 className="px-serif px-titulo mt-1.5">Como foi a semana</h1>
+        <h1 className="px-titulo-tela">Revisão</h1>
+        <p className="mt-1 text-[13px] text-muted">Como foi a semana</p>
         <p className="mt-2 text-[13.5px] text-muted">
           {vencidas.length} com prazo vencido · {soltas.length} por organizar
         </p>
@@ -48,7 +48,7 @@ export default function Revisao() {
       <Secao>
         {itens.map((i) => (
           <article key={i.evidencia} className="border-t border-hairline py-5 first:border-t-0 first:pt-2">
-            <p className="px-serif text-[16.5px] leading-snug">{i.evidencia}</p>
+            <p className="text-[15px] font-medium leading-snug">{i.evidencia}</p>
             <p className="mt-1.5 text-[14px] leading-relaxed text-secondary">{i.interpretacao}</p>
             <p className="px-motivo mt-2">Você decide: {i.decisao}</p>
           </article>

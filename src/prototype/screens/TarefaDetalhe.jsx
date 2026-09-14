@@ -6,6 +6,7 @@ import { tarefaPorId, memoriaPorId } from '../store/reducer'
 import { ESTADO, rotuloDeData, somarDias, iso, nomeDoDia, diaCurto, numeroDoDia, inicioDaSemana } from '../mock/dados'
 import { sugerirPassos, espera } from '../mock/ia'
 import { Secao, Botao, Chip, Marcar } from '../parts/base'
+import TarefaForm from '../forms/TarefaForm'
 import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,7 @@ export default function TarefaDetalhe() {
   const [selecionadas, setSelecionadas] = useState([])
   const [pensando, setPensando] = useState(false)
   const [escolhendoHora, setEscolhendoHora] = useState(false)
+  const [editando, setEditando] = useState(false)
 
   if (!t) {
     return (
@@ -70,9 +72,12 @@ export default function TarefaDetalhe() {
           label="Concluir"
           onClick={() => acoes.mudarEstado(t.id, t.estado === ESTADO.FEITO ? ESTADO.A_FAZER : ESTADO.FEITO)}
         />
-        <h1 className={cx('px-serif px-titulo', t.estado === ESTADO.FEITO && 'line-through opacity-60')}>
+        <h1 className={cx('min-w-0 flex-1 text-[20px] font-semibold leading-snug', t.estado === ESTADO.FEITO && 'line-through opacity-60')}>
           {t.titulo}
         </h1>
+        <Botao variante="secundario" className="flex-none px-3 py-1.5" onClick={() => setEditando(true)}>
+          Editar
+        </Botao>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -84,6 +89,12 @@ export default function TarefaDetalhe() {
         {t.prioridade === 'alta' && <Chip>Prioridade alta</Chip>}
         {!t.planejadaPara && !t.prazo && <Chip>Sem data</Chip>}
       </div>
+
+      {t.descricao && (
+        <p className="mt-3 max-w-[62ch] whitespace-pre-line text-[14.5px] leading-relaxed text-secondary">
+          {t.descricao}
+        </p>
+      )}
 
       {/* ORIGEM — a nota que gerou esta tarefa continua existindo. */}
       {origem && (
@@ -229,6 +240,8 @@ export default function TarefaDetalhe() {
           </div>
         )}
       </Secao>
+
+      <TarefaForm aberta={editando} aoFechar={() => setEditando(false)} tarefa={t} />
     </div>
   )
 }

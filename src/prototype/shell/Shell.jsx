@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { Sun, CalendarDays, ListTodo, Library, Plus, Search, Sparkles } from 'lucide-react'
+import { Sun, CalendarDays, ListTodo, Library, Plus, Search, Sparkles, PenLine } from 'lucide-react'
 import { cx } from '../../lib/utils'
 import { useAviso, useAcoes, useProto } from '../store/contexto'
 import { Link } from 'react-router-dom'
@@ -23,12 +23,22 @@ const DESTINOS = [
   { to: '/prototipo/memoria', label: 'Memória', icon: Library },
 ]
 
-export default function Shell({ children, onCapturar, onBuscar }) {
+export default function Shell({ children, onCapturar, onBuscar, onNovaTarefa, onNovoCompromisso, largo }) {
   return (
     <div className="min-h-[100dvh] bg-canvas text-primary">
-      <Lateral onCapturar={onCapturar} onBuscar={onBuscar} />
-      <main className="lg:pl-[228px]">
-        <div className="mx-auto w-full max-w-[760px] px-5 pb-32 pt-6 lg:max-w-[860px] lg:px-10 lg:pb-16 lg:pt-10">
+      <Lateral
+        onCapturar={onCapturar}
+        onBuscar={onBuscar}
+        onNovaTarefa={onNovaTarefa}
+        onNovoCompromisso={onNovoCompromisso}
+      />
+      <main className="lg:pl-[216px]">
+        {/* Cada superficie usa o espaco conforme a funcao: a agenda e o quadro
+            precisam de largura para representar tempo e fluxo; leitura, nao. */}
+        <div className={cx(
+          'mx-auto w-full px-4 pb-32 pt-5 lg:px-8 lg:pb-14 lg:pt-8',
+          largo ? 'max-w-[1280px]' : 'max-w-[820px]',
+        )}>
           {children}
         </div>
       </main>
@@ -38,25 +48,45 @@ export default function Shell({ children, onCapturar, onBuscar }) {
   )
 }
 
-function Lateral({ onCapturar, onBuscar }) {
+function Lateral({ onCapturar, onBuscar, onNovaTarefa, onNovoCompromisso }) {
   return (
-    <aside className="fixed inset-y-0 left-0 hidden w-[228px] flex-col border-r border-hairline bg-surface px-4 py-6 lg:flex">
-      <div className="px-2">
-        <p className="px-secao">Agenda 360</p>
-        <p className="px-serif mt-1 text-[19px] font-semibold leading-tight">2.0</p>
+    <aside className="fixed inset-y-0 left-0 hidden w-[216px] flex-col border-r border-hairline bg-surface px-3 py-5 lg:flex">
+      <div className="flex items-baseline gap-1.5 px-2">
+        <span className="text-[15px] font-semibold tracking-tight">Agenda 360</span>
+        <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-accent-text">2.0</span>
       </div>
 
+      {/* Duas intencoes, dois botoes. Capturar e para o que ainda nao tem
+          forma; Nova atividade e para quem ja sabe o que quer criar. */}
       <button
+        type="button"
         onClick={onCapturar}
-        className="press mt-6 flex items-center gap-2 rounded-control bg-accent px-3.5 py-2.5 text-[13.5px] font-semibold text-white transition hover:opacity-90"
+        className="press mt-5 flex items-center gap-2 rounded-control bg-accent px-3.5 py-2.5 text-[13.5px] font-semibold text-white shadow-raised transition hover:brightness-110"
       >
         <Plus size={17} /> Capturar
       </button>
+      <div className="mt-1.5 flex gap-1.5">
+        <button
+          type="button"
+          onClick={onNovaTarefa}
+          className="press flex flex-1 items-center justify-center gap-1.5 rounded-control border border-hairline px-2 py-1.5 text-[12.5px] font-medium text-secondary transition hover:border-accent hover:text-accent-text"
+        >
+          <PenLine size={14} /> Tarefa
+        </button>
+        <button
+          type="button"
+          onClick={onNovoCompromisso}
+          className="press flex flex-1 items-center justify-center gap-1.5 rounded-control border border-hairline px-2 py-1.5 text-[12.5px] font-medium text-secondary transition hover:border-accent hover:text-accent-text"
+        >
+          <CalendarDays size={14} /> Horário
+        </button>
+      </div>
       <button
+        type="button"
         onClick={onBuscar}
-        className="press mt-2 flex items-center gap-2 rounded-control px-3.5 py-2 text-[13.5px] text-secondary transition hover:bg-surface-2"
+        className="press mt-1.5 flex items-center gap-2 rounded-control px-3.5 py-2 text-[13px] text-secondary transition hover:bg-surface-2"
       >
-        <Search size={16} /> Buscar
+        <Search size={15} /> Buscar <kbd className="ml-auto text-[10.5px] text-faint">⌘K</kbd>
       </button>
 
       <nav className="mt-7 space-y-0.5">

@@ -1,39 +1,43 @@
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Sparkles } from 'lucide-react'
+import { Plus, Sparkles } from 'lucide-react'
 import { useProto, useDesktop } from '../store/contexto'
 import { agendaDoDia, planejadasDoDia } from '../store/reducer'
-import { inicioDaSemana, somarDias, iso, diaCurto, numeroDoDia, rotuloDeData, nomeDoDia } from '../mock/dados'
-import { Secao, Vazio } from '../parts/base'
+import { inicioDaSemana, somarDias, iso, diaCurto, numeroDoDia, rotuloDeData, nomeDoDia, AGORA_DEMO } from '../mock/dados'
+import { Secao, Vazio, Botao } from '../parts/base'
+import CompromissoForm from '../forms/CompromissoForm'
 import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
-// AGENDA — "quando acontece, ou quando cabe?"
+// AGENDA — precisa PARECER uma agenda, e não uma lista com horas escritas.
 //
-// Tres especies convivem aqui, e a tela precisa deixar claro que sao coisas
-// diferentes:
+// No desktop a semana usa a largura para representar TEMPO: uma grade com
+// horas, em que a altura de um bloco é a duração e o espaço entre blocos é o
+// intervalo livre. É isso que permite olhar e ver "a terça à tarde está vazia".
 //
-//   COMPROMISSO         acontece naquele horario (barra cheia);
-//   HORARIO RESERVADO   tempo que decidi proteger para executar uma tarefa
-//                       (barra hachurada — e tempo meu, nao um encontro);
-//   TAREFA PLANEJADA    quero fazer naquele DIA, sem hora (fio neutro, fora da
-//                       linha do tempo, embaixo).
+// TRÊS ESPÉCIES, distinguíveis sem depender de cor:
+//   compromisso        bloco cheio, borda sólida — acontece naquele horário;
+//   horário reservado  bloco hachurado, borda tracejada — tempo que eu decidi
+//                      proteger para executar uma tarefa;
+//   tarefa planejada   fora da grade, numa faixa do dia — quero fazer nesse
+//                      dia, sem hora marcada.
 //
-// Uma tarefa no calendario continua sendo a mesma tarefa: o bloco aponta para
-// ela, e retirar o horario nao a apaga.
+// Clicar num horário vazio cria um compromisso JÁ com dia e hora. Clicar num
+// bloco abre para editar.
 // ---------------------------------------------------------------------------
+const H_INICIO = 7
+const H_FIM = 21
+const PX_HORA = 46
+
 export default function Agenda() {
   const { estado } = useProto()
   const desktop = useDesktop()
   const [params] = useSearchParams()
-  // Abrir a agenda "no dia daquilo que acabou de ser criado" e o que fecha o
-  // ciclo da captura: quem confirmou um compromisso de amanha quer ver amanha.
   const diaPedido = params.get('dia')
   const [visao, setVisao] = useState(diaPedido ? 'dia' : desktop ? 'semana' : 'dia')
   const [dia, setDia] = useState(diaPedido || estado.hoje)
+  const [form, setForm] = useState(null) // { compromisso } | { padroes }
 
-  // O pedido pode chegar com a tela JA montada (o aviso "Ver na agenda" e um
-  // link para a mesma rota): sem isto, o dia so valeria na primeira abertura.
   useEffect(() => {
     if (diaPedido) { setDia(diaPedido); setVisao('dia') }
   }, [diaPedido])
@@ -41,55 +45,66 @@ export default function Agenda() {
   const seg = inicioDaSemana(new Date(`${estado.hoje}T12:00:00`))
   const dias = Array.from({ length: 7 }, (_, i) => iso(somarDias(seg, i)))
 
+  const abrirNovo = (padroes = {}) => setForm({ padroes })
+  const abrirItem = (evento) => {
+    if (evento.especie === 'compromisso') {
+      setForm({ compromisso: estado.compromissos.find((c) => c.id === evento.id) })
+    }
+  }
+
   return (
     <div className="px-entra">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="px-secao">Agenda</p>
-          <h1 className="px-serif px-titulo mt-1.5">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <h1 className="px-titulo-tela">Agenda</h1>
+          <span className="text-[13px] text-muted">
             {visao === 'semana'
               ? `${numeroDoDia(dias[0])}–${numeroDoDia(dias[6])} de ${mesDe(dias[6])}`
-              : capitalizar(nomeDoDia(dia))}
-          </h1>
+              : `${capitalizar(nomeDoDia(dia))}, ${numeroDoDia(dia)} de ${mesDe(dia)}`}
+          </span>
         </div>
-        <div className="flex gap-1 rounded-control border border-hairline p-0.5">
-          {['dia', 'semana', 'mês'].map((v) => (
-            <button
-              key={v}
-              onClick={() => setVisao(v)}
-              className={cx(
-                'press rounded-[7px] px-3 py-1.5 text-[13px] capitalize transition',
-                visao === v ? 'bg-accent-soft font-semibold text-accent-text' : 'text-muted',
-              )}
-            >
-              {v}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 rounded-control border border-hairline p-0.5">
+            {['dia', 'semana', 'mês'].map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setVisao(v)}
+                aria-pressed={visao === v}
+                className={cx(
+                  'press rounded-[7px] px-3 py-1.5 text-[13px] capitalize transition',
+                  visao === v ? 'bg-accent-soft font-semibold text-accent-text' : 'text-muted hover:text-primary',
+                )}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <Botao variante="primario" onClick={() => abrirNovo({ data: dia })}>
+            <Plus size={16} /> Novo compromisso
+          </Botao>
         </div>
       </header>
 
-      {/* Faixa da semana — no telefone e a bussola; no desktop, o cabecalho. */}
-      <div className="no-scrollbar mt-5 flex gap-1 overflow-x-auto">
+      <div className={cx('no-scrollbar mt-4 flex gap-1 overflow-x-auto', visao === 'semana' && 'hidden')}>
         {dias.map((d) => {
-          const ativo = visao === 'semana' ? false : d === dia
+          const ativo = visao !== 'semana' && d === dia
           const hoje = d === estado.hoje
           const carga = agendaDoDia(estado, d).length + planejadasDoDia(estado, d).length
           return (
             <button
               key={d}
-              onClick={() => { setDia(d); if (visao === 'semana') setVisao('dia') }}
+              type="button"
+              onClick={() => { setDia(d); if (visao === 'mês') setVisao('dia') }}
               className={cx(
-                'press flex min-w-[46px] flex-1 flex-col items-center gap-1 rounded-row py-2 transition',
-                ativo ? 'bg-accent-soft' : 'hover:bg-surface-2',
+                'press flex min-w-[44px] flex-1 flex-col items-center gap-0.5 rounded-row border py-1.5 transition',
+                ativo ? 'border-accent bg-accent-soft' : 'border-transparent hover:bg-surface-2',
               )}
             >
-              <span className={cx('text-[10.5px] uppercase tracking-wider', ativo ? 'text-accent-text' : 'text-faint')}>
+              <span className={cx('text-[10px] uppercase tracking-wider', ativo ? 'text-accent-text' : 'text-faint')}>
                 {diaCurto(d)}
               </span>
-              <span className={cx(
-                'px-hora text-[15px]',
-                ativo ? 'font-semibold text-accent-text' : hoje ? 'font-semibold text-primary' : 'text-secondary',
-              )}>
+              <span className={cx('px-hora text-[14.5px]', ativo ? 'font-semibold text-accent-text' : hoje ? 'font-semibold' : 'text-secondary')}>
                 {numeroDoDia(d)}
               </span>
               <span className={cx('h-1 w-1 rounded-full', carga ? 'bg-accent/60' : 'bg-transparent')} />
@@ -99,115 +114,284 @@ export default function Agenda() {
       </div>
 
       {visao === 'semana' ? (
-        <Semana dias={dias} onDia={(d) => { setDia(d); setVisao('dia') }} />
+        <GradeSemana dias={dias} aoNovo={abrirNovo} aoAbrir={abrirItem} aoDia={(d) => { setDia(d); setVisao('dia') }} />
       ) : visao === 'mês' ? (
-        <Mes onDia={(d) => { setDia(d); setVisao('dia') }} />
+        <Mes aoDia={(d) => { setDia(d); setVisao('dia') }} />
       ) : (
-        <Dia data={dia} />
+        <Dia data={dia} aoNovo={abrirNovo} aoAbrir={abrirItem} desktop={desktop} />
       )}
 
       <Link
         to="/prototipo/copiloto?contexto=semana"
-        className="press mt-10 flex items-center justify-center gap-2 rounded-row border border-hairline py-3 text-[13.5px] font-semibold text-accent-text transition hover:bg-surface-2"
+        className="press mt-8 flex items-center justify-center gap-2 rounded-row border border-hairline py-2.5 text-[13.5px] font-semibold text-accent-text transition hover:border-accent hover:bg-surface-2"
       >
-        <Sparkles size={16} /> Planejar esta semana com o Copiloto
+        <Sparkles size={15} /> Planejar esta semana com o Copiloto
       </Link>
+
+      <CompromissoForm
+        aberta={Boolean(form)}
+        aoFechar={() => setForm(null)}
+        compromisso={form?.compromisso}
+        padroes={form?.padroes || {}}
+      />
     </div>
   )
 }
 
-function Dia({ data }) {
+// --- a grade -----------------------------------------------------------------
+const minutos = (hhmm) => {
+  const [h, m] = String(hhmm).split(':').map(Number)
+  return h * 60 + m
+}
+const topoDe = (hhmm) => ((minutos(hhmm) - H_INICIO * 60) / 60) * PX_HORA
+const alturaDe = (ini, fim) => Math.max(20, ((minutos(fim) - minutos(ini)) / 60) * PX_HORA)
+
+function ColunaDeHoras() {
+  return (
+    <div className="w-[42px] flex-none">
+      {Array.from({ length: H_FIM - H_INICIO }, (_, i) => (
+        <div key={i} style={{ height: PX_HORA }} className="relative">
+          <span className="px-hora absolute -top-1.5 right-1.5 text-[10.5px] text-faint">
+            {String(H_INICIO + i).padStart(2, '0')}:00
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ColunaDoDia({ data, aoNovo, aoAbrir, compacta }) {
   const { estado } = useProto()
   const eventos = agendaDoDia(estado, data)
-  const planejadas = planejadasDoDia(estado, data)
+  const hoje = data === estado.hoje
 
   return (
-    <>
-      <Secao titulo={rotuloDeData(data, estado.hoje)}>
-        {eventos.length === 0 && <Vazio>Nenhum horário ocupado neste dia.</Vazio>}
-        {eventos.map((e) => (
-          <Bloco key={e.id} evento={e} />
-        ))}
-      </Secao>
-
-      {planejadas.length > 0 && (
-        <Secao titulo="Para fazer neste dia">
-          <p className="mb-2 text-[12.5px] leading-relaxed text-faint">
-            Sem horário marcado — é o dia em que você decidiu fazer.
-          </p>
-          {planejadas.map((t) => (
-            <Link key={t.id} to={`/prototipo/tarefas/${t.id}`} className="px-linha px-toque items-center">
-              <span className="px-especie px-planejada self-stretch" />
-              <span className="flex-1 text-[14.5px]">{t.titulo}</span>
-              <span className="px-motivo">tarefa</span>
-            </Link>
-          ))}
-        </Secao>
-      )}
-    </>
-  )
-}
-
-function Bloco({ evento }) {
-  const reserva = evento.especie === 'reserva'
-  const conteudo = (
-    <>
-      <span className="px-hora w-[46px] flex-none pt-0.5 text-[13.5px] text-muted">{evento.inicio}</span>
-      <span className={cx('px-especie self-stretch', reserva ? 'px-reserva' : 'px-compromisso')} />
-      <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-medium leading-snug">{evento.titulo}</span>
-        <span className="px-motivo mt-0.5 block">
-          {reserva ? 'Horário reservado' : 'Compromisso'} · {evento.inicio}–{evento.fim}
-          {evento.local ? ` · ${evento.local}` : ''}
-        </span>
-      </span>
-    </>
-  )
-  return reserva ? (
-    <Link to={`/prototipo/tarefas/${evento.tarefaId}`} className="px-linha px-toque">{conteudo}</Link>
-  ) : (
-    <div className="px-linha">{conteudo}</div>
-  )
-}
-
-function Semana({ dias, onDia }) {
-  const { estado } = useProto()
-  return (
-    <div className="mt-6 grid gap-x-5 gap-y-6 lg:grid-cols-2">
-      {dias.map((d) => {
-        const eventos = agendaDoDia(estado, d)
-        const planejadas = planejadasDoDia(estado, d)
-        const vazio = !eventos.length && !planejadas.length
+    <div className="relative flex-1 border-l border-hairline">
+      {/* fatias de hora: clicaveis para criar ali mesmo */}
+      {Array.from({ length: H_FIM - H_INICIO }, (_, i) => {
+        const hora = `${String(H_INICIO + i).padStart(2, '0')}:00`
         return (
-          <section key={d}>
-            <button onClick={() => onDia(d)} className="press mb-1.5 flex items-baseline gap-2 text-left">
-              <span className="px-secao">{diaCurto(d)} {numeroDoDia(d)}</span>
-              {d === estado.hoje && <span className="px-chip px-chip-on">hoje</span>}
-            </button>
-            {vazio && <p className="py-2 text-[13px] text-faint">livre</p>}
-            {eventos.map((e) => (
-              <div key={e.id} className="flex items-baseline gap-2.5 py-1">
-                <span className="px-hora w-[42px] flex-none text-[12.5px] text-muted">{e.inicio}</span>
-                <span className={cx('px-especie h-3.5 self-center', e.especie === 'reserva' ? 'px-reserva' : 'px-compromisso')} />
-                <span className="truncate text-[14px]">{e.titulo}</span>
-              </div>
-            ))}
-            {planejadas.map((t) => (
-              <div key={t.id} className="flex items-baseline gap-2.5 py-1">
-                <span className="w-[42px] flex-none text-[12px] text-faint">—</span>
-                <span className="px-especie px-planejada h-3.5 self-center" />
-                <span className="truncate text-[14px] text-secondary">{t.titulo}</span>
-              </div>
-            ))}
-          </section>
+          <button
+            key={hora}
+            type="button"
+            aria-label={`Novo compromisso ${rotuloDeData(data, estado.hoje)} às ${hora}`}
+            onClick={() => aoNovo({ data, inicio: hora })}
+            style={{ height: PX_HORA }}
+            className="px-slot px-grade-hora block w-full"
+          />
+        )
+      })}
+
+      {/* agora */}
+      {hoje && (
+        <div
+          className="pointer-events-none absolute inset-x-0 z-10 border-t border-danger/70"
+          style={{ top: topoDe(AGORA_DEMO) }}
+        >
+          <span className="absolute -left-1 -top-[3px] h-1.5 w-1.5 rounded-full bg-danger" />
+        </div>
+      )}
+
+      {eventos.map((e) => {
+        const reserva = e.especie === 'reserva'
+        const conteudo = (
+          <>
+            <span className="px-hora block text-[10.5px] leading-tight text-accent-text/80">{e.inicio}</span>
+            <span className={cx('block truncate text-[12px] font-medium leading-tight', compacta && 'text-[11.5px]')}>
+              {e.titulo}
+            </span>
+          </>
+        )
+        const estilo = { top: topoDe(e.inicio), height: alturaDe(e.inicio, e.fim) }
+        return reserva ? (
+          <Link
+            key={e.id}
+            to={`/prototipo/tarefas/${e.tarefaId}`}
+            style={estilo}
+            title={`Horário reservado · ${e.titulo}`}
+            className="px-evento px-evento-reserva"
+          >
+            {conteudo}
+          </Link>
+        ) : (
+          <button
+            key={e.id}
+            type="button"
+            onClick={() => aoAbrir(e)}
+            style={estilo}
+            title={`Compromisso · ${e.titulo}`}
+            className="px-evento"
+          >
+            {conteudo}
+          </button>
         )
       })}
     </div>
   )
 }
 
-// O mes serve para orientacao e escolha de data — nao para ler conteudo.
-function Mes({ onDia }) {
+function FaixaPlanejadas({ data }) {
+  const { estado } = useProto()
+  const planejadas = planejadasDoDia(estado, data)
+  if (!planejadas.length) return <div className="min-h-[6px]" />
+  return (
+    <div className="space-y-1 border-l border-hairline px-1 py-1.5">
+      {planejadas.map((t) => (
+        <Link
+          key={t.id}
+          to={`/prototipo/tarefas/${t.id}`}
+          className="flex items-center gap-1.5 rounded-[7px] px-1 py-0.5 text-[11.5px] text-secondary transition hover:bg-surface-2"
+        >
+          <span className="px-especie px-planejada h-3" />
+          <span className="truncate">{t.titulo}</span>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+function GradeSemana({ dias, aoNovo, aoAbrir, aoDia }) {
+  const { estado } = useProto()
+  return (
+    <div className="mt-4">
+      <div className="flex">
+        <div className="w-[42px] flex-none" />
+        {dias.map((d) => (
+          <button
+            key={d}
+            type="button"
+            onClick={() => aoDia(d)}
+            className={cx(
+              'press flex-1 border-l border-hairline pb-1 text-center transition hover:bg-surface-2',
+              d === estado.hoje && 'bg-accent-soft/40',
+            )}
+          >
+            <span className="px-secao block">{diaCurto(d)}</span>
+            <span className={cx('px-hora text-[15px]', d === estado.hoje && 'font-semibold text-accent-text')}>
+              {numeroDoDia(d)}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* faixa das tarefas planejadas: fora da linha do tempo, de propósito */}
+      <div className="flex border-y border-hairline bg-surface-2/40">
+        <div className="w-[42px] flex-none py-1.5 pr-1.5 text-right">
+          <span className="text-[9.5px] uppercase tracking-wider text-faint">tarefas</span>
+        </div>
+        {dias.map((d) => (
+          <div key={d} className="min-w-0 flex-1"><FaixaPlanejadas data={d} /></div>
+        ))}
+      </div>
+
+      <div className="flex pt-2">
+        <ColunaDeHoras />
+        {dias.map((d) => (
+          <ColunaDoDia key={d} data={d} aoNovo={aoNovo} aoAbrir={aoAbrir} compacta />
+        ))}
+      </div>
+
+      <Legenda />
+    </div>
+  )
+}
+
+function Dia({ data, aoNovo, aoAbrir, desktop }) {
+  const { estado } = useProto()
+  const eventos = agendaDoDia(estado, data)
+  const planejadas = planejadasDoDia(estado, data)
+
+  if (!desktop) {
+    // No telefone a lista do dia é mais legível que a grade — e continua
+    // mostrando duração, intervalo e espécie.
+    return (
+      <>
+        <Secao titulo={rotuloDeData(data, estado.hoje)}>
+          {eventos.length === 0 && <Vazio>Nenhum horário ocupado neste dia.</Vazio>}
+          {eventos.map((e) => (
+            <ItemDia key={e.id} e={e} aoAbrir={aoAbrir} />
+          ))}
+          <button
+            type="button"
+            onClick={() => aoNovo({ data })}
+            className="press mt-2 flex w-full items-center justify-center gap-1.5 rounded-row border border-dashed border-hairline py-2.5 text-[13px] text-muted transition hover:border-accent hover:text-accent-text"
+          >
+            <Plus size={15} /> Novo compromisso
+          </button>
+        </Secao>
+
+        {planejadas.length > 0 && (
+          <Secao titulo="Para fazer neste dia">
+            <p className="mb-1.5 text-[12px] text-faint">Sem horário marcado.</p>
+            {planejadas.map((t) => (
+              <Link key={t.id} to={`/prototipo/tarefas/${t.id}`} className="px-linha px-toque items-center">
+                <span className="px-especie px-planejada self-stretch" />
+                <span className="flex-1 text-[14px]">{t.titulo}</span>
+                <span className="px-motivo">tarefa</span>
+              </Link>
+            ))}
+          </Secao>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="flex border-y border-hairline bg-surface-2/40">
+        <div className="w-[42px] flex-none py-1.5 pr-1.5 text-right">
+          <span className="text-[9.5px] uppercase tracking-wider text-faint">tarefas</span>
+        </div>
+        <div className="min-w-0 flex-1"><FaixaPlanejadas data={data} /></div>
+      </div>
+      <div className="flex pt-2">
+        <ColunaDeHoras />
+        <ColunaDoDia data={data} aoNovo={aoNovo} aoAbrir={aoAbrir} />
+      </div>
+      <Legenda />
+    </div>
+  )
+}
+
+function ItemDia({ e, aoAbrir }) {
+  const reserva = e.especie === 'reserva'
+  const conteudo = (
+    <>
+      <span className="px-hora w-[44px] flex-none pt-0.5 text-[13px] text-muted">{e.inicio}</span>
+      <span className={cx('px-especie self-stretch', reserva ? 'px-reserva' : 'px-compromisso')} />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[14.5px] font-medium leading-snug">{e.titulo}</span>
+        <span className="px-motivo mt-0.5 block">
+          {reserva ? 'Horário reservado' : 'Compromisso'} · {e.inicio}–{e.fim}
+          {e.local ? ` · ${e.local}` : ''}
+        </span>
+      </span>
+    </>
+  )
+  return reserva ? (
+    <Link to={`/prototipo/tarefas/${e.tarefaId}`} className="px-linha px-toque">{conteudo}</Link>
+  ) : (
+    <button type="button" onClick={() => aoAbrir(e)} className="px-linha px-toque w-full text-left">{conteudo}</button>
+  )
+}
+
+function Legenda() {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-muted">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-3 w-3 rounded-[3px] border border-accent/40 bg-accent-soft" /> compromisso
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="px-evento-reserva h-3 w-3 rounded-[3px] border border-dashed border-accent/40" /> horário reservado
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="px-especie px-planejada h-3 w-[3px]" /> tarefa planejada (sem hora)
+      </span>
+    </div>
+  )
+}
+
+function Mes({ aoDia }) {
   const { estado } = useProto()
   const base = new Date(`${estado.hoje}T12:00:00`)
   const primeiro = new Date(base.getFullYear(), base.getMonth(), 1)
@@ -216,7 +400,7 @@ function Mes({ onDia }) {
   const mesAtual = base.getMonth()
 
   return (
-    <div className="mt-6">
+    <div className="mt-4">
       <div className="grid grid-cols-7 gap-1 text-center">
         {['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map((d) => (
           <span key={d} className="px-secao pb-1">{d}</span>
@@ -227,11 +411,12 @@ function Mes({ onDia }) {
           return (
             <button
               key={d}
-              onClick={() => onDia(d)}
+              type="button"
+              onClick={() => aoDia(d)}
               className={cx(
-                'press aspect-square rounded-[10px] text-[13.5px] transition hover:bg-surface-2',
+                'press aspect-square rounded-[9px] border border-transparent text-[13px] transition hover:border-hairline hover:bg-surface-2',
                 !doMes && 'text-faint',
-                d === estado.hoje && 'bg-accent-soft font-semibold text-accent-text',
+                d === estado.hoje && 'border-accent bg-accent-soft font-semibold text-accent-text',
               )}
             >
               <span className="px-hora">{numeroDoDia(d)}</span>

@@ -19,6 +19,54 @@
 // ---------------------------------------------------------------------------
 import { semearEstado, ESTADO, TIPO_MEMORIA } from '../mock/dados'
 
+// ---------------------------------------------------------------------------
+// ORDEM DENTRO DA COLUNA (UX1.1).
+//
+// O produto de hoje NAO tem coluna `position`: a ordem e derivada — atrasadas
+// primeiro, depois data, depois prioridade, depois hora — e arrastar muda de
+// COLUNA, nunca de posicao (ver src/lib/board.js).
+//
+// O UX1.1 pediu soltar ENTRE atividades e atualizar posicao. Isso e uma
+// mudanca de politica, e ela esta aqui declarada em vez de acontecer no
+// silencio: cada tarefa ganha `ordem`, semeada pela MESMA regra derivada de
+// hoje, e o arrasto passa a escreve-la. Mostrar um ponto de insercao e depois
+// reordenar por regra seria pior que nao mostrar: a tela prometeria um lugar
+// que nao existe.
+//
+// Consequencia para a migracao real, que fica registrada: sustentar isto no
+// produto exige uma coluna de posicao no banco.
+// ---------------------------------------------------------------------------
+const PESO_PRIORIDADE = { urgente: 0, alta: 1, media: 2, baixa: 3 }
+
+export function compararDerivado(a, b, hoje) {
+  const atrasoA = a.prazo && a.prazo < hoje ? 0 : 1
+  const atrasoB = b.prazo && b.prazo < hoje ? 0 : 1
+  if (atrasoA !== atrasoB) return atrasoA - atrasoB
+
+  const dataA = a.planejadaPara || a.prazo || '9999-12-31'
+  const dataB = b.planejadaPara || b.prazo || '9999-12-31'
+  if (dataA !== dataB) return dataA < dataB ? -1 : 1
+
+  const pA = PESO_PRIORIDADE[a.prioridade] ?? 2
+  const pB = PESO_PRIORIDADE[b.prioridade] ?? 2
+  if (pA !== pB) return pA - pB
+
+  return (a.reserva?.inicio || '99:99').localeCompare(b.reserva?.inicio || '99:99')
+}
+
+// A ordem visivel: `ordem` manual quando existe; a regra derivada como criterio
+// de desempate e para quem nunca foi arrastado.
+export function ordenarColuna(tarefas, hoje) {
+  return [...tarefas].sort((a, b) => {
+    if (a.ordem != null && b.ordem != null && a.ordem !== b.ordem) return a.ordem - b.ordem
+    return compararDerivado(a, b, hoje)
+  })
+}
+
+export function colunaDe(estado, coluna) {
+  return ordenarColuna(estado.tarefas.filter((t) => t.estado === coluna), estado.hoje)
+}
+
 let seq = 0
 const novoId = (prefixo) => `${prefixo}-${++seq}`
 
@@ -117,6 +165,61 @@ export function reducer(estado, acao) {
     }
 
     // --- tarefas ------------------------------------------------------------
+    // Edicao estruturada: um patch sobre a tarefa, sem tocar no que nao veio.
+    case 'editarTarefa':
+      return mapTarefa(estado, acao.id, (t) => ({ ...t, ...acao.patch }), { texto: 'Atualizada' })
+
+    case 'excluirTarefa':
+      return {
+        ...estado,
+        tarefas: estado.tarefas.filter((t) => t.id !== acao.id),
+        aviso: { texto: 'Atividade excluída' },
+      }
+
+    case 'editarCompromisso':
+      return {
+        ...estado,
+        compromissos: estado.compromissos.map((c) => (c.id === acao.id ? { ...c, ...acao.patch } : c)),
+        aviso: { texto: 'Compromisso atualizado' },
+      }
+
+    case 'excluirCompromisso':
+      return {
+        ...estado,
+        compromissos: estado.compromissos.filter((c) => c.id !== acao.id),
+        aviso: { texto: 'Compromisso excluído' },
+      }
+
+    // MOVER — uma funcao so para o arrasto, o "Mover para..." e o teclado.
+    // Nao existe uma segunda regra de movimentacao em lugar nenhum.
+    case 'moverTarefa': {
+      const tarefa = estado.tarefas.find((t) => t.id === acao.id)
+      if (!tarefa) return estado
+
+      const destino = acao.paraEstado || tarefa.estado
+      // A coluna de destino SEM a tarefa movida, na ordem que esta na tela.
+      const coluna = ordenarColuna(
+        estado.tarefas.filter((t) => t.estado === destino && t.id !== acao.id),
+        estado.hoje,
+      )
+      const alvo = acao.antesDe ? coluna.findIndex((t) => t.id === acao.antesDe) : -1
+      const posicao = alvo >= 0 ? alvo : coluna.length
+      coluna.splice(posicao, 0, { ...tarefa, estado: destino })
+
+      // Reescreve a ordem inteira da coluna: posicao relativa so e estavel se
+      // todos os vizinhos souberem onde estao.
+      const ordens = new Map(coluna.map((t, i) => [t.id, i]))
+      return {
+        ...estado,
+        tarefas: estado.tarefas.map((t) =>
+          ordens.has(t.id)
+            ? { ...t, estado: t.id === acao.id ? destino : t.estado, ordem: ordens.get(t.id) }
+            : t,
+        ),
+        aviso: acao.silencioso ? estado.aviso : { texto: rotuloDoDestino(destino) },
+      }
+    }
+
     case 'mudarEstado':
       return mapTarefa(estado, acao.id, (t) => ({ ...t, estado: acao.estado }), {
         texto: acao.estado === ESTADO.FEITO ? 'Concluída' : 'Atualizada',
@@ -215,6 +318,13 @@ export function reducer(estado, acao) {
       return estado
   }
 }
+
+const ROTULO_ESTADO = {
+  [ESTADO.A_FAZER]: 'Movida para A fazer',
+  [ESTADO.FAZENDO]: 'Movida para Em andamento',
+  [ESTADO.FEITO]: 'Concluída',
+}
+const rotuloDoDestino = (estadoNovo) => ROTULO_ESTADO[estadoNovo] || 'Movida'
 
 function mapTarefa(estado, id, fn, aviso = null) {
   return {

@@ -25,7 +25,12 @@ export default function Busca({ aberto, aoFechar }) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
       <button aria-label="Fechar busca" onClick={aoFechar} className="animate-backdrop absolute inset-0 bg-black/35 backdrop-blur-[2px]" />
-      <div className="animate-scale-in relative w-full max-w-[560px] overflow-hidden rounded-sheet border border-hairline bg-surface shadow-float">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Buscar"
+        className="animate-scale-in relative w-full max-w-[560px] overflow-hidden rounded-sheet border border-hairline bg-surface shadow-float"
+      >
         <div className="flex items-center gap-3 border-b border-hairline px-4 py-3.5">
           <Search size={18} className="flex-none text-muted" />
           <input
