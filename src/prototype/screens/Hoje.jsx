@@ -1,23 +1,31 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { Check, CalendarClock, ChevronRight } from 'lucide-react'
+import { Check, CalendarClock, Bell, CornerUpRight, ChevronRight } from 'lucide-react'
 import { useProto, useAcoes } from '../store/contexto'
-import { paraHoje, atrasadas, porOrganizar, agendaDoDia, MOTIVO } from '../store/reducer'
-import { ESTADO, rotuloDeData, somarDias, iso, nomeDoDia, numeroDoDia, AGORA_DEMO } from '../mock/dados'
-import { Secao, Vazio, Botao } from '../parts/base'
+import { paraHoje, atrasadas, porOrganizar, agendaDoDia, planejadasDoDia, MOTIVO } from '../store/reducer'
+import { ESTADO, rotuloDeData, somarDias, iso, nomeDoDia, numeroDoDia, mesCurto, AGORA_DEMO, emMinutos } from '../mock/dados'
+import { Vazio, Botao } from '../parts/base'
 import TarefaForm from '../forms/TarefaForm'
 import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
-// HOJE — centro operacional, com o trabalho perto da abertura.
+// HOJE — "o Agenda entendeu meu dia".
 //
-// O UX1 abria com uma capa: saudação em corpo enorme, muito ar, e as tarefas
-// do dia empurradas para baixo da dobra. Cabeçalho agora é uma linha; o
-// próximo compromisso tem destaque, mas destaque não é capa.
+// UX1.1.1 trabalhou COMPOSIÇÃO, não conteúdo novo. O que já existia passou a
+// caber melhor:
 //
-// Hoje continua sendo SELEÇÃO: cada item mostra por que está aqui, e tarefa
-// sem dia não aparece. E as ações frequentes — concluir, reagendar, abrir —
-// estão à vista, com palavra, não escondidas atrás de um ícone cinza.
+//   AGORA / PRÓXIMO   uma faixa compacta com a contagem real ("em 20 min") e
+//                     as ações que cabem naquele instante;
+//   MEU DIA           a linha do tempo do dia — compromissos, horários
+//                     reservados e o que foi escolhido para hoje, na ordem em
+//                     que vão acontecer. Não é uma segunda Agenda: é a leitura
+//                     ordenada do que já existe;
+//   PRIORIDADES       o punhado de itens que merece decisão, com o MOTIVO de
+//                     estar ali;
+//   POR ORGANIZAR     uma linha, não uma seção.
+//
+// Densidade veio de linhas mais informativas e de menos ar entre elas — não de
+// widgets. Cada linha diz o suficiente para decidir sem abrir nada.
 // ---------------------------------------------------------------------------
 export default function Hoje() {
   const { estado } = useProto()
@@ -31,172 +39,276 @@ export default function Hoje() {
   const emCurso = agenda.find((e) => e.inicio <= agora && e.fim > agora)
   const proximo = agenda.find((e) => e.inicio > agora)
   const destaque = emCurso || proximo
-  const restantes = agenda.filter((e) => e !== destaque && e.fim > agora)
+  const faltam = destaque && !emCurso ? emMinutos(destaque.inicio) - emMinutos(agora) : null
+
   const tarefas = paraHoje(estado)
   const vencidas = atrasadas(estado).filter((t) => !tarefas.some((x) => x.id === t.id))
   const soltas = porOrganizar(estado)
   const amanha = iso(somarDias(new Date(`${estado.hoje}T12:00:00`), 1))
+  const concluidasHoje = estado.tarefas.filter(
+    (t) => t.estado === ESTADO.FEITO && t.planejadaPara === estado.hoje,
+  )
+
+  // MEU DIA: tudo que tem hora, mais o que foi escolhido sem hora, em ordem.
+  const comHora = agenda.map((e) => ({ ...e, ordem: e.inicio }))
+  const semHora = planejadasDoDia(estado, estado.hoje)
+    .filter((t) => !tarefas.some((x) => x.id === t.id && x.reserva))
+    .filter((t) => !t.reserva)
+    .map((t) => ({ id: `p-${t.id}`, tarefaId: t.id, titulo: t.titulo, especie: 'tarefa', tarefa: t, ordem: '99:99' }))
+  const meuDia = [...comHora, ...semHora].sort((a, b) => a.ordem.localeCompare(b.ordem))
 
   return (
     <div className="px-entra">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <h1 className="px-titulo-tela">Hoje</h1>
-        <p className="text-[13px] text-muted">
-          {capitalizar(nomeDoDia(estado.hoje))}, {numeroDoDia(estado.hoje)} · bom dia, {estado.pessoa}
+        <p className="text-[12.5px] text-muted lg:text-[13px]">
+          {nomeDoDia(estado.hoje)}, {numeroDoDia(estado.hoje)} de {mesCurto(estado.hoje)}
+          <span className="text-faint"> · bom dia, {estado.pessoa}</span>
         </p>
       </header>
 
-      {/* AGORA / A SEGUIR — destaque, não capa. */}
+      {/* AGORA / PRÓXIMO ---------------------------------------------------- */}
       {destaque && (
-        <div className="px-painel mt-4 p-3.5">
-          <div className="flex items-start gap-3">
-            <span className="px-hora w-[52px] flex-none text-[20px] font-semibold leading-none">
-              {destaque.inicio}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-semibold leading-snug">{destaque.titulo}</p>
-              <p className="px-motivo mt-0.5">
-                {emCurso ? 'Agora' : 'A seguir'} · {destaque.especie === 'reserva' ? 'horário reservado' : 'compromisso'}
-                {destaque.local ? ` · ${destaque.local}` : ''} · até {destaque.fim}
-              </p>
-            </div>
-            <Link to="/prototipo/agenda" className="press flex-none text-[12.5px] font-semibold text-accent-text hover:underline">
-              Agenda
-            </Link>
+        <div className="mt-3 flex items-center gap-3 rounded-row border border-accent/30 bg-accent-soft/45 px-3.5 py-2.5">
+          <span className="px-hora flex-none text-[19px] font-semibold leading-none">{destaque.inicio}</span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14.5px] font-semibold leading-tight">{destaque.titulo}</p>
+            <p className="px-motivo mt-0.5">
+              {emCurso ? 'acontecendo agora' : faltam <= 90 ? `em ${faltam} min` : `às ${destaque.inicio}`}
+              {' · '}até {destaque.fim}
+              {destaque.local ? ` · ${destaque.local}` : ''}
+              {destaque.especie === 'reserva' ? ' · horário reservado' : ''}
+            </p>
           </div>
-
-          {restantes.length > 0 && (
-            <div className="mt-2.5 space-y-0.5 border-t border-hairline pt-2.5">
-              {restantes.map((e) => (
-                <div key={e.id} className="flex items-baseline gap-3">
-                  <span className="px-hora w-[52px] flex-none text-[12.5px] text-muted">{e.inicio}</span>
-                  <span className="truncate text-[13.5px] text-secondary">{e.titulo}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <Link
+            to={destaque.especie === 'reserva' ? `/prototipo/tarefas/${destaque.tarefaId}` : '/prototipo/agenda'}
+            className="press shrink-0 rounded-control border border-hairline bg-surface px-2.5 py-1.5 text-[12.5px] font-semibold text-accent-text transition hover:border-accent"
+          >
+            {/* No telefone o rótulo curto devolve a largura ao título, que é a
+                informação que importa nessa faixa. */}
+            <span className="lg:hidden">{destaque.especie === 'reserva' ? 'Abrir' : 'Agenda'}</span>
+            <span className="hidden lg:inline">
+              {destaque.especie === 'reserva' ? 'Abrir tarefa' : 'Ver na agenda'}
+            </span>
+          </Link>
         </div>
       )}
 
-      {/* PARA HOJE — logo abaixo, com ação visível em cada linha. */}
-      <Secao
-        titulo="Para hoje"
-        acao={
-          <Botao variante="fantasma" className="px-2 py-1" onClick={() => setForm({ estado: ESTADO.A_FAZER, planejadaPara: estado.hoje })}>
-            Nova tarefa
-          </Botao>
-        }
-      >
-        {tarefas.length === 0 && <Vazio>Nada escolhido para hoje.</Vazio>}
-        {tarefas.map((t) => (
-          <LinhaHoje
-            key={t.id}
-            t={t}
-            motivo={t.motivo}
-            aoConcluir={() => acoes.mudarEstado(t.id, ESTADO.FEITO)}
-            aoReagendar={() => acoes.reagendar(t.id, amanha)}
-            aoAbrir={() => navegar(`/prototipo/tarefas/${t.id}`)}
-          />
-        ))}
+      <div className="mt-5 gap-x-8 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+        {/* MEU DIA ---------------------------------------------------------- */}
+        <section>
+          <header className="mb-1.5 flex items-center justify-between">
+            <h2 className="px-secao">Meu dia</h2>
+            <Link to="/prototipo/agenda" className="press text-[12px] font-semibold text-accent-text hover:underline">
+              Agenda
+            </Link>
+          </header>
 
-        {/* A sugestão da IA fica JUNTO da tarefa a que se refere, e é pequena. */}
-        {sugestao && tarefas.some((t) => t.id === 't-estoque' && !t.reserva) && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-row border border-dashed border-accent/35 px-3 py-2">
-            <span className="text-[12.5px] text-secondary">
-              Há uma janela livre das 13:20 às 14:40. Reservar para “Revisar estoque”?
-            </span>
-            <span className="ml-auto flex gap-1.5">
-              <Botao
-                variante="secundario"
-                className="px-2.5 py-1 text-[12.5px]"
-                onClick={() => { acoes.reservarHorario('t-estoque', estado.hoje, '13:20', '14:40'); setSugestao(false) }}
-              >
-                Reservar
-              </Botao>
-              <Botao variante="fantasma" className="px-2 py-1 text-[12.5px]" onClick={() => setSugestao(false)}>
-                Agora não
-              </Botao>
-            </span>
-          </div>
-        )}
-      </Secao>
+          {meuDia.length === 0 && <Vazio>Dia livre.</Vazio>}
+          {meuDia.map((item) => (
+            <ItemDoDia
+              key={item.id}
+              item={item}
+              agora={agora}
+              aoAbrir={(id) => navegar(`/prototipo/tarefas/${id}`)}
+              aoConcluir={(id) => acoes.mudarEstado(id, ESTADO.FEITO)}
+            />
+          ))}
 
-      {/* PRECISA DA SUA ATENÇÃO — atraso real e decisão. Não é depósito. */}
-      <Secao titulo="Precisa da sua atenção">
-        {vencidas.map((t) => (
-          <LinhaHoje
-            key={t.id}
-            t={t}
-            motivo={`${MOTIVO.ATRASADA} · prazo ${rotuloDeData(t.prazo, estado.hoje)}`}
-            aviso
-            aoConcluir={() => acoes.mudarEstado(t.id, ESTADO.FEITO)}
-            aoReagendar={() => acoes.escolherParaHoje(t.id, true)}
-            rotuloReagendar="Fazer hoje"
-            aoAbrir={() => navegar(`/prototipo/tarefas/${t.id}`)}
-          />
-        ))}
+          {/* O que já saiu hoje. Não é métrica: é a outra metade do dia, e sem
+              ela a tela conta só o que falta. Fechada por padrão. */}
+          {concluidasHoje.length > 0 && (
+            <details className="group mt-1.5">
+              <summary className="px-motivo flex cursor-pointer list-none items-center gap-1.5 py-1.5 marker:hidden hover:text-secondary">
+                <Check size={12} className="text-positive" />
+                {concluidasHoje.length} {concluidasHoje.length === 1 ? 'concluída' : 'concluídas'} hoje
+                <ChevronRight size={12} className="transition group-open:rotate-90" />
+              </summary>
+              <div className="opacity-60">
+                {concluidasHoje.map((t) => (
+                  <div key={t.id} className="px-linha items-center gap-2.5 py-1.5">
+                    <span className="px-hora w-[42px] flex-none text-[12px] text-faint">—</span>
+                    <span className="flex-1 truncate text-[13.5px] line-through">{t.titulo}</span>
+                    {t.contexto && <span className="px-motivo flex-none">{t.contexto}</span>}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
 
-        {soltas.length > 0 && (
-          <Link to="/prototipo/memoria?filtro=por-organizar" className="px-linha px-toque items-center justify-between">
-            <span className="text-[14px]">
-              {soltas.length} {soltas.length === 1 ? 'captura' : 'capturas'} por organizar
-            </span>
-            <span className="px-motivo inline-flex items-center gap-1">quando der <ChevronRight size={13} /></span>
-          </Link>
-        )}
+          {/* A sugestão fica junto do que ela propõe, curta, sem faixa própria. */}
+          {sugestao && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-row border border-dashed border-accent/40 px-3 py-2">
+              <span className="text-[12.5px] leading-snug text-secondary">
+                Você tem 40 min livres antes da reunião. Adiantar o fechamento do repasse?
+              </span>
+              <span className="ml-auto flex shrink-0 gap-1.5">
+                <Botao
+                  variante="secundario"
+                  className="px-2.5 py-1 text-[12.5px]"
+                  onClick={() => { acoes.reservarHorario('t-repasse', estado.hoje, '08:45', '09:00'); setSugestao(false) }}
+                >
+                  Reservar
+                </Botao>
+                <Botao variante="fantasma" className="px-2 py-1 text-[12.5px]" onClick={() => setSugestao(false)}>
+                  Agora não
+                </Botao>
+              </span>
+            </div>
+          )}
+        </section>
 
-        {vencidas.length === 0 && soltas.length === 0 && <Vazio>Nada pendente.</Vazio>}
-      </Secao>
+        {/* PRIORIDADES + POR ORGANIZAR --------------------------------------- */}
+        <section className="mt-7 lg:mt-0">
+          <header className="mb-1.5 flex items-center justify-between">
+            <h2 className="px-secao">Prioridades</h2>
+            <Botao
+              variante="fantasma"
+              className="px-2 py-0.5 text-[12px]"
+              onClick={() => setForm({ estado: ESTADO.A_FAZER, planejadaPara: estado.hoje })}
+            >
+              Nova tarefa
+            </Botao>
+          </header>
+
+          {tarefas.length === 0 && vencidas.length === 0 && <Vazio>Nada exigindo decisão.</Vazio>}
+
+          {vencidas.map((t) => (
+            <LinhaPrioridade
+              key={t.id}
+              t={t}
+              motivo={MOTIVO.ATRASADA}
+              detalhe={`prazo ${rotuloDeData(t.prazo, estado.hoje)}`}
+              aviso
+              aoConcluir={() => acoes.mudarEstado(t.id, ESTADO.FEITO)}
+              aoReagendar={() => acoes.escolherParaHoje(t.id, true)}
+              rotuloReagendar="Fazer hoje"
+              aoAbrir={() => navegar(`/prototipo/tarefas/${t.id}`)}
+            />
+          ))}
+
+          {tarefas.map((t) => (
+            <LinhaPrioridade
+              key={t.id}
+              t={t}
+              motivo={t.motivo}
+              detalhe={t.reserva ? `${t.reserva.inicio}–${t.reserva.fim}` : t.contexto}
+              aoConcluir={() => acoes.mudarEstado(t.id, ESTADO.FEITO)}
+              aoReagendar={() => acoes.reagendar(t.id, amanha)}
+              aoAbrir={() => navegar(`/prototipo/tarefas/${t.id}`)}
+            />
+          ))}
+
+          {soltas.length > 0 && (
+            <Link
+              to="/prototipo/memoria?filtro=por-organizar"
+              className="press mt-3 flex items-center justify-between rounded-row border border-hairline px-3 py-2 text-[13px] transition hover:border-accent hover:bg-surface-2"
+            >
+              <span>Por organizar <span className="text-muted">· {soltas.length}</span></span>
+              <ChevronRight size={14} className="text-muted" />
+            </Link>
+          )}
+        </section>
+      </div>
 
       <TarefaForm aberta={Boolean(form)} aoFechar={() => setForm(null)} padroes={form || {}} />
     </div>
   )
 }
 
-function LinhaHoje({ t, motivo, aviso, aoConcluir, aoReagendar, rotuloReagendar = 'Adiar', aoAbrir }) {
+// Uma linha do dia: hora à esquerda, espécie na barra, ação à direita quando faz
+// sentido. Compromisso não se conclui — tarefa sim.
+function ItemDoDia({ item, agora, aoAbrir, aoConcluir }) {
+  const passou = item.ordem !== '99:99' && item.fim && item.fim <= agora
+  const tarefa = item.especie === 'tarefa' || item.especie === 'reserva'
+  const id = item.tarefaId
+
   return (
-    <div className="px-linha px-toque items-start">
+    <div className={cx('px-linha px-toque items-center gap-2.5 py-2', passou && 'opacity-55')}>
+      <span className="px-hora w-[42px] flex-none text-[12.5px] text-muted">
+        {item.ordem === '99:99' ? '—' : item.inicio}
+      </span>
+      <span
+        className={cx(
+          'px-especie h-7 self-center',
+          item.especie === 'compromisso' ? 'px-compromisso' : item.especie === 'reserva' ? 'px-reserva' : 'px-planejada',
+        )}
+      />
       <button
         type="button"
-        onClick={aoConcluir}
-        aria-label={`Concluir ${t.titulo}`}
-        className="press mt-0.5 grid h-[19px] w-[19px] flex-none place-items-center rounded-[6px] border border-hairline transition hover:border-accent hover:text-accent-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        onClick={() => (tarefa ? aoAbrir(id) : null)}
+        className={cx('min-w-0 flex-1 text-left', !tarefa && 'cursor-default')}
       >
-        <Check size={12} className="opacity-0" aria-hidden="true" />
-      </button>
-
-      <button type="button" onClick={aoAbrir} className="min-w-0 flex-1 text-left">
-        <span className="block text-[14.5px] leading-snug">{t.titulo}</span>
-        <span className={cx('px-motivo mt-0.5 flex flex-wrap items-center gap-x-2', aviso && 'text-warning')}>
-          <span>{motivo}</span>
-          {t.reserva && (
-            <span className="inline-flex items-center gap-1 text-accent-text">
-              <CalendarClock size={12} />
-              <span className="px-hora">{t.reserva.inicio}–{t.reserva.fim}</span>
-            </span>
+        <span className="block truncate text-[14px] leading-snug">{item.titulo}</span>
+        <span className="px-motivo mt-0.5 flex flex-wrap items-center gap-x-2">
+          {item.especie === 'compromisso' && (
+            <>
+              <span>{item.inicio}–{item.fim}</span>
+              {item.local && <span>{item.local}</span>}
+              {item.alerta != null && (
+                <span className="inline-flex items-center gap-0.5"><Bell size={10} /> {item.alerta} min</span>
+              )}
+            </>
           )}
-          {t.contexto && <span className="text-muted">{t.contexto}</span>}
+          {item.especie === 'reserva' && <span className="text-accent-text">horário reservado · {item.inicio}–{item.fim}</span>}
+          {item.especie === 'tarefa' && (
+            <>
+              <span>escolhida para hoje</span>
+              {item.tarefa.contexto && <span>{item.tarefa.contexto}</span>}
+              {item.tarefa.prioridade === 'alta' && <span className="text-danger">alta</span>}
+            </>
+          )}
         </span>
       </button>
-
-      <div className="flex flex-none items-center gap-1">
+      {tarefa && (
         <button
           type="button"
-          onClick={aoReagendar}
-          className="press rounded-[7px] px-2 py-1 text-[12.5px] text-muted transition hover:bg-surface-2 hover:text-accent-text"
-        >
-          {rotuloReagendar}
-        </button>
-        <button
-          type="button"
-          onClick={aoConcluir}
-          className="press rounded-[7px] px-2 py-1 text-[12.5px] text-muted transition hover:bg-surface-2 hover:text-positive"
+          onClick={() => aoConcluir(id)}
+          aria-label="Concluir"
+          className="press flex-none rounded-[7px] px-2 py-1 text-[12px] text-muted transition hover:bg-surface-2 hover:text-positive"
         >
           Concluir
         </button>
-      </div>
+      )}
     </div>
   )
 }
 
-const capitalizar = (s) => s.charAt(0).toUpperCase() + s.slice(1)
+function LinhaPrioridade({ t, motivo, detalhe, aviso, aoConcluir, aoReagendar, rotuloReagendar = 'Adiar', aoAbrir }) {
+  return (
+    <div className="px-linha px-toque items-start gap-2.5 py-2">
+      <button
+        type="button"
+        onClick={aoConcluir}
+        aria-label={`Concluir ${t.titulo}`}
+        className="press mt-0.5 grid h-[18px] w-[18px] flex-none place-items-center rounded-[6px] border border-hairline text-transparent transition hover:border-accent hover:text-accent-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <Check size={11} />
+      </button>
+
+      <button type="button" onClick={aoAbrir} className="min-w-0 flex-1 text-left">
+        <span className="block text-[14px] leading-snug">{t.titulo}</span>
+        <span className="px-motivo mt-0.5 flex flex-wrap items-center gap-x-2">
+          <span className={cx(aviso && 'font-medium text-warning')}>{motivo}</span>
+          {detalhe && (
+            <span className={cx('inline-flex items-center gap-1', t.reserva && 'text-accent-text')}>
+              {t.reserva && <CalendarClock size={11} />}
+              {detalhe}
+            </span>
+          )}
+          {t.prioridade === 'alta' && !aviso && <span className="text-danger">alta</span>}
+          {t.estado === ESTADO.FAZENDO && <span>em andamento</span>}
+          {t.origemId && <CornerUpRight size={11} className="text-accent-text" />}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={aoReagendar}
+        className="press mt-0.5 flex-none rounded-[7px] px-2 py-1 text-[12px] text-muted transition hover:bg-surface-2 hover:text-accent-text"
+      >
+        {rotuloReagendar}
+      </button>
+    </div>
+  )
+}

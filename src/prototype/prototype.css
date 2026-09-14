@@ -53,7 +53,11 @@
 .px-linha {
   display: flex;
   gap: 0.75rem;
-  padding: 0.6875rem 0;
+  /* UX1.1.1 — a linha e a unidade de densidade do produto. 11px de respiro
+     vertical fazia cada tela caber menos do que devia; 8px continua confortavel
+     para o dedo (a area de toque vem da altura do conteudo, nao do padding) e
+     devolve cerca de uma linha a cada seis. */
+  padding: 0.5rem 0;
   border-top: 1px solid rgb(var(--c-hairline));
 }
 .px-linha:first-child { border-top: 0; }
@@ -80,7 +84,7 @@
   border: 1px solid rgb(var(--c-hairline));
   border-radius: 12px;
   background: rgb(var(--c-board-card));
-  padding: 0.625rem 0.75rem;
+  padding: 0.5rem 0.625rem;
   transition: border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out),
     transform var(--dur-fast) var(--ease-out);
@@ -111,7 +115,7 @@
 .px-coluna {
   border-radius: 14px;
   background: rgb(var(--c-board));
-  padding: 0.5rem;
+  padding: 0.375rem;
   transition: box-shadow var(--dur-fast) var(--ease-out),
     background-color var(--dur-fast) var(--ease-out);
 }
@@ -216,24 +220,53 @@
 
 /* Grade da semana: a linha do tempo precisa ser LEGIVEL como tempo. */
 .px-grade-hora {
-  border-top: 1px solid rgb(var(--c-hairline) / 0.65);
+  border-top: 1px solid rgb(var(--c-hairline));
+  background-image: linear-gradient(
+    to bottom,
+    transparent calc(50% - 0.5px),
+    rgb(var(--c-hairline) / 0.45) calc(50% - 0.5px),
+    rgb(var(--c-hairline) / 0.45) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
 }
+/* Slot vazio: precisa PARECER que da para criar ali, sem que noventa slots
+   fiquem gritando isso ao mesmo tempo. O "+" mora escondido e so acende sob o
+   cursor. */
 .px-slot {
+  position: relative;
   transition: background-color var(--dur-fast) var(--ease-out);
 }
+.px-slot::after {
+  content: '+';
+  position: absolute;
+  inset-inline-start: 4px;
+  top: 1px;
+  font-size: 12px;
+  line-height: 1;
+  color: rgb(var(--c-accent-text));
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
 @media (hover: hover) {
-  .px-slot:hover { background: rgb(var(--c-accent-soft) / 0.55); }
+  .px-slot:hover { background: rgb(var(--c-accent-soft) / 0.6); }
+  .px-slot:hover::after { opacity: 0.75; }
+}
+.px-slot:focus-visible {
+  outline: 2px solid rgb(var(--c-accent));
+  outline-offset: -2px;
 }
 .px-evento {
   position: absolute;
-  left: 2px;
-  right: 2px;
-  border-radius: 8px;
-  border: 1px solid rgb(var(--c-accent) / 0.3);
+  left: 3px;
+  right: 3px;
+  border-radius: 7px;
+  border: 1px solid rgb(var(--c-accent) / 0.32);
+  border-left-width: 3px;
   background: rgb(var(--c-accent-soft));
-  padding: 3px 6px;
+  padding: 2px 6px;
   overflow: hidden;
   text-align: left;
+  line-height: 1.2;
   transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 }
 @media (hover: hover) {
@@ -246,6 +279,21 @@
     rgb(var(--c-accent) / 0.05) 6px 12px
   );
   border-style: dashed;
+}
+
+/* Tabela densa da visao Lista: alinhamento por coluna ajuda a varrer, e varrer
+   e o que se faz numa lista de trinta itens. */
+.px-tabela-linha {
+  display: grid;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4375rem 0.5rem;
+  border-top: 1px solid rgb(var(--c-hairline));
+  border-radius: 8px;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .px-tabela-linha:hover { background: rgb(var(--c-surface-2)); }
 }
 
 .px-aviso { animation: px-subir var(--dur-base) var(--ease-out); }

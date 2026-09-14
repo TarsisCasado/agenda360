@@ -184,20 +184,22 @@ describe('E · dia e horário são decisões diferentes', () => {
 describe('F · IA contextual aplica só o que foi confirmado', () => {
   it('nenhuma subtarefa entra sem confirmação', () => {
     const e0 = inicial()
-    expect(tarefaPorId(e0, 't-apresentacao').subtarefas).toHaveLength(0)
+    const antes = tarefaPorId(e0, 't-apresentacao').subtarefas.length
     const e1 = reducer(e0, { tipo: 'adicionarSubtarefas', id: 't-apresentacao', titulos: [] })
-    expect(tarefaPorId(e1, 't-apresentacao').subtarefas).toHaveLength(0)
+    expect(tarefaPorId(e1, 't-apresentacao').subtarefas).toHaveLength(antes)
   })
 
   it('só os passos selecionados são adicionados', () => {
-    const e1 = reducer(inicial(), {
+    const e0 = inicial()
+    const antes = tarefaPorId(e0, 't-apresentacao').subtarefas.length
+    const e1 = reducer(e0, {
       tipo: 'adicionarSubtarefas',
       id: 't-apresentacao',
       titulos: ['Levantar números de giro do trimestre', 'Montar o esqueleto dos slides'],
     })
     const sub = tarefaPorId(e1, 't-apresentacao').subtarefas
-    expect(sub).toHaveLength(2)
-    expect(sub.every((s) => !s.feito)).toBe(true)
+    expect(sub).toHaveLength(antes + 2)
+    expect(sub.slice(antes).every((s) => !s.feito)).toBe(true)
   })
 })
 
@@ -310,10 +312,13 @@ describe('UX1.1 · edição e exclusão', () => {
   })
 
   it('editar compromisso mantém os campos não tocados', () => {
-    const e1 = reducer(inicial(), { tipo: 'editarCompromisso', id: 'c-diretoria', patch: { inicio: '09:30', fim: '11:00' } })
-    const c = e1.compromissos.find((x) => x.id === 'c-diretoria')
+    const e0 = inicial()
+    const antes = e0.compromissos.find((x) => x.id === 'c-gerentes')
+    const e1 = reducer(e0, { tipo: 'editarCompromisso', id: 'c-gerentes', patch: { inicio: '09:30', fim: '11:00' } })
+    const c = e1.compromissos.find((x) => x.id === 'c-gerentes')
     expect(c.inicio).toBe('09:30')
-    expect(c.local).toBe('Sala 2')
+    expect(c.local).toBe(antes.local)
+    expect(c.categoria).toBe(antes.categoria)
   })
 
   it('excluir remove a atividade e nada mais', () => {
@@ -365,10 +370,14 @@ describe('UX1.1 · mover (arrasto, "Mover para…" e teclado usam a mesma regra)
   })
 
   it('a ordem inicial da coluna reproduz a política do produto de hoje', () => {
-    // atrasadas primeiro, depois por data, depois por prioridade
+    // atrasadas primeiro, depois por data, depois por prioridade, depois hora
     const ids = colunaDe(inicial(), ESTADO.A_FAZER).map((t) => t.id)
-    expect(ids[0]).toBe('t-consorcio')            // única com prazo vencido
-    expect(ids.indexOf('t-repasse')).toBeLessThan(ids.indexOf('t-apresentacao'))
+    expect(ids[0]).toBe('t-consorcio')  // única com prazo vencido
+
+    // com dia definido vem antes de sem dia nenhum
+    expect(ids.indexOf('t-porcino')).toBeLessThan(ids.indexOf('t-site'))
+    // mesmo dia: prioridade alta antes de média
+    expect(ids.indexOf('t-proposta')).toBeLessThan(ids.indexOf('t-jorge'))
   })
 
   it('mover para Concluído conclui; mover de volta reabre', () => {

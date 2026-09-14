@@ -6,6 +6,7 @@ import { memoriaPorId } from '../store/reducer'
 import { TIPO_MEMORIA, rotuloDeData } from '../mock/dados'
 import { Secao, Botao, Chip } from '../parts/base'
 import { dominio } from '../parts/url'
+import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
 // LER UMA MEMÓRIA — a mesma peça no painel lateral do desktop e na tela do
@@ -47,7 +48,7 @@ export default function Leitura({ id, embutida }) {
         </p>
       )}
 
-      <div className="mt-4 max-w-[62ch] whitespace-pre-line text-[15px] leading-[1.62] text-secondary">
+      <div className="mt-3.5 max-w-[68ch] whitespace-pre-line text-[14.5px] leading-[1.6] text-secondary">
         {m.texto}
       </div>
 
@@ -59,13 +60,24 @@ export default function Leitura({ id, embutida }) {
         </div>
       )}
 
-      <Secao titulo="A partir desta nota">
+      <Secao titulo={derivadas.length ? 'Relacionado' : 'A partir desta nota'}>
         {derivadas.length > 0 && (
-          <div className="mb-2">
+          <div className="mb-2.5">
             {derivadas.map((t) => (
-              <Link key={t.id} to={`/prototipo/tarefas/${t.id}`} className="px-linha px-toque items-center">
-                <span className="flex-1 text-[14px]">{t.titulo}</span>
-                <span className="px-motivo">tarefa</span>
+              <Link key={t.id} to={`/prototipo/tarefas/${t.id}`} className="px-linha px-toque items-center gap-2.5">
+                <span className={cx('px-especie h-5 self-center', t.reserva ? 'px-reserva' : 'px-planejada')} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px]">{t.titulo}</span>
+                  <span className="px-motivo mt-0.5 flex flex-wrap gap-x-2">
+                    <span>{t.estado === 'fazendo' ? 'em andamento' : t.estado === 'feito' ? 'concluída' : 'a fazer'}</span>
+                    {t.reserva ? (
+                      <span className="text-accent-text">{rotuloDeData(t.reserva.data, estado.hoje)} {t.reserva.inicio}–{t.reserva.fim}</span>
+                    ) : t.planejadaPara ? (
+                      <span>{rotuloDeData(t.planejadaPara, estado.hoje)}</span>
+                    ) : null}
+                    {t.contexto && <span>{t.contexto}</span>}
+                  </span>
+                </span>
               </Link>
             ))}
           </div>

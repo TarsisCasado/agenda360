@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MoreHorizontal, Check, CalendarClock } from 'lucide-react'
+import { Plus, MoreHorizontal, Check, CalendarClock, Bell, CornerUpRight } from 'lucide-react'
 import { useProto, useDesktop, useAcoes } from '../store/contexto'
 import { colunaDe } from '../store/reducer'
 import { ESTADO, rotuloDeData } from '../mock/dados'
@@ -140,7 +140,7 @@ export default function Tarefas() {
       {visao === 'lista' ? (
         <Lista tarefas={estado.tarefas.filter(passa)} aoAbrir={(t) => navegar(`/prototipo/tarefas/${t.id}`)} aoMover={setMover} />
       ) : desktop ? (
-        <div className="mt-5 grid grid-cols-3 gap-4">
+        <div className="mt-4 grid grid-cols-3 gap-3">
           {COLUNAS.map((c) => (
             <Coluna
               key={c.estado}
@@ -230,7 +230,7 @@ function Coluna({
       data-testid={`board-column-${col}`}
       onDragOver={(e) => sobre(e, null)}
       onDrop={(e) => { e.preventDefault(); aoSoltar(col) }}
-      className={cx('px-coluna flex min-h-[140px] flex-col')}
+      className={cx('px-coluna flex min-h-[200px] flex-col')}
       data-alvo={alvo ? 'true' : 'false'}
     >
       {!semCabecalho && (
@@ -250,7 +250,7 @@ function Coluna({
         </header>
       )}
 
-      <div className="flex-1 space-y-1.5">
+      <div className="flex-1 space-y-1">
         {tarefas.length === 0 && (
           <p className="px-1 py-5 text-center text-[12.5px] text-faint">
             {arrasto ? 'Solte aqui' : 'Nada aqui'}
@@ -298,7 +298,12 @@ function CartaoTarefa({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
   const acoes = useAcoes()
   const feito = t.estado === ESTADO.FEITO
   const atrasada = t.prazo && t.prazo < estado.hoje && !feito
+  const feitos = t.subtarefas?.filter((s) => s.feito).length || 0
 
+  // Duas linhas de meta, e so quando ha o que dizer: QUANDO (dia, prazo,
+  // horario reservado) e ONDE/COMO (contexto, prioridade, lembrete, origem).
+  // Um cartao com tres linhas de etiqueta vira ficha; um sem nenhuma obriga a
+  // abrir tudo para decidir.
   return (
     <div
       data-task-id={t.id}
@@ -317,43 +322,52 @@ function CartaoTarefa({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
           feito={feito}
           label={feito ? `Reabrir ${t.titulo}` : `Concluir ${t.titulo}`}
           onClick={() => acoes.mudarEstado(t.id, feito ? ESTADO.A_FAZER : ESTADO.FEITO)}
-          className="mt-0.5"
+          className="mt-px"
         />
-        <button
-          type="button"
-          onClick={() => aoAbrir(t)}
-          className="min-w-0 flex-1 text-left"
-        >
-          <span className={cx('block text-[14px] font-medium leading-snug', feito && 'line-through')}>
+        <button type="button" onClick={() => aoAbrir(t)} className="min-w-0 flex-1 text-left">
+          <span className={cx('block text-[13.5px] font-medium leading-[1.3]', feito && 'line-through')}>
             {t.titulo}
           </span>
+
           <span className="px-motivo mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            {t.reserva ? (
+            {atrasada ? (
+              <span className="font-medium text-warning">atrasada · {rotuloDeData(t.prazo, estado.hoje)}</span>
+            ) : t.reserva ? (
               <span className="inline-flex items-center gap-1 font-medium text-accent-text">
-                <CalendarClock size={12} />
-                <span className="px-hora">{t.reserva.inicio}–{t.reserva.fim}</span>
+                <CalendarClock size={11} />
+                <span className="px-hora">{rotuloDeData(t.reserva.data, estado.hoje)} {t.reserva.inicio}–{t.reserva.fim}</span>
               </span>
             ) : t.planejadaPara ? (
               <span>{rotuloDeData(t.planejadaPara, estado.hoje)}</span>
             ) : (
               <span className="text-faint">sem data</span>
             )}
-            {atrasada && <span className="font-medium text-warning">atrasada</span>}
-            {t.prioridade === 'alta' && <span className="text-danger">alta</span>}
-            {t.contexto && <span>{t.contexto}</span>}
-            {t.origemId && <span className="text-accent-text">origem</span>}
-            {t.subtarefas?.length > 0 && (
-              <span>{t.subtarefas.filter((s) => s.feito).length}/{t.subtarefas.length}</span>
+            {t.prazo && !atrasada && !t.reserva && (
+              <span>prazo {rotuloDeData(t.prazo, estado.hoje)}</span>
             )}
+            {t.prioridade === 'alta' && <span className="text-danger">alta</span>}
           </span>
+
+          {(t.contexto || t.alerta != null || t.origemId || t.subtarefas?.length > 0) && (
+            <span className="px-motivo mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-faint">
+              {t.contexto && <span>{t.contexto}</span>}
+              {t.alerta != null && (
+                <span className="inline-flex items-center gap-0.5"><Bell size={10} /> {t.alerta} min</span>
+              )}
+              {t.subtarefas?.length > 0 && <span>{feitos}/{t.subtarefas.length} passos</span>}
+              {t.origemId && (
+                <span className="inline-flex items-center gap-0.5 text-accent-text"><CornerUpRight size={10} /> origem</span>
+              )}
+            </span>
+          )}
         </button>
         <button
           type="button"
           aria-label={`Mover ${t.titulo}`}
           onClick={() => aoMover(t)}
-          className="press -mr-1 -mt-0.5 grid h-7 w-7 flex-none place-items-center rounded-[7px] text-muted transition hover:bg-surface-2 hover:text-primary"
+          className="press -mr-1 -mt-0.5 grid h-6 w-6 flex-none place-items-center rounded-[6px] text-muted transition hover:bg-surface-2 hover:text-primary"
         >
-          <MoreHorizontal size={16} />
+          <MoreHorizontal size={15} />
         </button>
       </div>
     </div>
@@ -391,20 +405,114 @@ function MoverPara({ tarefa, aoFechar }) {
 }
 
 function Lista({ tarefas, aoAbrir, aoMover }) {
+  const { estado } = useProto()
+  const acoes = useAcoes()
+  const desktop = useDesktop()
   const abertas = tarefas.filter((t) => t.estado !== ESTADO.FEITO)
   const feitas = tarefas.filter((t) => t.estado === ESTADO.FEITO)
+
+  // A lista existe para VARRER muitos itens — por isso é mais densa que o
+  // quadro, e no desktop alinha por coluna: o olho desce a mesma faixa em vez
+  // de caçar a informação dentro de cada linha.
+  const COLUNAS_GRADE = 'minmax(0,1fr) 118px 96px 110px 84px'
+
+  const linha = (t) => {
+    const feito = t.estado === ESTADO.FEITO
+    const atrasada = t.prazo && t.prazo < estado.hoje && !feito
+    return (
+      <div
+        key={t.id}
+        className={cx('px-tabela-linha', feito && 'opacity-60')}
+        style={desktop ? { gridTemplateColumns: COLUNAS_GRADE } : undefined}
+      >
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Marcar
+            feito={feito}
+            label={feito ? `Reabrir ${t.titulo}` : `Concluir ${t.titulo}`}
+            onClick={() => acoes.mudarEstado(t.id, feito ? ESTADO.A_FAZER : ESTADO.FEITO)}
+          />
+          <button type="button" onClick={() => aoAbrir(t)} className="min-w-0 flex-1 text-left">
+            <span className={cx('block truncate text-[13.5px]', feito && 'line-through')}>{t.titulo}</span>
+            {!desktop && (
+              <span className="px-motivo mt-0.5 flex flex-wrap items-center gap-x-2">
+                {atrasada ? (
+                  <span className="text-warning">atrasada</span>
+                ) : t.reserva ? (
+                  <span className="text-accent-text">{rotuloDeData(t.reserva.data, estado.hoje)} {t.reserva.inicio}</span>
+                ) : t.planejadaPara ? (
+                  <span>{rotuloDeData(t.planejadaPara, estado.hoje)}</span>
+                ) : (
+                  <span className="text-faint">sem data</span>
+                )}
+                {t.prioridade === 'alta' && <span className="text-danger">alta</span>}
+                {t.contexto && <span>{t.contexto}</span>}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {desktop && (
+          <>
+            <span className="px-motivo truncate">
+              {t.estado === ESTADO.FAZENDO ? 'em andamento' : feito ? 'concluído' : 'a fazer'}
+            </span>
+            <span className={cx('px-motivo truncate', atrasada && 'font-medium text-warning')}>
+              {atrasada
+                ? `prazo ${rotuloDeData(t.prazo, estado.hoje)}`
+                : t.planejadaPara
+                  ? rotuloDeData(t.planejadaPara, estado.hoje)
+                  : t.prazo
+                    ? `prazo ${rotuloDeData(t.prazo, estado.hoje)}`
+                    : 'sem data'}
+            </span>
+            <span className="px-motivo truncate">
+              {t.reserva ? (
+                <span className="px-hora inline-flex items-center gap-1 text-accent-text">
+                  <CalendarClock size={11} /> {t.reserva.inicio}–{t.reserva.fim}
+                </span>
+              ) : (
+                t.contexto || '—'
+              )}
+            </span>
+            <span className="flex items-center justify-end gap-1">
+              {t.prioridade === 'alta' && <span className="px-motivo text-danger">alta</span>}
+              <button
+                type="button"
+                aria-label={`Mover ${t.titulo}`}
+                onClick={() => aoMover(t)}
+                className="press grid h-6 w-6 place-items-center rounded-[6px] text-muted transition hover:bg-surface hover:text-primary"
+              >
+                <MoreHorizontal size={15} />
+              </button>
+            </span>
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="mt-5 space-y-1.5">
+    <div className="mt-4">
+      {desktop && (
+        <div
+          className="grid gap-3 border-b border-hairline px-2 pb-1.5"
+          style={{ gridTemplateColumns: COLUNAS_GRADE }}
+        >
+          <span className="px-secao">Atividade</span>
+          <span className="px-secao">Situação</span>
+          <span className="px-secao">Quando</span>
+          <span className="px-secao">Contexto</span>
+          <span className="px-secao text-right">Ações</span>
+        </div>
+      )}
+
       {abertas.length === 0 && <Vazio>Nenhuma atividade com esses filtros.</Vazio>}
-      {abertas.map((t) => (
-        <CartaoTarefa key={t.id} t={t} aoAbrir={aoAbrir} aoMover={aoMover} setArrasto={() => {}} coluna={t.estado} />
-      ))}
+      {abertas.map(linha)}
+
       {feitas.length > 0 && (
         <>
-          <h2 className="px-secao pt-5">Concluído</h2>
-          {feitas.map((t) => (
-            <CartaoTarefa key={t.id} t={t} aoAbrir={aoAbrir} aoMover={aoMover} setArrasto={() => {}} coluna={t.estado} />
-          ))}
+          <h2 className="px-secao mt-5 px-2 pb-1">Concluído · {feitas.length}</h2>
+          {feitas.map(linha)}
         </>
       )}
     </div>

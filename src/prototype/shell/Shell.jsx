@@ -35,9 +35,13 @@ export default function Shell({ children, onCapturar, onBuscar, onNovaTarefa, on
       <main className="lg:pl-[216px]">
         {/* Cada superficie usa o espaco conforme a funcao: a agenda e o quadro
             precisam de largura para representar tempo e fluxo; leitura, nao. */}
+        {/* O conteudo comeca logo depois da navegacao em vez de flutuar
+            centralizado num canvas enorme: telas operacionais (agenda, quadro,
+            memoria) usam a largura toda ate um teto generoso; leitura mantem
+            medida confortavel. */}
         <div className={cx(
-          'mx-auto w-full px-4 pb-32 pt-5 lg:px-8 lg:pb-14 lg:pt-8',
-          largo ? 'max-w-[1280px]' : 'max-w-[820px]',
+          'w-full px-4 pb-28 pt-4 lg:px-7 lg:pb-12 lg:pt-6',
+          largo ? 'max-w-[1560px]' : 'mx-auto max-w-[880px]',
         )}>
           {children}
         </div>

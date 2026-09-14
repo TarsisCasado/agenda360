@@ -194,15 +194,28 @@ function ColunaDoDia({ data, aoNovo, aoAbrir, compacta }) {
 
       {eventos.map((e) => {
         const reserva = e.especie === 'reserva'
+        const altura = alturaDe(e.inicio, e.fim)
+        // Bloco alto tem espaço para o título inteiro; bloco curto não pode
+        // empurrar o vizinho, então corta. A informação some por falta de
+        // espaço real, nunca por padrão.
+        const linhas = altura >= 62 ? 2 : 1
         const conteudo = (
           <>
-            <span className="px-hora block text-[10.5px] leading-tight text-accent-text/80">{e.inicio}</span>
-            <span className={cx('block truncate text-[12px] font-medium leading-tight', compacta && 'text-[11.5px]')}>
+            <span className="px-hora block text-[10px] leading-tight text-accent-text/80">
+              {e.inicio}–{e.fim}
+            </span>
+            <span
+              className={cx('block overflow-hidden text-[12px] font-medium leading-[1.25]', compacta && 'text-[11.5px]')}
+              style={{ display: '-webkit-box', WebkitLineClamp: linhas, WebkitBoxOrient: 'vertical' }}
+            >
               {e.titulo}
             </span>
+            {altura >= 96 && e.local && (
+              <span className="mt-0.5 block truncate text-[10.5px] text-secondary">{e.local}</span>
+            )}
           </>
         )
-        const estilo = { top: topoDe(e.inicio), height: alturaDe(e.inicio, e.fim) }
+        const estilo = { top: topoDe(e.inicio), height: altura }
         return reserva ? (
           <Link
             key={e.id}
