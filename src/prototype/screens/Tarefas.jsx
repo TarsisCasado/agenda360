@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MoreHorizontal, Check, CalendarClock, Bell, CornerUpRight } from 'lucide-react'
+import { Plus, MoreHorizontal, Check, CalendarClock, Bell, CornerUpRight, Ban } from 'lucide-react'
 import { useProto, useDesktop, useAcoes } from '../store/contexto'
-import { colunaDe } from '../store/reducer'
+import { colunaDe, ehMinha, delegadasPorMim, recebidas } from '../store/reducer'
 import { ESTADO, rotuloDeData } from '../mock/dados'
 import { Vazio, Chip, Botao, Folha, Marcar } from '../parts/base'
+import { alertaCurto } from '../mock/alerta'
+import { Pessoa, SeloResponsabilidade, EscolherPessoa } from '../parts/pessoas'
 import TarefaForm from '../forms/TarefaForm'
 import { useTouchCardDrag } from '../../hooks/useTouchCardDrag'
 import { cx } from '../../lib/utils'
@@ -36,6 +38,22 @@ const COLUNAS = [
   { estado: ESTADO.FEITO, titulo: 'Concluído', curto: 'Concluído' },
 ]
 
+// ---------------------------------------------------------------------------
+// OS TRES RECORTES DA DELEGACAO.
+//
+// Nao sao tres listas: sao tres PERGUNTAS sobre o mesmo conjunto. "Conferir
+// documentacao dos seminovos" aparece em "Delegadas por mim" e, para o Rubens,
+// apareceria em "Recebidas" — e a MESMA tarefa, com o mesmo andamento. Nao ha
+// copia, nao ha tarefa espelho, e e por isso que o delegador ve o progresso
+// real em vez de um relatorio.
+// ---------------------------------------------------------------------------
+const ESCOPOS = [
+  { chave: 'todas', label: 'Todas' },
+  { chave: 'minhas', label: 'Minhas' },
+  { chave: 'delegadas', label: 'Delegadas por mim' },
+  { chave: 'recebidas', label: 'Recebidas' },
+]
+
 const FILTROS = [
   { chave: 'sem-data', label: 'Sem data' },
   { chave: 'hoje', label: 'Para hoje' },
@@ -50,13 +68,22 @@ export default function Tarefas() {
   const navegar = useNavigate()
   const [visao, setVisao] = useState('quadro')
   const [filtros, setFiltros] = useState([])
+  const [escopo, setEscopo] = useState('todas')
   const [colunaMovel, setColunaMovel] = useState(ESTADO.A_FAZER)
   const [form, setForm] = useState(null)      // { tarefa } | { padroes }
   const [mover, setMover] = useState(null)    // tarefa
   const [arrasto, setArrasto] = useState(null) // { id, coluna, antesDe }
   const pagerRef = useRef(null)
 
+  const noEscopo = useCallback((t) => {
+    if (escopo === 'minhas') return ehMinha(t)
+    if (escopo === 'delegadas') return t.delegadorId === 'p-tarsis' && !ehMinha(t)
+    if (escopo === 'recebidas') return ehMinha(t) && t.delegadorId && t.delegadorId !== 'p-tarsis'
+    return true
+  }, [escopo])
+
   const passa = useCallback((t) => {
+    if (!noEscopo(t)) return false
     if (!filtros.length) return true
     return filtros.every((f) => {
       if (f === 'sem-data') return !t.planejadaPara && !t.prazo
@@ -65,7 +92,7 @@ export default function Tarefas() {
       if (f === 'atrasadas') return t.prazo && t.prazo < estado.hoje && t.estado !== ESTADO.FEITO
       return true
     })
-  }, [filtros, estado.hoje])
+  }, [filtros, estado.hoje, noEscopo])
 
   const porColuna = (col) => colunaDe(estado, col).filter(passa)
 
@@ -113,9 +140,28 @@ export default function Tarefas() {
         </div>
       </header>
 
+      {/* De quem é o trabalho — o eixo da RESPONSABILIDADE, separado do eixo da
+          execução (as colunas) e do eixo das propriedades (os filtros). */}
+      <div className="no-scrollbar mt-4 flex items-center gap-1.5 overflow-x-auto pb-1">
+        {ESCOPOS.map((e) => {
+          const n = e.chave === 'todas'
+            ? estado.tarefas.length
+            : e.chave === 'minhas'
+              ? estado.tarefas.filter(ehMinha).length
+              : e.chave === 'delegadas'
+                ? delegadasPorMim(estado).length
+                : recebidas(estado).length
+          return (
+            <Chip key={e.chave} on={escopo === e.chave} onClick={() => setEscopo(e.chave)}>
+              {e.label} <span className="opacity-60">{n}</span>
+            </Chip>
+          )
+        })}
+      </div>
+
       {/* Filtros: precisam parecer selecionaveis, mostrar o que esta ligado e
           poder ser limpos. "Sem data" mora aqui — e propriedade, nao estagio. */}
-      <div className="no-scrollbar mt-4 flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="no-scrollbar mt-2 flex items-center gap-2 overflow-x-auto pb-1">
         {FILTROS.map((f) => (
           <Chip key={f.chave} on={filtros.includes(f.chave)} onClick={() => alternarFiltro(f.chave)}>
             {f.label}
@@ -346,13 +392,18 @@ function CartaoTarefa({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
               <span>prazo {rotuloDeData(t.prazo, estado.hoje)}</span>
             )}
             {t.prioridade === 'alta' && <span className="text-danger">alta</span>}
+            {t.bloqueio && (
+              <span className="inline-flex items-center gap-0.5 font-medium text-danger">
+                <Ban size={10} /> bloqueada
+              </span>
+            )}
           </span>
 
-          {(t.contexto || t.alerta != null || t.origemId || t.subtarefas?.length > 0) && (
+          {(t.contexto || t.alerta || t.origemId || t.subtarefas?.length > 0) && (
             <span className="px-motivo mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-faint">
               {t.contexto && <span>{t.contexto}</span>}
-              {t.alerta != null && (
-                <span className="inline-flex items-center gap-0.5"><Bell size={10} /> {t.alerta} min</span>
+              {t.alerta && (
+                <span className="inline-flex items-center gap-0.5"><Bell size={10} /> {alertaCurto(t.alerta)}</span>
               )}
               {t.subtarefas?.length > 0 && <span>{feitos}/{t.subtarefas.length} passos</span>}
               {t.origemId && (
@@ -360,6 +411,15 @@ function CartaoTarefa({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
               )}
             </span>
           )}
+
+          {/* Quem responde por isto. Só aparece quando não sou eu — um avatar em
+              toda tarefa seria ruído numa agenda pessoal. */}
+          {!ehMinha(t) || t.delegadorId ? (
+            <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Pessoa id={t.responsavelId} />
+              <SeloResponsabilidade t={t} />
+            </span>
+          ) : null}
         </button>
         <button
           type="button"
@@ -375,9 +435,25 @@ function CartaoTarefa({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
 }
 
 // "Mover para..." — no toque e a via principal, nao o plano B.
+//
+// A folha reune as duas acoes rapidas do cartao, e elas ficam em blocos
+// separados de proposito: MOVER e execucao, DELEGAR e responsabilidade. Junta-
+// las numa lista so faria "Concluído" e "Rubens" parecerem a mesma especie de
+// escolha.
 function MoverPara({ tarefa, aoFechar }) {
   const acoes = useAcoes()
+  const [delegando, setDelegando] = useState(false)
   if (!tarefa) return null
+  if (delegando) {
+    return (
+      <EscolherPessoa
+        aberta
+        t={tarefa}
+        aoFechar={() => { setDelegando(false); aoFechar() }}
+        aoEscolher={(id) => { acoes.delegar(tarefa.id, id); setDelegando(false); aoFechar() }}
+      />
+    )
+  }
   return (
     <Folha aberta aoFechar={aoFechar} titulo="Mover para" subtitulo={tarefa.titulo} largura="max-w-[420px]">
       <div className="space-y-1.5">
@@ -400,6 +476,18 @@ function MoverPara({ tarefa, aoFechar }) {
           )
         })}
       </div>
+
+      <div className="mt-4 border-t border-hairline pt-4">
+        <p className="px-secao mb-2">Responsabilidade</p>
+        <button
+          type="button"
+          onClick={() => setDelegando(true)}
+          className="press flex w-full items-center gap-3 rounded-row border border-hairline px-4 py-3 text-left text-[14.5px] transition hover:border-accent hover:text-accent-text"
+        >
+          <Pessoa id={tarefa.responsavelId} />
+          <span className="flex-1">Delegar…</span>
+        </button>
+      </div>
     </Folha>
   )
 }
@@ -414,7 +502,7 @@ function Lista({ tarefas, aoAbrir, aoMover }) {
   // A lista existe para VARRER muitos itens — por isso é mais densa que o
   // quadro, e no desktop alinha por coluna: o olho desce a mesma faixa em vez
   // de caçar a informação dentro de cada linha.
-  const COLUNAS_GRADE = 'minmax(0,1fr) 118px 96px 110px 84px'
+  const COLUNAS_GRADE = 'minmax(0,1fr) 118px 96px 110px 104px 84px'
 
   const linha = (t) => {
     const feito = t.estado === ESTADO.FEITO
@@ -474,6 +562,10 @@ function Lista({ tarefas, aoAbrir, aoMover }) {
                 t.contexto || '—'
               )}
             </span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Pessoa id={t.responsavelId} />
+              <SeloResponsabilidade t={t} />
+            </span>
             <span className="flex items-center justify-end gap-1">
               {t.prioridade === 'alta' && <span className="px-motivo text-danger">alta</span>}
               <button
@@ -502,6 +594,7 @@ function Lista({ tarefas, aoAbrir, aoMover }) {
           <span className="px-secao">Situação</span>
           <span className="px-secao">Quando</span>
           <span className="px-secao">Contexto</span>
+          <span className="px-secao">Quem responde</span>
           <span className="px-secao text-right">Ações</span>
         </div>
       )}

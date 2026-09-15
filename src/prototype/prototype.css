@@ -310,3 +310,178 @@
 @media (prefers-reduced-motion: reduce) {
   .px-aviso, .px-entra, .px-insercao { animation: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   TEMA DO PROTOTIPO (UX1.2).
+
+   O protótipo escolhe Claro / Escuro / Sistema SEM tocar na classe do <html>:
+   se mexesse ali, sair do protótipo deixaria o produto com o tema trocado
+   atrás. Em vez disso a raiz do protótipo redeclara a escala inteira para o
+   próprio subárvore — os mesmos valores do produto, escritos aqui de propósito
+   para que o portão continue sendo só uma rota.
+
+   Consequência registrada para a migração real: quando isto virar produto, o
+   tema é uma preferência de conta, não uma classe local.
+--------------------------------------------------------------------------- */
+.px-claro {
+  color-scheme: light;
+  --c-canvas: 247 248 250;
+  --c-surface: 255 255 255;
+  --c-surface-2: 242 244 247;
+  --c-surface-3: 232 235 240;
+  --c-hairline: 226 230 237;
+  --c-board: 234 237 243;
+  --c-board-card: 255 255 255;
+  --c-text: 16 22 34;
+  --c-text-2: 88 98 116;
+  --c-text-3: 137 147 164;
+  --c-text-4: 170 179 193;
+  --c-accent: 79 70 229;
+  --c-accent-soft: 238 240 255;
+  --c-accent-text: 67 56 202;
+  --c-positive: 16 152 106;
+  --c-warning: 197 128 12;
+  --c-danger: 220 62 62;
+}
+
+.px-escuro {
+  color-scheme: dark;
+  --c-canvas: 11 13 18;
+  --c-surface: 20 23 30;
+  --c-surface-2: 27 31 40;
+  --c-surface-3: 36 41 52;
+  --c-hairline: 44 50 62;
+  --c-board: 22 26 33;
+  --c-board-card: 34 39 49;
+  --c-text: 240 243 248;
+  --c-text-2: 160 170 187;
+  --c-text-3: 116 126 143;
+  --c-text-4: 92 101 117;
+  --c-accent: 129 140 248;
+  --c-accent-soft: 33 36 62;
+  --c-accent-text: 165 180 252;
+  --c-positive: 52 199 145;
+  --c-warning: 234 179 8;
+  --c-danger: 248 113 113;
+}
+
+/* ---------------------------------------------------------------------------
+   PECAS NOVAS DO UX1.2
+--------------------------------------------------------------------------- */
+
+/* Grupo da lateral: o rótulo existe para AGRUPAR, não para ser lido toda hora.
+   Some quando a lateral está recolhida, onde vira uma linha de separação. */
+.px-grupo {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(var(--c-text-4));
+  padding: 0 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Iniciais de uma pessoa: delegação precisa de um rosto, e um rosto que cabe
+   numa linha de 20px é um par de letras. */
+.px-pessoa {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-3));
+  color: rgb(var(--c-text-2));
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  width: 20px;
+  height: 20px;
+}
+.px-pessoa-eu { background: rgb(var(--c-accent-soft)); color: rgb(var(--c-accent-text)); }
+
+/* Etiqueta de estado de responsabilidade — não é a mesma coisa que a coluna. */
+.px-selo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.px-selo-aguardando { background: rgb(var(--c-warning) / 0.14); color: rgb(var(--c-warning)); }
+.px-selo-devolvida { background: rgb(var(--c-danger) / 0.12); color: rgb(var(--c-danger)); }
+.px-selo-aceita { background: rgb(var(--c-positive) / 0.12); color: rgb(var(--c-positive)); }
+.px-selo-bloqueada { background: rgb(var(--c-danger) / 0.12); color: rgb(var(--c-danger)); }
+
+/* Célula do mês: precisa caber conteúdo de verdade, não só um ponto. */
+.px-mes-celula {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 92px;
+  border: 1px solid rgb(var(--c-hairline));
+  border-radius: 10px;
+  background: rgb(var(--c-surface));
+  padding: 0.25rem 0.3rem;
+  text-align: left;
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .px-mes-celula:hover { border-color: rgb(var(--c-accent) / 0.55); }
+}
+.px-mes-celula:focus-visible { outline: 2px solid rgb(var(--c-accent)); outline-offset: 1px; }
+.px-mes-fora { background: transparent; border-color: transparent; }
+.px-mes-hoje { border-color: rgb(var(--c-accent)); background: rgb(var(--c-accent-soft) / 0.5); }
+.px-mes-item {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 4px;
+  padding: 0 3px;
+  background: rgb(var(--c-accent-soft));
+  color: rgb(var(--c-accent-text));
+}
+.px-mes-tarefa {
+  background: transparent;
+  color: rgb(var(--c-text-2));
+  border-left: 2px solid rgb(var(--c-hairline));
+  border-radius: 0;
+  padding-left: 4px;
+}
+/* A barra de ocupação conhecida: quanto do dia o Agenda sabe que está tomado.
+   Não afirma disponibilidade — só mostra o que ele conhece. */
+.px-ocupacao {
+  height: 2px;
+  border-radius: 2px;
+  background: rgb(var(--c-accent) / 0.55);
+}
+
+/* Conversa do Copiloto */
+.px-balao {
+  max-width: 88%;
+  border-radius: 14px;
+  padding: 0.6rem 0.9rem;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+.px-balao-pessoa { margin-left: auto; background: rgb(var(--c-accent-soft)); color: rgb(var(--c-accent-text)); }
+.px-balao-ia { background: rgb(var(--c-surface-2)); color: rgb(var(--c-text)); }
+
+/* Editor de nota: uma folha de papel, não um formulário. */
+.px-editor {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+  font-size: 15px;
+  line-height: 1.65;
+  color: rgb(var(--c-text));
+}
+.px-editor::placeholder { color: rgb(var(--c-text-4)); }

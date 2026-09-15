@@ -116,3 +116,142 @@ export function planejarSemana(estado, terca) {
     ],
   }
 }
+
+// ---------------------------------------------------------------------------
+// O COPILOTO AMPLIADO — respostas DETERMINISTICAS.
+//
+// Este arquivo nao entende portugues e nao tenta. Ele reconhece alguns padroes
+// para que a CONVERSA possa ser avaliada: os estados (pensando -> resposta ou
+// proposta -> revisao -> confirmacao), a diferenca entre CONSULTAR e ESCREVER,
+// e o fato de que fontes da Memoria podem ser abertas.
+//
+// A regra de produto que isto existe para demonstrar:
+//
+//   PERGUNTA NAO PEDE CONFIRMACAO. ESCRITA PEDE, SEMPRE.
+//
+// Consultar o que esta atrasado nao muda nada, entao responde direto. Reservar
+// um horario muda a agenda de alguem, entao vira PROPOSTA e espera.
+// ---------------------------------------------------------------------------
+export const ATALHOS = [
+  'Organizar meu dia',
+  'Planejar minha semana',
+  'O que está atrasado?',
+  'Encontrar algo que anotei',
+]
+
+export function responder(texto, estado, contexto) {
+  const t = String(texto || '').toLowerCase()
+  const hoje = estado.hoje
+
+  // --- CONSULTAS: respondem direto, nao escrevem nada ----------------------
+  if (/atrasad|vencid|venceu/.test(t)) {
+    const lista = estado.tarefas.filter((x) => x.estado !== 'feito' && x.prazo && x.prazo < hoje)
+    const bloqueadas = estado.tarefas.filter((x) => x.bloqueio)
+    return {
+      especie: 'resposta',
+      texto: lista.length
+        ? `Há ${lista.length} com prazo vencido: ${lista.map((x) => `“${x.titulo}”`).join(', ')}.` +
+          (bloqueadas.length
+            ? ` Fora isso, ${bloqueadas.length} está bloqueada: “${bloqueadas[0].titulo}” — ${bloqueadas[0].bloqueio}.`
+            : '')
+        : 'Nada com prazo vencido no momento.',
+      referencias: lista.map((x) => ({ tipo: 'tarefa', id: x.id, titulo: x.titulo })),
+    }
+  }
+
+  if (/anotei|anotad|nota|memória|memoria|guardei|encontrar|onde está|onde esta/.test(t)) {
+    const fontes = estado.memoria.filter((m) => !m.arquivada).slice(0, 3)
+    return {
+      especie: 'resposta',
+      texto:
+        'Achei isto no que você guardou. As fontes ficam abertas — você confere de onde veio ' +
+        'antes de acreditar em mim.',
+      fontes: fontes.map((m) => ({ tipo: 'memoria', id: m.id, titulo: m.titulo, resumo: m.resumo })),
+    }
+  }
+
+  if (/quem|delegad|rubens|carla|jorge|marina/.test(t)) {
+    const fora = estado.tarefas.filter((x) => x.delegadorId === 'p-tarsis' && x.responsavelId !== 'p-tarsis')
+    return {
+      especie: 'resposta',
+      texto: fora.length
+        ? `Você tem ${fora.length} ${fora.length === 1 ? 'atividade' : 'atividades'} com outras pessoas: ` +
+          fora.map((x) => `“${x.titulo}”`).join(', ') + '.'
+        : 'Nada sob responsabilidade de outra pessoa agora.',
+      referencias: fora.map((x) => ({ tipo: 'tarefa', id: x.id, titulo: x.titulo })),
+    }
+  }
+
+  // --- PROPOSTAS: mexem no estado, entao esperam confirmacao ---------------
+  if (/organizar.*dia|meu dia|hoje/.test(t)) {
+    return {
+      especie: 'proposta',
+      resumo:
+        'Sua manhã tem 20 minutos livres antes da reunião e a tarde está aberta depois das 15h. ' +
+        'Eu faria assim:',
+      mudancas: [
+        {
+          rotulo: 'Puxar a documentação do consórcio para hoje (está vencida há dias)',
+          acao: { tipo: 'escolherParaHoje', id: 't-consorcio', valor: true },
+        },
+        {
+          rotulo: 'Reservar 15:30–16:00 para retornar o Porcino',
+          acao: { tipo: 'reservarHorario', id: 't-porcino', data: estado.hoje, inicio: '15:30', fim: '16:00' },
+        },
+      ],
+    }
+  }
+
+  if (/semana|planejar/.test(t)) {
+    return { especie: 'proposta', ...planejarSemana(estado, estado.terca) }
+  }
+
+  if (contexto?.tipo === 'tarefa' && /passo|quebrar|começar|comecar|dividir/.test(t)) {
+    const alvo = estado.tarefas.find((x) => x.id === contexto.id)
+    return {
+      especie: 'proposta',
+      resumo: `Separei o que eu faria em “${alvo?.titulo}”:`,
+      mudancas: sugerirPassos(alvo?.titulo).map((p) => ({
+        rotulo: p,
+        acao: { tipo: 'adicionarSubtarefas', id: contexto.id, titulos: [p] },
+      })),
+    }
+  }
+
+  // --- sem correspondencia: o mock ADMITE que e mock ----------------------
+  return {
+    especie: 'resposta',
+    texto:
+      'Neste protótipo eu respondo a um conjunto fixo de pedidos — não há modelo de ' +
+      'linguagem por trás. Tente “organizar meu dia”, “planejar minha semana”, ' +
+      '“o que está atrasado?” ou “encontrar algo que anotei”.',
+  }
+}
+
+// REVISAR altera a MESMA proposta, em vez de criar outra. É a diferença entre
+// "não é bem isso" e "esquece, começa de novo".
+export function revisar(proposta, pedido) {
+  const t = String(pedido || '').toLowerCase()
+  if (/tarde|depois|mais tarde/.test(t)) {
+    return {
+      ...proposta,
+      revisada: 'movi o que tinha horário para mais tarde',
+      mudancas: proposta.mudancas.map((m) =>
+        m.acao.tipo === 'reservarHorario'
+          ? { ...m, rotulo: m.rotulo.replace(/\d{2}:\d{2}–\d{2}:\d{2}/, '16:30–17:00'), acao: { ...m.acao, inicio: '16:30', fim: '17:00' } }
+          : m,
+      ),
+    }
+  }
+  if (/menos|só|so o|apenas|simples/.test(t)) {
+    return {
+      ...proposta,
+      revisada: 'deixei só a mudança mais importante',
+      mudancas: proposta.mudancas.slice(0, 1),
+    }
+  }
+  return {
+    ...proposta,
+    revisada: 'não entendi o ajuste, então mantive a proposta como estava — desmarque o que não serve',
+  }
+}

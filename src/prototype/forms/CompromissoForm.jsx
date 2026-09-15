@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useProto, useAcoes } from '../store/contexto'
 import { somarDias, iso, inicioDaSemana, diaCurto, numeroDoDia } from '../mock/dados'
 import { Folha, Campo, Texto, Area, Escolha, Botao, Chip } from '../parts/base'
+import AlertaCampo from '../parts/AlertaCampo'
 
 // ---------------------------------------------------------------------------
 // NOVO COMPROMISSO / EDITAR — a outra criacao estruturada.
@@ -22,12 +23,6 @@ const DURACOES = [
   { valor: 120, label: '2 h' },
 ]
 const CATEGORIAS = ['Operação', 'Comercial', 'Financeiro', 'Diretoria', 'Pessoal']
-const LEMBRETES = [
-  { valor: 0, label: 'Na hora' },
-  { valor: 15, label: '15 min antes' },
-  { valor: 30, label: '30 min antes' },
-  { valor: 60, label: '1 h antes' },
-]
 
 export default function CompromissoForm({ aberta, aoFechar, compromisso, padroes = {} }) {
   const { estado } = useProto()
@@ -39,7 +34,7 @@ export default function CompromissoForm({ aberta, aoFechar, compromisso, padroes
   useEffect(() => {
     if (aberta) {
       setF(inicial(compromisso, padroes, estado.hoje))
-      setMais(Boolean(compromisso?.notas || compromisso?.alerta != null))
+      setMais(Boolean(compromisso?.notas || compromisso?.alerta))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberta, compromisso?.id, padroes.data, padroes.inicio])
@@ -135,9 +130,13 @@ export default function CompromissoForm({ aberta, aoFechar, compromisso, padroes
             <Campo rotulo="Categoria">
               <Escolha permitirVazio valor={f.categoria} aoEscolher={(v) => set('categoria', v)} opcoes={CATEGORIAS.map((c) => ({ valor: c, label: c }))} />
             </Campo>
-            <Campo rotulo="Lembrete">
-              <Escolha permitirVazio valor={f.alerta} aoEscolher={(v) => set('alerta', v)} opcoes={LEMBRETES} />
-            </Campo>
+
+            <AlertaCampo
+              valor={f.alerta}
+              aoMudar={(v) => set('alerta', v)}
+              item={{ data: f.data, inicio: f.inicio }}
+            />
+
             <Campo rotulo="Notas">
               <Area value={f.notas} onChange={(e) => set('notas', e.target.value)} placeholder="Pauta, quem participa, o que levar…" />
             </Campo>

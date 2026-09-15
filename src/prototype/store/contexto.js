@@ -44,6 +44,30 @@ export function useDesktop() {
   return desktop
 }
 
+// ---------------------------------------------------------------------------
+// TEMA — resolvido DENTRO do protótipo.
+//
+// O protótipo não mexe na classe do <html>: se mexesse, sair para o produto
+// deixaria o tema trocado atrás dele. Em vez disso a raiz do protótipo carrega
+// a própria escala de cor, e "Sistema" escuta a preferência do aparelho ao
+// vivo. Não persiste depois do reload — e o briefing diz que não precisa.
+// ---------------------------------------------------------------------------
+export function useTema() {
+  const { estado } = useProto()
+  const [sistemaEscuro, setSistemaEscuro] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const ouvir = (e) => setSistemaEscuro(e.matches)
+    mq.addEventListener('change', ouvir)
+    return () => mq.removeEventListener('change', ouvir)
+  }, [])
+  const escolhido = estado.tema || 'sistema'
+  const escuro = escolhido === 'escuro' || (escolhido === 'sistema' && sistemaEscuro)
+  return { escolhido, escuro, classe: escuro ? 'px-escuro' : 'px-claro' }
+}
+
 export function useAcoes() {
   const { dispatch } = useProto()
   return useMemo(
@@ -71,6 +95,28 @@ export function useAcoes() {
       alternarSubtarefa: (id, subId) => dispatch({ tipo: 'alternarSubtarefa', id, subId }),
       organizarMemoria: (id, tipoNovo) => dispatch({ tipo: 'organizarMemoria', id, tipoNovo }),
       aplicarPlano: (mudancas) => dispatch({ tipo: 'aplicarPlano', mudancas }),
+      // notas
+      criarNota: (dados) => dispatch({ tipo: 'criarNota', ...dados }),
+      editarNota: (id, patch) => dispatch({ tipo: 'editarNota', id, patch }),
+      arquivarMemoria: (id, valor) => dispatch({ tipo: 'arquivarMemoria', id, valor }),
+      excluirMemoria: (id) => dispatch({ tipo: 'excluirMemoria', id }),
+      // delegação
+      delegar: (id, paraId) => dispatch({ tipo: 'delegar', id, paraId }),
+      aceitar: (id, porId) => dispatch({ tipo: 'aceitarResponsabilidade', id, porId }),
+      devolver: (id, motivo, porId) => dispatch({ tipo: 'devolverResponsabilidade', id, motivo, porId }),
+      retomar: (id) => dispatch({ tipo: 'retomarTarefa', id }),
+      bloquear: (id, motivo, porId) => dispatch({ tipo: 'bloquearTarefa', id, motivo, porId }),
+      comentar: (id, texto, porId) => dispatch({ tipo: 'comentarTarefa', id, texto, porId }),
+      alternarAcompanhar: (id) => dispatch({ tipo: 'alternarAcompanhar', id }),
+      // notificações
+      lerNotificacao: (id) => dispatch({ tipo: 'lerNotificacao', id }),
+      lerTodasNotificacoes: () => dispatch({ tipo: 'lerTodasNotificacoes' }),
+      // copiloto (a conversa é estado da sessão, não do componente)
+      copilotoTurno: (turno, contexto) => dispatch({ tipo: 'copilotoTurno', turno, contexto }),
+      copilotoProposta: (proposta) => dispatch({ tipo: 'copilotoProposta', proposta }),
+      copilotoContexto: (contexto) => dispatch({ tipo: 'copilotoContexto', contexto }),
+      // tema
+      definirTema: (tema) => dispatch({ tipo: 'definirTema', tema }),
       limparAviso: () => dispatch({ tipo: 'limparAviso' }),
     }),
     [dispatch],

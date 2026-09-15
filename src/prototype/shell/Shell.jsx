@@ -1,20 +1,36 @@
-import { NavLink, useLocation } from 'react-router-dom'
-import { Sun, CalendarDays, ListTodo, Library, Plus, Search, Sparkles, PenLine } from 'lucide-react'
+import { useState } from 'react'
+import { NavLink, useLocation, Link } from 'react-router-dom'
+import {
+  Sun, CalendarDays, ListTodo, Library, Plus, Search, Sparkles, Bell,
+  PanelLeftClose, PanelLeftOpen, PieChart, CircleDashed, Settings,
+} from 'lucide-react'
 import { cx } from '../../lib/utils'
-import { useAviso, useAcoes, useProto } from '../store/contexto'
-import { Link } from 'react-router-dom'
+import { useAviso, useAcoes, useProto, useTema } from '../store/contexto'
+import { naoLidas } from '../store/reducer'
 
 // ---------------------------------------------------------------------------
-// A NAVEGACAO DO 2.0 — quatro destinos e uma capacidade.
+// A NAVEGACAO DO 2.0 (UX1.2) — QUATRO DESTINOS, E TUDO O MAIS E CAPACIDADE.
 //
-// HOJE · AGENDA · [+] · TAREFAS · MEMORIA
+// A lateral antiga era um menu de MODULOS: Ideias, Links, Inbox, Alertas,
+// Delegacao, cada um virando uma tela. Isso empurrava a pessoa a decidir "onde
+// isso mora?" antes de decidir "o que eu quero fazer?".
 //
-// O [+] nao e um quinto destino: e a captura, disponivel de qualquer lugar.
-// No telefone ele fica no centro da barra, onde o polegar chega primeiro; no
-// desktop, no topo da lateral, onde o olho comeca.
+// Aqui os DESTINOS organizam o produto — Hoje, Agenda, Tarefas, Memoria — e as
+// capacidades atravessam todos eles: capturar, buscar, o Copiloto, criar com
+// formulario, notificacoes, delegacao. Nenhuma delas e um lugar.
 //
-// "Memoria" e nome de trabalho — aparece aqui para ser julgado, nao por estar
-// decidido.
+// A hierarquia da lateral diz isso em voz alta:
+//
+//   ACAO GLOBAL      [+] Criar / Capturar
+//   UTILIDADE        Buscar · Notificacoes
+//   DESTINOS         Hoje · Agenda · Tarefas · Memoria
+//   ASSISTENCIA      Copiloto
+//   ACOMPANHAMENTO   Revisao · Relatorios
+//   BASE             Perfil / Configuracoes
+//
+// Recolher a lateral devolve ~150px para a grade da agenda e para o quadro, que
+// e onde a largura vale dinheiro. Recolhida, ela continua inteira: os mesmos
+// itens, identificados por hover e por foco.
 // ---------------------------------------------------------------------------
 const DESTINOS = [
   { to: '/prototipo/hoje', label: 'Hoje', icon: Sun },
@@ -23,127 +39,225 @@ const DESTINOS = [
   { to: '/prototipo/memoria', label: 'Memória', icon: Library },
 ]
 
-export default function Shell({ children, onCapturar, onBuscar, onNovaTarefa, onNovoCompromisso, largo }) {
+const LARGA = 216
+const ESTREITA = 62
+
+export default function Shell({
+  children, largo, aoCentral, aoBuscar, aoNotificacoes, aoMenuPessoal,
+}) {
+  const [recolhida, setRecolhida] = useState(false)
+  const { classe } = useTema()
+  const largura = recolhida ? ESTREITA : LARGA
+
   return (
-    <div className="min-h-[100dvh] bg-canvas text-primary">
+    <div className={cx(classe, 'min-h-[100dvh] bg-canvas text-primary')}>
       <Lateral
-        onCapturar={onCapturar}
-        onBuscar={onBuscar}
-        onNovaTarefa={onNovaTarefa}
-        onNovoCompromisso={onNovoCompromisso}
+        recolhida={recolhida}
+        aoAlternar={() => setRecolhida((r) => !r)}
+        aoCentral={aoCentral}
+        aoBuscar={aoBuscar}
+        aoNotificacoes={aoNotificacoes}
       />
-      <main className="lg:pl-[216px]">
+      <CabecalhoMovel
+        aoBuscar={aoBuscar}
+        aoNotificacoes={aoNotificacoes}
+        aoMenuPessoal={aoMenuPessoal}
+      />
+      <main style={{ '--px-lateral': `${largura}px` }} className="lg:pl-[var(--px-lateral)]">
         {/* Cada superficie usa o espaco conforme a funcao: a agenda e o quadro
             precisam de largura para representar tempo e fluxo; leitura, nao. */}
-        {/* O conteudo comeca logo depois da navegacao em vez de flutuar
-            centralizado num canvas enorme: telas operacionais (agenda, quadro,
-            memoria) usam a largura toda ate um teto generoso; leitura mantem
-            medida confortavel. */}
         <div className={cx(
-          'w-full px-4 pb-28 pt-4 lg:px-7 lg:pb-12 lg:pt-6',
+          'w-full px-4 pb-28 pt-3 lg:px-7 lg:pb-12 lg:pt-6',
           largo ? 'max-w-[1560px]' : 'mx-auto max-w-[880px]',
         )}>
           {children}
         </div>
       </main>
-      <BarraInferior onCapturar={onCapturar} />
+      <BarraInferior aoCentral={aoCentral} />
       <Aviso />
     </div>
   )
 }
 
-function Lateral({ onCapturar, onBuscar, onNovaTarefa, onNovoCompromisso }) {
+// --- lateral do desktop -----------------------------------------------------
+function Grupo({ titulo, recolhida, children }) {
   return (
-    <aside className="fixed inset-y-0 left-0 hidden w-[216px] flex-col border-r border-hairline bg-surface px-3 py-5 lg:flex">
-      <div className="flex items-baseline gap-1.5 px-2">
-        <span className="text-[15px] font-semibold tracking-tight">Agenda 360</span>
-        <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-accent-text">2.0</span>
-      </div>
+    <div className="mt-4 first:mt-0">
+      {recolhida ? (
+        <div className="mx-3 mb-1.5 border-t border-hairline" />
+      ) : (
+        <p className="px-grupo">{titulo}</p>
+      )}
+      <div className="space-y-0.5">{children}</div>
+    </div>
+  )
+}
 
-      {/* Duas intencoes, dois botoes. Capturar e para o que ainda nao tem
-          forma; Nova atividade e para quem ja sabe o que quer criar. */}
+function Item({ to, label, icon: Icon, recolhida, onClick, insignia, destaque }) {
+  const classes = ({ isActive }) =>
+    cx(
+      'group relative flex items-center rounded-control py-2 text-[13.5px] transition',
+      recolhida ? 'justify-center px-0' : 'gap-2.5 px-3',
+      isActive
+        ? 'bg-accent-soft font-semibold text-accent-text'
+        : destaque
+          ? 'text-primary hover:bg-surface-2'
+          : 'text-secondary hover:bg-surface-2',
+    )
+
+  const conteudo = (
+    <>
+      <span className="relative flex-none">
+        <Icon size={17} />
+        {insignia > 0 && (
+          <span className={cx(
+            'absolute grid place-items-center rounded-full bg-danger text-[9px] font-bold text-white',
+            recolhida ? '-right-1.5 -top-1.5 h-3.5 min-w-[14px] px-0.5' : '-right-1.5 -top-1 h-3.5 min-w-[14px] px-0.5',
+          )}>
+            {insignia}
+          </span>
+        )}
+      </span>
+      {!recolhida && <span className="truncate">{label}</span>}
+      {/* Recolhida, a identificacao vem no hover e no foco — o item continua
+          nomeado, so nao ocupa largura. */}
+      {recolhida && (
+        <span className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-[7px] border border-hairline bg-surface px-2 py-1 text-[12px] text-primary shadow-float group-hover:block group-focus-visible:block">
+          {label}
+        </span>
+      )}
+    </>
+  )
+
+  if (onClick) {
+    return (
       <button
         type="button"
-        onClick={onCapturar}
-        className="press mt-5 flex items-center gap-2 rounded-control bg-accent px-3.5 py-2.5 text-[13.5px] font-semibold text-white shadow-raised transition hover:brightness-110"
+        onClick={onClick}
+        title={recolhida ? label : undefined}
+        aria-label={label}
+        className={classes({ isActive: false })}
       >
-        <Plus size={17} /> Capturar
+        {conteudo}
       </button>
-      <div className="mt-1.5 flex gap-1.5">
+    )
+  }
+  return (
+    <NavLink to={to} title={recolhida ? label : undefined} aria-label={label} className={classes}>
+      {conteudo}
+    </NavLink>
+  )
+}
+
+function Lateral({ recolhida, aoAlternar, aoCentral, aoBuscar, aoNotificacoes }) {
+  const { estado } = useProto()
+  const pendentes = naoLidas(estado).length
+
+  return (
+    <aside
+      style={{ width: recolhida ? ESTREITA : LARGA }}
+      className="fixed inset-y-0 left-0 z-20 hidden flex-col border-r border-hairline bg-surface py-4 transition-[width] duration-200 lg:flex"
+    >
+      <div className={cx('flex items-center', recolhida ? 'justify-center' : 'justify-between px-3')}>
+        {!recolhida && (
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-[15px] font-semibold tracking-tight">Agenda 360</span>
+            <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-accent-text">2.0</span>
+          </span>
+        )}
         <button
           type="button"
-          onClick={onNovaTarefa}
-          className="press flex flex-1 items-center justify-center gap-1.5 rounded-control border border-hairline px-2 py-1.5 text-[12.5px] font-medium text-secondary transition hover:border-accent hover:text-accent-text"
+          onClick={aoAlternar}
+          aria-label={recolhida ? 'Expandir menu' : 'Recolher menu'}
+          aria-expanded={!recolhida}
+          className="press grid h-7 w-7 place-items-center rounded-[7px] text-muted transition hover:bg-surface-2 hover:text-primary"
         >
-          <PenLine size={14} /> Tarefa
-        </button>
-        <button
-          type="button"
-          onClick={onNovoCompromisso}
-          className="press flex flex-1 items-center justify-center gap-1.5 rounded-control border border-hairline px-2 py-1.5 text-[12.5px] font-medium text-secondary transition hover:border-accent hover:text-accent-text"
-        >
-          <CalendarDays size={14} /> Horário
+          {recolhida ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
       </div>
-      <button
-        type="button"
-        onClick={onBuscar}
-        className="press mt-1.5 flex items-center gap-2 rounded-control px-3.5 py-2 text-[13px] text-secondary transition hover:bg-surface-2"
-      >
-        <Search size={15} /> Buscar <kbd className="ml-auto text-[10.5px] text-faint">⌘K</kbd>
-      </button>
 
-      <nav className="mt-7 space-y-0.5">
-        {DESTINOS.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              cx(
-                'flex items-center gap-2.5 rounded-control px-3 py-2 text-[14px] transition',
-                isActive
-                  ? 'bg-accent-soft font-semibold text-accent-text'
-                  : 'text-secondary hover:bg-surface-2',
-              )
-            }
-          >
-            <Icon size={17} /> {label}
-          </NavLink>
-        ))}
+      <nav className="mt-4 flex-1 overflow-y-auto px-2">
+        {/* AÇÃO GLOBAL — uma porta só. Criar e capturar são a mesma intenção
+            vista de dois lados, e separá-las em dois botões obrigava a decidir
+            o tipo antes de escrever. */}
+        <button
+          type="button"
+          onClick={aoCentral}
+          aria-label="Criar ou capturar"
+          className={cx(
+            'press flex w-full items-center rounded-control bg-accent text-[13.5px] font-semibold text-white shadow-raised transition hover:brightness-110',
+            recolhida ? 'justify-center px-0 py-2.5' : 'gap-2 px-3.5 py-2.5',
+          )}
+        >
+          <Plus size={17} />
+          {!recolhida && 'Criar / Capturar'}
+        </button>
+
+        <Grupo titulo="Utilidade" recolhida={recolhida}>
+          <Item label="Buscar" icon={Search} recolhida={recolhida} onClick={aoBuscar} />
+          <Item label="Notificações" icon={Bell} recolhida={recolhida} onClick={aoNotificacoes} insignia={pendentes} />
+        </Grupo>
+
+        <Grupo titulo="Destinos" recolhida={recolhida}>
+          {DESTINOS.map((d) => (
+            <Item key={d.to} {...d} recolhida={recolhida} destaque />
+          ))}
+        </Grupo>
+
+        <Grupo titulo="Assistência" recolhida={recolhida}>
+          <Item to="/prototipo/copiloto" label="Copiloto" icon={Sparkles} recolhida={recolhida} />
+        </Grupo>
+
+        <Grupo titulo="Acompanhamento" recolhida={recolhida}>
+          <Item to="/prototipo/revisao" label="Revisão" icon={CircleDashed} recolhida={recolhida} />
+          <Item to="/prototipo/relatorios" label="Relatórios" icon={PieChart} recolhida={recolhida} />
+        </Grupo>
       </nav>
 
-      <div className="mt-auto space-y-0.5 pt-6">
-        <NavLink
-          to="/prototipo/copiloto"
-          className={({ isActive }) =>
-            cx(
-              'flex items-center gap-2.5 rounded-control px-3 py-2 text-[13.5px] transition',
-              isActive ? 'bg-accent-soft font-semibold text-accent-text' : 'text-muted hover:bg-surface-2',
-            )
-          }
-        >
-          <Sparkles size={16} /> Copiloto
-        </NavLink>
-        <NavLink
-          to="/prototipo/revisao"
-          className={({ isActive }) =>
-            cx(
-              'flex items-center gap-2.5 rounded-control px-3 py-2 text-[13.5px] transition',
-              isActive ? 'bg-accent-soft font-semibold text-accent-text' : 'text-muted hover:bg-surface-2',
-            )
-          }
-        >
-          <span className="w-4 text-center">◔</span> Revisão
-        </NavLink>
-        <p className="px-3 pt-4 text-[11px] leading-relaxed text-faint">
-          Protótipo · dados fictícios
-        </p>
+      <div className="mt-2 border-t border-hairline px-2 pt-3">
+        <Item to="/prototipo/config" label="Perfil e configurações" icon={Settings} recolhida={recolhida} />
+        {!recolhida && (
+          <p className="px-3 pt-3 text-[11px] leading-relaxed text-faint">Protótipo · dados fictícios</p>
+        )}
       </div>
     </aside>
   )
 }
 
-function BarraInferior({ onCapturar }) {
+// --- cabeçalho do telefone ---------------------------------------------------
+// Busca, notificações e o menu pessoal precisam existir no telefone sem roubar
+// uma vaga da barra inferior — que é dos quatro destinos e do [+].
+function CabecalhoMovel({ aoBuscar, aoNotificacoes, aoMenuPessoal }) {
+  const { estado } = useProto()
+  const pendentes = naoLidas(estado).length
+  return (
+    <header className="sticky top-0 z-20 flex items-center gap-1 border-b border-hairline bg-surface/95 px-3 py-2 backdrop-blur lg:hidden">
+      <span className="flex items-baseline gap-1.5">
+        <span className="text-[14px] font-semibold tracking-tight">Agenda 360</span>
+        <span className="rounded-[5px] bg-accent-soft px-1 py-0.5 text-[9.5px] font-semibold text-accent-text">2.0</span>
+      </span>
+      <button type="button" onClick={aoBuscar} aria-label="Buscar" className="press ml-auto grid h-9 w-9 place-items-center rounded-[9px] text-secondary">
+        <Search size={19} />
+      </button>
+      <button type="button" onClick={aoNotificacoes} aria-label="Notificações" className="press relative grid h-9 w-9 place-items-center rounded-[9px] text-secondary">
+        <Bell size={19} />
+        {pendentes > 0 && (
+          <span className="absolute right-1.5 top-1.5 grid h-3.5 min-w-[14px] place-items-center rounded-full bg-danger px-0.5 text-[9px] font-bold text-white">
+            {pendentes}
+          </span>
+        )}
+      </button>
+      <button type="button" onClick={aoMenuPessoal} aria-label="Menu pessoal" className="press ml-0.5">
+        <span className="px-pessoa px-pessoa-eu h-8 w-8 text-[11px]">
+          {estado.pessoas?.find((p) => p.eu)?.iniciais || 'TC'}
+        </span>
+      </button>
+    </header>
+  )
+}
+
+// --- barra inferior do telefone ---------------------------------------------
+function BarraInferior({ aoCentral }) {
   const { pathname } = useLocation()
   const item = (to, label, Icon) => {
     const ativo = pathname.startsWith(to)
@@ -166,9 +280,11 @@ function BarraInferior({ onCapturar }) {
       <div className="mx-auto flex max-w-md items-center px-2">
         {item('/prototipo/hoje', 'Hoje', Sun)}
         {item('/prototipo/agenda', 'Agenda', CalendarDays)}
+        {/* O [+] abre a MESMA central de ação do desktop: um só modelo mental
+            nas duas larguras. */}
         <button
-          onClick={onCapturar}
-          aria-label="Capturar"
+          onClick={aoCentral}
+          aria-label="Criar ou capturar"
           className="press mx-1 grid h-12 w-12 flex-none place-items-center rounded-full bg-accent text-white shadow-raised"
         >
           <Plus size={23} />

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, FileText, Lightbulb, Link2, X, CornerUpRight } from 'lucide-react'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { Search, FileText, Lightbulb, Link2, X, CornerUpRight, PenLine, Archive } from 'lucide-react'
 import { useProto, useDesktop } from '../store/contexto'
 import { TIPO_MEMORIA, rotuloDeData } from '../mock/dados'
 import { Vazio, Chip } from '../parts/base'
@@ -39,8 +39,12 @@ export default function Memoria() {
   const [selecionado, setSelecionado] = useState(null)
   const filtro = params.get('filtro') || 'tudo'
 
-  const soltos = estado.memoria.filter((m) => m.porOrganizar)
-  const lista = estado.memoria
+  const ativos = estado.memoria.filter((m) => !m.arquivada)
+  const arquivados = estado.memoria.filter((m) => m.arquivada)
+  const soltos = ativos.filter((m) => m.porOrganizar)
+  // Arquivado sai da lista de trabalho — e continua existindo, buscável, a um
+  // filtro de distância. Arquivar não é excluir.
+  const lista = (filtro === 'arquivados' ? arquivados : ativos)
     .filter((m) => {
       if (filtro === 'por-organizar') return m.porOrganizar
       if (['nota', 'ideia', 'link'].includes(filtro)) return m.tipo === filtro
@@ -58,8 +62,18 @@ export default function Memoria() {
   return (
     <div className="px-entra">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="px-titulo-tela">Memória</h1>
-        <span className="text-[12.5px] text-muted">{estado.memoria.length} itens</span>
+        <div className="flex items-baseline gap-3">
+          <h1 className="px-titulo-tela">Memória</h1>
+          <span className="text-[12.5px] text-muted">{ativos.length} itens</span>
+        </div>
+        {/* NOVA NOTA é entrada explícita, não um efeito colateral da captura.
+            Quem quer escrever quer uma folha em branco agora. */}
+        <Link
+          to="/prototipo/memoria/nova"
+          className="press inline-flex items-center gap-1.5 rounded-control bg-accent px-3.5 py-2 text-[13.5px] font-semibold text-white shadow-raised transition hover:brightness-110"
+        >
+          <PenLine size={15} /> Nova nota
+        </Link>
       </header>
 
       {/* Busca e filtros dividem uma faixa só: acessíveis sem dominar a tela. */}
@@ -87,6 +101,11 @@ export default function Memoria() {
           <Chip on={filtro === 'nota'} onClick={() => trocarFiltro('nota')}>Notas</Chip>
           <Chip on={filtro === 'ideia'} onClick={() => trocarFiltro('ideia')}>Ideias</Chip>
           <Chip on={filtro === 'link'} onClick={() => trocarFiltro('link')}>Links</Chip>
+          {arquivados.length > 0 && (
+            <Chip on={filtro === 'arquivados'} onClick={() => trocarFiltro('arquivados')}>
+              <Archive size={12} /> Arquivados · {arquivados.length}
+            </Chip>
+          )}
         </div>
 
         {(termo || filtro !== 'tudo') && (

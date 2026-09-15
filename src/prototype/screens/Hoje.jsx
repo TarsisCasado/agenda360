@@ -1,10 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { Check, CalendarClock, Bell, CornerUpRight, ChevronRight } from 'lucide-react'
+import { Check, CalendarClock, Bell, CornerUpRight, ChevronRight, CornerDownLeft, Ban, Clock3 } from 'lucide-react'
 import { useProto, useAcoes } from '../store/contexto'
-import { paraHoje, atrasadas, porOrganizar, agendaDoDia, planejadasDoDia, MOTIVO } from '../store/reducer'
-import { ESTADO, rotuloDeData, somarDias, iso, nomeDoDia, numeroDoDia, mesCurto, AGORA_DEMO, emMinutos } from '../mock/dados'
+import { paraHoje, atrasadas, porOrganizar, agendaDoDia, planejadasDoDia, decisoes, MOTIVO } from '../store/reducer'
+import { ESTADO, RESPONSABILIDADE, rotuloDeData, somarDias, iso, nomeDoDia, numeroDoDia, mesCurto, AGORA_DEMO, emMinutos, saudacao } from '../mock/dados'
 import { Vazio, Botao } from '../parts/base'
+import { alertaCurto } from '../mock/alerta'
 import TarefaForm from '../forms/TarefaForm'
 import { cx } from '../../lib/utils'
 
@@ -44,6 +45,10 @@ export default function Hoje() {
   const tarefas = paraHoje(estado)
   const vencidas = atrasadas(estado).filter((t) => !tarefas.some((x) => x.id === t.id))
   const soltas = porOrganizar(estado)
+  // O que a DELEGAÇÃO devolve para mim. Uma tarefa que está com outra pessoa e
+  // andando não é assunto meu hoje; uma que voltou, travou ou está com prazo em
+  // cima, é. Por isso Hoje continua sendo seleção, e não "tudo que existe".
+  const decisao = decisoes(estado)
   const amanha = iso(somarDias(new Date(`${estado.hoje}T12:00:00`), 1))
   const concluidasHoje = estado.tarefas.filter(
     (t) => t.estado === ESTADO.FEITO && t.planejadaPara === estado.hoje,
@@ -59,11 +64,17 @@ export default function Hoje() {
 
   return (
     <div className="px-entra">
+      {/* A personalidade do produto atual volta — e ela cabe numa linha. Um
+          cabeçalho que cumprimenta e diz a data não precisa de mais que isso, e
+          os quatro cards de contagem continuam fora: eles diziam QUANTOS, e a
+          pergunta desta tela é QUAIS. */}
       <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-        <h1 className="px-titulo-tela">Hoje</h1>
+        <h1 className="px-titulo-tela">
+          {saudacao(AGORA_DEMO)}, {estado.pessoa}
+        </h1>
         <p className="text-[12.5px] text-muted lg:text-[13px]">
-          {nomeDoDia(estado.hoje)}, {numeroDoDia(estado.hoje)} de {mesCurto(estado.hoje)}
-          <span className="text-faint"> · bom dia, {estado.pessoa}</span>
+          <span className="capitalize">{nomeDoDia(estado.hoje)}</span>, {numeroDoDia(estado.hoje)} de {mesCurto(estado.hoje)}
+          <span className="text-faint"> · {AGORA_DEMO}</span>
         </p>
       </header>
 
@@ -161,7 +172,7 @@ export default function Hoje() {
         {/* PRIORIDADES + POR ORGANIZAR --------------------------------------- */}
         <section className="mt-7 lg:mt-0">
           <header className="mb-1.5 flex items-center justify-between">
-            <h2 className="px-secao">Prioridades</h2>
+            <h2 className="px-secao">Decisões e prioridades</h2>
             <Botao
               variante="fantasma"
               className="px-2 py-0.5 text-[12px]"
@@ -171,7 +182,15 @@ export default function Hoje() {
             </Botao>
           </header>
 
-          {tarefas.length === 0 && vencidas.length === 0 && <Vazio>Nada exigindo decisão.</Vazio>}
+          {tarefas.length === 0 && vencidas.length === 0 && decisao.length === 0 && (
+            <Vazio>Nada exigindo decisão.</Vazio>
+          )}
+
+          {/* DECISÕES primeiro: são as únicas linhas que estão paradas
+              esperando por mim. */}
+          {decisao.map((t) => (
+            <LinhaDecisao key={`d-${t.id}`} t={t} estado={estado} acoes={acoes} navegar={navegar} />
+          ))}
 
           {vencidas.map((t) => (
             <LinhaPrioridade
@@ -245,8 +264,8 @@ function ItemDoDia({ item, agora, aoAbrir, aoConcluir }) {
             <>
               <span>{item.inicio}–{item.fim}</span>
               {item.local && <span>{item.local}</span>}
-              {item.alerta != null && (
-                <span className="inline-flex items-center gap-0.5"><Bell size={10} /> {item.alerta} min</span>
+              {item.alerta && (
+                <span className="inline-flex items-center gap-0.5"><Bell size={10} /> {alertaCurto(item.alerta)}</span>
               )}
             </>
           )}
@@ -268,6 +287,59 @@ function ItemDoDia({ item, agora, aoAbrir, aoConcluir }) {
           className="press flex-none rounded-[7px] px-2 py-1 text-[12px] text-muted transition hover:bg-surface-2 hover:text-positive"
         >
           Concluir
+        </button>
+      )}
+    </div>
+  )
+}
+
+// Uma decisão pendente traz consigo o porquê e a resposta mais provável. Sem o
+// motivo, a linha seria só mais uma tarefa numa lista — e o que a torna urgente
+// é justamente a razão pela qual ela voltou.
+function LinhaDecisao({ t, estado, acoes, navegar }) {
+  const pessoa = estado.pessoas?.find((p) => p.id === t.responsavelId)
+  const devolvida = t.responsabilidade === RESPONSABILIDADE.DEVOLVIDA
+  const aguardandoMeuAceite =
+    t.responsabilidade === RESPONSABILIDADE.AGUARDANDO && t.responsavelId === estado.pessoas?.find((p) => p.eu)?.id
+  const Icone = devolvida ? CornerDownLeft : t.bloqueio ? Ban : Clock3
+
+  return (
+    <div className="px-linha px-toque items-start gap-2.5 py-2">
+      <Icone size={15} className="mt-1 flex-none text-warning" />
+      <button type="button" onClick={() => navegar(`/prototipo/tarefas/${t.id}`)} className="min-w-0 flex-1 text-left">
+        <span className="block text-[14px] leading-snug">{t.titulo}</span>
+        <span className="px-motivo mt-0.5 flex flex-wrap items-center gap-x-2">
+          <span className="font-medium text-warning">{t.motivoDecisao}</span>
+          {pessoa && !pessoa.eu && <span>com {pessoa.nome}</span>}
+          {t.prazo && <span>prazo {rotuloDeData(t.prazo, estado.hoje)}</span>}
+        </span>
+        {t.motivoDevolucao && devolvida && (
+          <span className="mt-1 block text-[12.5px] leading-snug text-secondary">“{t.motivoDevolucao}”</span>
+        )}
+      </button>
+      {aguardandoMeuAceite ? (
+        <button
+          type="button"
+          onClick={() => acoes.aceitar(t.id)}
+          className="press mt-0.5 flex-none rounded-[7px] border border-hairline px-2 py-1 text-[12px] font-semibold text-accent-text transition hover:border-accent"
+        >
+          Aceitar
+        </button>
+      ) : devolvida ? (
+        <button
+          type="button"
+          onClick={() => acoes.escolherParaHoje(t.id, true)}
+          className="press mt-0.5 flex-none rounded-[7px] px-2 py-1 text-[12px] text-muted transition hover:bg-surface-2 hover:text-accent-text"
+        >
+          Fazer hoje
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => navegar(`/prototipo/tarefas/${t.id}`)}
+          className="press mt-0.5 flex-none rounded-[7px] px-2 py-1 text-[12px] text-muted transition hover:bg-surface-2 hover:text-accent-text"
+        >
+          Abrir
         </button>
       )}
     </div>

@@ -1,34 +1,36 @@
 import { useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { X, ListTodo, CalendarDays, PenLine, Sparkles } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { cx } from '../../lib/utils'
-import { useProto, useAcoes } from '../store/contexto'
+import { useProto, useAcoes, useDesktop } from '../store/contexto'
 import { interpretar, espera } from '../mock/ia'
 import { somarDias, iso, rotuloDeData } from '../mock/dados'
 import { Botao } from '../parts/base'
-import { ListTodo, CalendarDays } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
-// CAPTURA — a peca mais importante do 2.0.
+// CENTRAL DE ACAO — a porta unica do [+], igual no desktop e no telefone.
 //
-// A primeira pergunta e uma so: "O que voce quer registrar?". Sem catalogo,
-// sem escolher tipo, sem decidir onde guardar. Capturar primeiro, organizar
-// depois.
+// O UX1.1.1 tinha DUAS portas: um botao "Capturar" que abria uma superficie e
+// botoes separados de criacao. Duas portas para a mesma intencao obrigam a
+// pessoa a classificar antes de escrever — exatamente o contrario de CAPTURE
+// FIRST, ORGANIZE LATER.
 //
-// GUARDAR esta sempre disponivel assim que existe texto, e nao depende de
-// interpretacao nenhuma. A sugestao da IA aparece DEPOIS, menor, ao lado — e e
-// uma oferta, nao um pedagio: ninguem precisa aceita-la para capturar.
+// Agora ha uma so, e a propria central JA e a captura: o campo "O que voce quer
+// registrar?" esta ali, aberto, sem nada antes dele. Os atalhos ficam ao lado
+// para quem JA SABE o que quer criar — e nenhum deles passa pela IA.
+//
+// NO TELEFONE O TECLADO NAO SOBE SOZINHO. Abrir o [+] para tocar num atalho e
+// tao legitimo quanto abrir para escrever; um teclado que salta cobre metade da
+// tela e responde uma pergunta que ninguem fez.
 //
 // Fechar nao cria nada. O que foi escrito vira rascunho da sessao, para que
 // desistir nao seja o mesmo que perder.
-//
-// UX1.1 — CAPTURA NAO SUBSTITUI CRIACAO ESTRUTURADA. Quem ja SABE que quer uma
-// tarefa ou um compromisso nao deveria ter de escrever uma frase e torcer para
-// a interpretacao acertar. Entao, antes de digitar, dois atalhos diretos levam
-// ao formulario — e nenhum deles depende da IA.
 // ---------------------------------------------------------------------------
-export default function CaptureOverlay({ aberto, aoFechar, aoNovaTarefa, aoNovoCompromisso }) {
+export default function CentralDeAcao({ aberto, aoFechar, aoNovaTarefa, aoNovoCompromisso, aoNovaNota }) {
   const { estado } = useProto()
   const acoes = useAcoes()
+  const desktop = useDesktop()
+  const navegar = useNavigate()
   const [texto, setTexto] = useState('')
   const [sugestao, setSugestao] = useState(null)
   const [pensando, setPensando] = useState(false)
@@ -39,13 +41,30 @@ export default function CaptureOverlay({ aberto, aoFechar, aoNovaTarefa, aoNovoC
   const amanha = iso(somarDias(new Date(`${estado.hoje}T12:00:00`), 1))
 
   useEffect(() => {
-    if (!aberto) return
+    if (!aberto) return undefined
     setTexto(estado.rascunho?.texto || '')
     setSugestao(null)
     setAjustando(false)
+    // Só o desktop ganha o cursor: no telefone, focar é convocar o teclado.
+    if (!desktop) return undefined
     const t = setTimeout(() => campo.current?.focus(), 60)
     return () => clearTimeout(t)
-  }, [aberto, estado.rascunho])
+  }, [aberto, estado.rascunho, desktop])
+
+  // Escape é tratado AQUI, e não pelo atalho global: fechar por fora fecharia
+  // sem passar por `fechar()`, e o rascunho — a promessa de que desistir não é
+  // perder — ficaria para trás.
+  useEffect(() => {
+    if (!aberto) return undefined
+    const tecla = (e) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      if (texto.trim()) acoes.guardarRascunho({ texto: texto.trim() })
+      aoFechar()
+    }
+    window.addEventListener('keydown', tecla)
+    return () => window.removeEventListener('keydown', tecla)
+  }, [aberto, texto, acoes, aoFechar])
 
   // A interpretacao roda em segundo plano e nunca bloqueia o campo.
   useEffect(() => {
@@ -83,65 +102,69 @@ export default function CaptureOverlay({ aberto, aoFechar, aoNovaTarefa, aoNovoC
     aoFechar()
   }
 
+  const atalho = (Icone, rotulo, acao) => (
+    <button
+      key={rotulo}
+      type="button"
+      onClick={() => { aoFechar(); acao() }}
+      className="press flex items-center gap-2 rounded-control border border-hairline px-3 py-2 text-[13px] font-medium text-secondary transition hover:border-accent hover:text-accent-text"
+    >
+      <Icone size={15} /> {rotulo}
+    </button>
+  )
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-start lg:pt-[12vh]">
       <button
-        aria-label="Fechar captura"
+        aria-label="Fechar"
         onClick={fechar}
         className="animate-backdrop absolute inset-0 bg-black/35 backdrop-blur-[2px]"
       />
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Capturar"
+        aria-label="Criar ou capturar"
         className="animate-sheet relative w-full max-w-[560px] rounded-t-sheet border border-hairline bg-surface p-5 pb-7 shadow-float lg:rounded-sheet lg:p-6"
       >
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <h2 className="text-[17px] font-semibold leading-snug">
-            O que você quer registrar?
-          </h2>
+        <div className="mb-3 flex items-start justify-between gap-4">
+          <h2 className="text-[17px] font-semibold leading-snug">O que você quer registrar?</h2>
           <button onClick={fechar} aria-label="Fechar" className="press -m-1 p-1 text-muted">
             <X size={19} />
           </button>
         </div>
 
-        {/* Atalhos: so enquanto o campo esta vazio, para nao competir com o
-            que a pessoa esta escrevendo. */}
-        {!texto.trim() && (
-          <div className="mb-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => { aoFechar(); aoNovaTarefa?.() }}
-              className="press flex flex-1 items-center justify-center gap-1.5 rounded-control border border-hairline py-2 text-[13.5px] font-medium transition hover:border-accent hover:text-accent-text"
-            >
-              <ListTodo size={15} /> Tarefa
-            </button>
-            <button
-              type="button"
-              onClick={() => { aoFechar(); aoNovoCompromisso?.() }}
-              className="press flex flex-1 items-center justify-center gap-1.5 rounded-control border border-hairline py-2 text-[13.5px] font-medium transition hover:border-accent hover:text-accent-text"
-            >
-              <CalendarDays size={15} /> Compromisso
-            </button>
-          </div>
-        )}
-
+        {/* O campo É a captura. Não há um botão que abre outra superfície. */}
         <textarea
           ref={campo}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           rows={3}
+          aria-label="O que você quer registrar?"
           placeholder="Uma frase basta. Organizo depois."
           className="w-full resize-none bg-transparent text-[16px] leading-relaxed text-primary outline-none placeholder:text-faint"
         />
 
         {/* GUARDAR e sempre a acao principal e nunca depende da IA. */}
-        <div className="mt-4 flex items-center gap-3 border-t border-hairline pt-4">
+        <div className="mt-3 flex items-center gap-3 border-t border-hairline pt-3.5">
           <Botao variante="primario" onClick={guardar} disabled={!texto.trim()} className={cx(!texto.trim() && 'opacity-40')}>
             Guardar
           </Botao>
           {pensando && <span className="text-[12.5px] text-faint">lendo…</span>}
         </div>
+
+        {/* Atalhos: para quem JÁ SABE. Somem enquanto há texto, para não
+            competir com o que a pessoa está escrevendo. */}
+        {!texto.trim() && (
+          <div className="mt-4 border-t border-hairline pt-4">
+            <p className="px-secao mb-2">Ou crie direto</p>
+            <div className="grid grid-cols-2 gap-2">
+              {atalho(ListTodo, 'Nova tarefa', () => aoNovaTarefa?.())}
+              {atalho(CalendarDays, 'Novo compromisso', () => aoNovoCompromisso?.())}
+              {atalho(PenLine, 'Nova nota', () => aoNovaNota?.())}
+              {atalho(Sparkles, 'Conversar com o Copiloto', () => navegar('/prototipo/copiloto'))}
+            </div>
+          </div>
+        )}
 
         {/* A sugestao vem depois, secundaria, e sempre pode ser ignorada. */}
         {sugestao && !pensando && (

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Plus, Sparkles } from 'lucide-react'
+import { Plus, Sparkles, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react'
 import { useProto, useDesktop } from '../store/contexto'
-import { agendaDoDia, planejadasDoDia } from '../store/reducer'
+import { agendaDoDia, planejadasDoDia, ocupacaoDoDia, conflitosDoDia } from '../store/reducer'
 import { inicioDaSemana, somarDias, iso, diaCurto, numeroDoDia, rotuloDeData, nomeDoDia, AGORA_DEMO } from '../mock/dados'
 import { Secao, Vazio, Botao } from '../parts/base'
 import CompromissoForm from '../forms/CompromissoForm'
@@ -86,7 +86,9 @@ export default function Agenda() {
         </div>
       </header>
 
-      <div className={cx('no-scrollbar mt-4 flex gap-1 overflow-x-auto', visao === 'semana' && 'hidden')}>
+      {/* A faixa de dias serve para TROCAR de dia. Na semana e no mês a própria
+          grade já faz isso, então ela sairia do caminho em vez de ajudar. */}
+      <div className={cx('no-scrollbar mt-4 flex gap-1 overflow-x-auto', visao !== 'dia' && 'hidden')}>
         {dias.map((d) => {
           const ativo = visao !== 'semana' && d === dia
           const hoje = d === estado.hoje
@@ -113,10 +115,12 @@ export default function Agenda() {
         })}
       </div>
 
+      <AvisoConflito dias={visao === 'semana' ? dias : [dia]} aoDia={(d) => { setDia(d); setVisao('dia') }} />
+
       {visao === 'semana' ? (
         <GradeSemana dias={dias} aoNovo={abrirNovo} aoAbrir={abrirItem} aoDia={(d) => { setDia(d); setVisao('dia') }} />
       ) : visao === 'mês' ? (
-        <Mes aoDia={(d) => { setDia(d); setVisao('dia') }} />
+        <Mes desktop={desktop} aoDia={(d) => { setDia(d); setVisao('dia') }} />
       ) : (
         <Dia data={dia} aoNovo={abrirNovo} aoAbrir={abrirItem} desktop={desktop} />
       )}
@@ -134,6 +138,37 @@ export default function Agenda() {
         compromisso={form?.compromisso}
         padroes={form?.padroes || {}}
       />
+    </div>
+  )
+}
+
+// Conflito: dois compromissos que se encavalam. A Agenda MOSTRA e a decisão
+// continua sendo de quem marcou — o produto não desmarca nada sozinho.
+function AvisoConflito({ dias, aoDia }) {
+  const { estado } = useProto()
+  const conflitos = dias.flatMap((d) => conflitosDoDia(estado, d).map((par) => ({ data: d, par })))
+  if (!conflitos.length) return null
+  return (
+    <div className="mt-3 space-y-1.5">
+      {conflitos.map(({ data, par }) => (
+        <button
+          key={`${data}-${par[0].id}-${par[1].id}`}
+          type="button"
+          onClick={() => aoDia(data)}
+          className="press flex w-full items-center gap-2.5 rounded-row border border-warning/40 bg-warning/[0.07] px-3.5 py-2 text-left"
+        >
+          <AlertTriangle size={15} className="flex-none text-warning" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] leading-snug">
+              <strong className="font-semibold">{capitalizar(nomeDoDia(data))}</strong>: “{par[0].titulo}” e
+              “{par[1].titulo}” se sobrepõem.
+            </span>
+            <span className="px-motivo mt-0.5 block">
+              <span className="px-hora">{par[1].inicio}–{par[0].fim}</span> em comum — um dos dois vai começar atrasado.
+            </span>
+          </span>
+        </button>
+      ))}
     </div>
   )
 }
@@ -404,36 +439,105 @@ function Legenda() {
   )
 }
 
-function Mes({ aoDia }) {
+// ---------------------------------------------------------------------------
+// MES — a visao que estava VAZIA.
+//
+// Um calendario que so mostra numeros e um ponto nao responde a pergunta que
+// leva alguem ao mes: "como esta o mes?". Ele obriga a clicar dia a dia para
+// descobrir, e nesse ponto a lista teria sido melhor.
+//
+// Cada celula agora mostra o que cabe de verdade:
+//   . os compromissos do dia, por titulo, na ordem da hora;
+//   . as tarefas planejadas, marcadas como outra especie (barrinha a esquerda);
+//   . "+N" quando nao cabe tudo — a celula nunca finge que aquilo e o total;
+//   . uma barra fina de OCUPACAO CONHECIDA, que e o que deixa o olho achar os
+//     dias carregados sem ler nada.
+//
+// A palavra e OCUPACAO CONHECIDA, e nao "livre". O Agenda so sabe o que esta
+// dentro dele; dizer "voce esta livre na quinta" seria prometer o que ele nao
+// tem como saber.
+// ---------------------------------------------------------------------------
+const CABEM = 3
+
+function Mes({ aoDia, desktop }) {
   const { estado } = useProto()
+  const [deslocamento, setDeslocamento] = useState(0)
   const base = new Date(`${estado.hoje}T12:00:00`)
-  const primeiro = new Date(base.getFullYear(), base.getMonth(), 1)
+  const primeiro = new Date(base.getFullYear(), base.getMonth() + deslocamento, 1)
   const inicio = inicioDaSemana(primeiro)
   const celulas = Array.from({ length: 42 }, (_, i) => iso(somarDias(inicio, i)))
-  const mesAtual = base.getMonth()
+  const mesAtual = primeiro.getMonth()
+
+  // A escala da barra vem do mes inteiro: 8 horas ocupadas so parecem muito
+  // perto de um dia de 1 hora.
+  const maior = Math.max(60, ...celulas.map((d) => ocupacaoDoDia(estado, d)))
 
   return (
     <div className="mt-4">
-      <div className="grid grid-cols-7 gap-1 text-center">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => setDeslocamento((x) => x - 1)} aria-label="Mês anterior" className="press grid h-7 w-7 place-items-center rounded-[7px] text-muted hover:bg-surface-2 hover:text-primary">
+            <ChevronLeft size={16} />
+          </button>
+          <span className="min-w-[140px] text-center text-[13.5px] font-semibold">
+            {capitalizar(MESES[mesAtual])} de {primeiro.getFullYear()}
+          </span>
+          <button type="button" onClick={() => setDeslocamento((x) => x + 1)} aria-label="Próximo mês" className="press grid h-7 w-7 place-items-center rounded-[7px] text-muted hover:bg-surface-2 hover:text-primary">
+            <ChevronRight size={16} />
+          </button>
+        </div>
+        <span className="px-motivo">Barra = ocupação conhecida pelo Agenda</span>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
         {['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map((d) => (
-          <span key={d} className="px-secao pb-1">{d}</span>
+          <span key={d} className="px-secao pb-1 text-center">{d}</span>
         ))}
         {celulas.map((d) => {
           const doMes = new Date(`${d}T12:00:00`).getMonth() === mesAtual
-          const carga = agendaDoDia(estado, d).length + planejadasDoDia(estado, d).length
+          const eventos = agendaDoDia(estado, d)
+          const planejadas = planejadasDoDia(estado, d)
+          const itens = [
+            ...eventos.map((e) => ({ chave: e.id, texto: e.titulo, hora: e.inicio, especie: e.especie })),
+            ...planejadas.map((t) => ({ chave: t.id, texto: t.titulo, especie: 'tarefa' })),
+          ]
+          // No telefone cabe menos: mostrar duas linhas e "+N" e mais honesto
+          // do que espremer quatro ate ninguem conseguir ler.
+          const limite = desktop ? CABEM : 2
+          const visiveis = itens.slice(0, limite)
+          const sobrando = itens.length - visiveis.length
+          const ocupacao = ocupacaoDoDia(estado, d)
+
           return (
             <button
               key={d}
               type="button"
               onClick={() => aoDia(d)}
-              className={cx(
-                'press aspect-square rounded-[9px] border border-transparent text-[13px] transition hover:border-hairline hover:bg-surface-2',
-                !doMes && 'text-faint',
-                d === estado.hoje && 'border-accent bg-accent-soft font-semibold text-accent-text',
-              )}
+              aria-label={`${numeroDoDia(d)} — ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}`}
+              className={cx('px-mes-celula press', !doMes && 'px-mes-fora', d === estado.hoje && 'px-mes-hoje')}
             >
-              <span className="px-hora">{numeroDoDia(d)}</span>
-              <span className={cx('mx-auto mt-0.5 block h-1 w-1 rounded-full', carga && doMes ? 'bg-accent/60' : 'bg-transparent')} />
+              <span className="flex items-baseline justify-between gap-1">
+                <span className={cx('px-hora text-[12.5px]', !doMes && 'text-faint', d === estado.hoje && 'font-semibold text-accent-text')}>
+                  {numeroDoDia(d)}
+                </span>
+                {itens.length > 0 && doMes && (
+                  <span className="text-[9.5px] text-faint">{itens.length}</span>
+                )}
+              </span>
+
+              {doMes && ocupacao > 0 && (
+                <span className="px-ocupacao" style={{ width: `${Math.min(100, (ocupacao / maior) * 100)}%` }} aria-hidden="true" />
+              )}
+
+              {doMes && visiveis.map((i) => (
+                <span key={i.chave} className={cx('px-mes-item', i.especie !== 'compromisso' && 'px-mes-tarefa')}>
+                  {i.hora ? <span className="px-hora">{i.hora} </span> : null}{i.texto}
+                </span>
+              ))}
+
+              {doMes && sobrando > 0 && (
+                <span className="px-motivo px-0.5 text-[10px]">+{sobrando}</span>
+              )}
             </button>
           )
         })}

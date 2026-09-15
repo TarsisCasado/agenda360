@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Sparkles, CornerUpLeft } from 'lucide-react'
+import { ArrowLeft, Sparkles, CornerUpLeft, Ban, BellOff, Bell, UserPlus } from 'lucide-react'
 import { useProto, useAcoes } from '../store/contexto'
 import { tarefaPorId, memoriaPorId } from '../store/reducer'
-import { ESTADO, rotuloDeData, somarDias, iso, nomeDoDia, diaCurto, numeroDoDia, inicioDaSemana } from '../mock/dados'
+import { ESTADO, RESPONSABILIDADE, EU, rotuloDeData, rotuloDeMomento, somarDias, iso, nomeDoDia, diaCurto, numeroDoDia, inicioDaSemana } from '../mock/dados'
 import { sugerirPassos, espera } from '../mock/ia'
-import { Secao, Botao, Chip, Marcar } from '../parts/base'
+import { Secao, Botao, Chip, Marcar, Folha, Area } from '../parts/base'
+import { Pessoa, SeloResponsabilidade, LinhaDeDelegacao, EscolherPessoa } from '../parts/pessoas'
+import { descreverAlerta, referenciaDe } from '../mock/alerta'
 import TarefaForm from '../forms/TarefaForm'
 import { cx } from '../../lib/utils'
 
@@ -34,6 +36,9 @@ export default function TarefaDetalhe() {
   const [pensando, setPensando] = useState(false)
   const [escolhendoHora, setEscolhendoHora] = useState(false)
   const [editando, setEditando] = useState(false)
+  const [delegando, setDelegando] = useState(false)
+  const [devolvendo, setDevolvendo] = useState(false)
+  const [bloqueando, setBloqueando] = useState(false)
 
   if (!t) {
     return (
@@ -110,7 +115,18 @@ export default function TarefaDetalhe() {
         </Link>
       )}
 
-      {/* 1) O DIA -------------------------------------------------------- */}
+      {/* 1) RESPONSABILIDADE vem cedo: "de quem é isto?" é a primeira pergunta
+             de qualquer tarefa que passa por mais de uma pessoa, e ela muda o
+             sentido de tudo que vem depois. --------------------------------- */}
+      <Responsabilidade
+        t={t}
+        acoes={acoes}
+        aoDelegar={() => setDelegando(true)}
+        aoDevolver={() => setDevolvendo(true)}
+        aoBloquear={() => setBloqueando(true)}
+      />
+
+      {/* 2) O DIA -------------------------------------------------------- */}
       <Secao titulo="Quando fazer">
         <p className="mb-2.5 text-[13px] leading-relaxed text-muted">
           Escolher o dia não reserva horário — é só o dia em que você pretende fazer.
@@ -142,7 +158,7 @@ export default function TarefaDetalhe() {
         )}
       </Secao>
 
-      {/* 2) O HORARIO — decisao separada ---------------------------------- */}
+      {/* 3) O HORARIO — decisao separada ---------------------------------- */}
       <Secao titulo="Horário reservado">
         {t.reserva ? (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -183,7 +199,24 @@ export default function TarefaDetalhe() {
         )}
       </Secao>
 
-      {/* 3) IA CONTEXTUAL — propoe; aplica so o que for selecionado ------- */}
+      {/* 4) O ALERTA — e sempre relativo a ALGUMA COISA -------------------- */}
+      <Secao titulo="Alerta">
+        <p className="text-[14px]">
+          {t.alerta ? (
+            <span className="font-medium">{descreverAlerta(t.alerta, referenciaDe(t))}</span>
+          ) : (
+            <span className="text-muted">Sem alerta</span>
+          )}
+        </p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-faint">
+          {referenciaDe(t)
+            ? 'Alerta relativo acompanha a referência: mudar o horário move o lembrete junto.'
+            : 'Esta tarefa não tem horário nem prazo — um alerta aqui precisaria de data e hora específicas.'}
+          {' '}Configure em <strong className="font-semibold">Editar</strong>.
+        </p>
+      </Secao>
+
+      {/* 5) IA CONTEXTUAL — propoe; aplica so o que for selecionado ------- */}
       <Secao titulo="Próximos passos">
         {t.subtarefas.length > 0 && (
           <div className="mb-3">
@@ -197,9 +230,16 @@ export default function TarefaDetalhe() {
         )}
 
         {!sugestoes && (
-          <Botao variante="secundario" onClick={pedirPassos} disabled={pensando}>
-            <Sparkles size={15} /> {pensando ? 'Pensando…' : 'Sugerir próximos passos'}
-          </Botao>
+          <div className="flex flex-wrap gap-2">
+            <Botao variante="secundario" onClick={pedirPassos} disabled={pensando}>
+              <Sparkles size={15} /> {pensando ? 'Pensando…' : 'Sugerir próximos passos'}
+            </Botao>
+            {/* Quando a sugestão curta não basta, a MESMA assistência abre em
+                conversa — levando o contexto junto, não recomeçando do zero. */}
+            <Botao variante="fantasma" onClick={() => navegar(`/prototipo/copiloto?contexto=tarefa&id=${t.id}`)}>
+              Conversar sobre esta tarefa
+            </Botao>
+          </div>
         )}
 
         {sugestoes && (
@@ -241,8 +281,224 @@ export default function TarefaDetalhe() {
         )}
       </Secao>
 
+      {/* 6) ATIVIDADE — o histórico completo, inclusive o que não notificou -- */}
+      <Atividade t={t} hoje={estado.hoje} />
+
       <TarefaForm aberta={editando} aoFechar={() => setEditando(false)} tarefa={t} />
+      <EscolherPessoa
+        aberta={delegando}
+        aoFechar={() => setDelegando(false)}
+        t={t}
+        aoEscolher={(id) => { acoes.delegar(t.id, id); setDelegando(false) }}
+      />
+      <Devolver
+        aberta={devolvendo}
+        aoFechar={() => setDevolvendo(false)}
+        t={t}
+        aoDevolver={(motivo) => { acoes.devolver(t.id, motivo); setDevolvendo(false) }}
+      />
+      <RegistrarBloqueio
+        aberta={bloqueando}
+        aoFechar={() => setBloqueando(false)}
+        t={t}
+        aoRegistrar={(motivo) => { acoes.bloquear(t.id, motivo); setBloqueando(false) }}
+      />
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// RESPONSABILIDADE — "quem assumiu isto?" nunca e "em que pe esta?".
+//
+// Por isso esta secao existe separada das colunas: aceitar nao move de coluna,
+// e mover de coluna nao aceita nada. Uma tarefa pode estar EM ANDAMENTO e
+// AGUARDANDO ACEITE ao mesmo tempo — soa estranho ate perceber que sao duas
+// perguntas diferentes feitas a duas pessoas diferentes.
+//
+// Um responsavel principal por vez neste checkpoint. Delegar de novo troca o
+// nome na MESMA tarefa; nao nasce copia nenhuma.
+// ---------------------------------------------------------------------------
+function Responsabilidade({ t, acoes, aoDelegar, aoDevolver, aoBloquear }) {
+  const meu = (t.responsavelId || EU) === EU
+  const delegadaPorMim = t.delegadorId === EU && !meu
+  const recebida = meu && t.delegadorId && t.delegadorId !== EU
+  const devolvida = t.responsabilidade === RESPONSABILIDADE.DEVOLVIDA
+
+  return (
+    <Secao titulo="Responsável">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Pessoa id={t.responsavelId} comNome />
+        <SeloResponsabilidade t={t} />
+        {t.bloqueio && (
+          <span className="px-selo px-selo-bloqueada"><Ban size={10} /> {t.bloqueio}</span>
+        )}
+      </div>
+
+      <LinhaDeDelegacao t={t} className="mt-1.5 block" />
+
+      {devolvida && t.motivoDevolucao && (
+        <p className="mt-2.5 rounded-row border border-danger/30 bg-danger/[0.06] px-3.5 py-2.5 text-[13.5px] leading-relaxed text-secondary">
+          <strong className="font-semibold text-primary">Motivo da devolução:</strong> {t.motivoDevolucao}
+        </p>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {/* Recebida e ainda sem resposta: as duas saídas, lado a lado. */}
+        {recebida && t.responsabilidade === RESPONSABILIDADE.AGUARDANDO && (
+          <>
+            <Botao variante="primario" onClick={() => acoes.aceitar(t.id)}>Aceitar</Botao>
+            <Botao variante="secundario" onClick={aoDevolver}>Devolver…</Botao>
+          </>
+        )}
+        {recebida && t.responsabilidade === RESPONSABILIDADE.ACEITA && (
+          <Botao variante="secundario" onClick={aoDevolver}>Devolver…</Botao>
+        )}
+        {devolvida && meu && (
+          <Botao variante="primario" onClick={() => acoes.retomar(t.id)}>Assumir de volta</Botao>
+        )}
+        <Botao variante="secundario" onClick={aoDelegar}>
+          <UserPlus size={15} /> {delegadaPorMim ? 'Trocar responsável' : 'Delegar…'}
+        </Botao>
+        <Botao variante="fantasma" onClick={aoBloquear}>
+          <Ban size={15} /> {t.bloqueio ? 'Rever bloqueio' : 'Registrar bloqueio'}
+        </Botao>
+        <Botao variante="fantasma" className="ml-auto" onClick={() => acoes.alternarAcompanhar(t.id)}>
+          {t.acompanhando ? <><BellOff size={15} /> Silenciar</> : <><Bell size={15} /> Acompanhar</>}
+        </Botao>
+      </div>
+
+      <p className="mt-2 text-[12px] leading-relaxed text-faint">
+        {t.acompanhando
+          ? 'Você recebe notificação dos eventos relevantes desta tarefa. O histórico registra tudo de qualquer forma.'
+          : 'Silenciada: os eventos continuam no histórico abaixo, mas não interrompem você.'}
+      </p>
+    </Secao>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ATIVIDADE — autor, evento, momento.
+//
+// E aqui que a diferenca entre HISTORICO e NOTIFICACAO fica visivel: tudo entra
+// nesta lista, inclusive "moveu A fazer → Em andamento", que nao interrompeu
+// ninguem. Quem quiser conferir o caminho da tarefa tem o caminho inteiro.
+// ---------------------------------------------------------------------------
+const FRASE = {
+  delegou: 'delegou', atribuiu: 'atribuiu', aceitou: 'aceitou', devolveu: 'devolveu',
+  moveu: 'moveu', bloqueou: 'bloqueou', desbloqueou: 'desbloqueou', comentou: 'comentou',
+  concluiu: 'concluiu', reagendou: 'reagendou', retomou: 'assumiu de volta',
+  'alterou o prazo': 'alterou o prazo',
+}
+
+function Atividade({ t, hoje }) {
+  const eventos = [...(t.atividade || [])].sort((a, b) => b.quando.localeCompare(a.quando))
+  return (
+    <Secao titulo="Atividade">
+      {eventos.length === 0 ? (
+        <p className="text-[13.5px] text-muted">Nada registrado ainda.</p>
+      ) : (
+        eventos.map((e) => (
+          <div key={e.id} className="px-linha items-start gap-2.5 py-2">
+            <Pessoa id={e.autorId} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13.5px] leading-snug">
+                <NomeDoAutor id={e.autorId} /> {FRASE[e.evento] || e.evento}
+                {e.detalhe && !['comentou', 'devolveu', 'bloqueou'].includes(e.evento) && (
+                  <span className="text-secondary"> {e.detalhe}</span>
+                )}
+              </span>
+              {['comentou', 'devolveu', 'bloqueou'].includes(e.evento) && e.detalhe && (
+                <span className="mt-0.5 block text-[13px] leading-snug text-secondary">“{e.detalhe}”</span>
+              )}
+              <span className="px-motivo mt-0.5 block">{rotuloDeMomento(e.quando, hoje)}</span>
+            </span>
+          </div>
+        ))
+      )}
+    </Secao>
+  )
+}
+
+function NomeDoAutor({ id }) {
+  const { estado } = useProto()
+  const p = (estado.pessoas || []).find((x) => x.id === id)
+  return <strong className="font-semibold">{p?.eu ? 'Você' : p?.nome || 'Alguém'}</strong>
+}
+
+// --- folhas de decisão -------------------------------------------------------
+// DEVOLVER EXIGE MOTIVO — e o botão fica desabilitado até haver um. Devolver em
+// silêncio transfere o problema sem transferir a informação.
+function Devolver({ aberta, aoFechar, t, aoDevolver }) {
+  const [motivo, setMotivo] = useState('')
+  useEffect(() => { if (aberta) setMotivo('') }, [aberta])
+  if (!aberta) return null
+  return (
+    <Folha
+      aberta
+      aoFechar={aoFechar}
+      titulo="Devolver a tarefa"
+      subtitulo={t.titulo}
+      largura="max-w-[460px]"
+      rodape={
+        <>
+          <Botao variante="primario" disabled={!motivo.trim()} onClick={() => aoDevolver(motivo)}>
+            Devolver
+          </Botao>
+          <Botao variante="fantasma" onClick={aoFechar}>Cancelar</Botao>
+        </>
+      }
+    >
+      <p className="mb-3 text-[13.5px] leading-relaxed text-secondary">
+        Devolver cria uma decisão visível para quem delegou. O motivo é obrigatório —
+        sem ele a tarefa volta sem dizer o que travou.
+      </p>
+      <Area
+        autoFocus
+        rows={4}
+        value={motivo}
+        onChange={(e) => setMotivo(e.target.value)}
+        placeholder="O que impediu? O que você precisa para seguir?"
+      />
+      {!motivo.trim() && <p className="mt-2 text-[12px] text-faint">Escreva o motivo para poder devolver.</p>}
+    </Folha>
+  )
+}
+
+function RegistrarBloqueio({ aberta, aoFechar, t, aoRegistrar }) {
+  const [motivo, setMotivo] = useState('')
+  useEffect(() => { if (aberta) setMotivo(t.bloqueio || '') }, [aberta, t.bloqueio])
+  if (!aberta) return null
+  return (
+    <Folha
+      aberta
+      aoFechar={aoFechar}
+      titulo="Bloqueio"
+      subtitulo={t.titulo}
+      largura="max-w-[460px]"
+      rodape={
+        <>
+          <Botao variante="primario" disabled={!motivo.trim()} onClick={() => aoRegistrar(motivo)}>
+            Registrar
+          </Botao>
+          {t.bloqueio && (
+            <Botao variante="secundario" onClick={() => aoRegistrar('')}>Remover bloqueio</Botao>
+          )}
+          <Botao variante="fantasma" onClick={aoFechar}>Cancelar</Botao>
+        </>
+      }
+    >
+      <p className="mb-3 text-[13.5px] leading-relaxed text-secondary">
+        Bloqueio é uma condição, não uma coluna: a tarefa continua onde está e
+        ganha um impedimento declarado.
+      </p>
+      <Area
+        autoFocus
+        rows={3}
+        value={motivo}
+        onChange={(e) => setMotivo(e.target.value)}
+        placeholder="Ex.: aguardando documento do RH"
+      />
+    </Folha>
   )
 }
 

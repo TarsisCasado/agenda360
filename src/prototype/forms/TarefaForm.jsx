@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { useProto, useAcoes } from '../store/contexto'
 import { ESTADO, somarDias, iso, inicioDaSemana, diaCurto, numeroDoDia, rotuloDeData } from '../mock/dados'
 import { Folha, Campo, Texto, Area, Escolha, Botao, Chip } from '../parts/base'
+import AlertaCampo from '../parts/AlertaCampo'
+import { Pessoa } from '../parts/pessoas'
+import { EU } from '../mock/dados'
 
 // ---------------------------------------------------------------------------
 // NOVA TAREFA / EDITAR TAREFA — criacao ESTRUTURADA.
@@ -24,12 +27,6 @@ const PRIORIDADES = [
   { valor: 'alta', label: 'Alta' },
 ]
 const CONTEXTOS = ['Operação', 'Comercial', 'Financeiro', 'Diretoria', 'Pessoal']
-const LEMBRETES = [
-  { valor: 0, label: 'Na hora' },
-  { valor: 15, label: '15 min antes' },
-  { valor: 30, label: '30 min antes' },
-  { valor: 60, label: '1 h antes' },
-]
 
 export default function TarefaForm({ aberta, aoFechar, tarefa, padroes = {} }) {
   const { estado } = useProto()
@@ -61,8 +58,14 @@ export default function TarefaForm({ aberta, aoFechar, tarefa, padroes = {} }) {
         ? { data: f.planejadaPara, inicio: f.reservaInicio, fim: maisUma(f.reservaInicio) }
         : null,
     }
-    if (editando) acoes.editarTarefa(tarefa.id, dados)
-    else acoes.criarTarefa({ ...dados, origemId: padroes.origemId || null })
+    if (editando) {
+      acoes.editarTarefa(tarefa.id, dados)
+      // Trocar o responsável é DELEGAR, não editar um campo: passa pela mesma
+      // ação, com o mesmo registro no histórico.
+      if (f.responsavelId !== (tarefa.responsavelId || EU)) acoes.delegar(tarefa.id, f.responsavelId)
+    } else {
+      acoes.criarTarefa({ ...dados, responsavelId: f.responsavelId, origemId: padroes.origemId || null })
+    }
     aoFechar()
   }
 
@@ -164,10 +167,6 @@ export default function TarefaForm({ aberta, aoFechar, tarefa, padroes = {} }) {
               />
             </Campo>
 
-            <Campo rotulo="Lembrete">
-              <Escolha permitirVazio valor={f.alerta} aoEscolher={(v) => set('alerta', v)} opcoes={LEMBRETES} />
-            </Campo>
-
             <div>
               <span className="px-rotulo">Horário reservado</span>
               {f.planejadaPara ? (
@@ -188,6 +187,36 @@ export default function TarefaForm({ aberta, aoFechar, tarefa, padroes = {} }) {
                 <p className="text-[12.5px] text-faint">Escolha um dia primeiro para poder reservar um horário.</p>
               )}
             </div>
+
+            {/* O alerta vem DEPOIS do horário reservado de propósito: é ele que
+                define a referência de "antes de". */}
+            <div>
+              <span className="px-rotulo">Responsável</span>
+              <div className="flex flex-wrap gap-1.5">
+                {(estado.pessoas || []).map((p) => (
+                  <Chip key={p.id} on={f.responsavelId === p.id} onClick={() => set('responsavelId', p.id)}>
+                    <Pessoa id={p.id} /> {p.eu ? 'Você' : p.nome}
+                  </Chip>
+                ))}
+              </div>
+              {f.responsavelId !== EU && (
+                <p className="mt-1.5 text-[11.5px] text-faint">
+                  A atividade passa a aguardar aceite. Continua sendo esta mesma
+                  atividade — você acompanha o andamento real.
+                </p>
+              )}
+            </div>
+
+            <AlertaCampo
+              valor={f.alerta}
+              aoMudar={(v) => set('alerta', v)}
+              item={{
+                reserva: f.reservaInicio && f.planejadaPara
+                  ? { data: f.planejadaPara, inicio: f.reservaInicio }
+                  : null,
+                prazo: f.prazo,
+              }}
+            />
           </div>
         )}
       </div>
@@ -206,6 +235,7 @@ function inicial(tarefa, padroes) {
     contexto: tarefa?.contexto ?? null,
     alerta: tarefa?.alerta ?? null,
     reservaInicio: tarefa?.reserva?.inicio ?? padroes.reservaInicio ?? null,
+    responsavelId: tarefa?.responsavelId ?? padroes.responsavelId ?? 'p-tarsis',
   }
 }
 
