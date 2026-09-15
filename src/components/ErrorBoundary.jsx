@@ -20,6 +20,7 @@ export default class ErrorBoundary extends Component {
 
   handleReset = () => {
     this.setState({ hasError: false, error: null })
+    this.props.onReset?.()
   }
 
   handleHome = () => {
@@ -29,6 +30,28 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (!this.state.hasError) return this.props.children
+
+    // Fallback COMPACTO (por-rota): isola a falha ao conteudo, mantendo shell,
+    // header e navegacao funcionando. Mostra a mensagem tecnica para diagnostico.
+    if (this.props.compact) {
+      return (
+        <div role="alert" className="surface-outline mx-auto mt-6 max-w-md p-6 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500 dark:bg-red-950/40">
+            <AlertTriangle size={22} />
+          </div>
+          <h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">Não foi possível abrir esta tela</h2>
+          <p className="mt-1 text-sm text-slate-500">Você pode tentar de novo — o resto do app continua funcionando.</p>
+          {this.state.error?.message && (
+            <p className="mt-2 break-words rounded-lg bg-slate-100 px-2 py-1 text-left font-mono text-[11px] text-slate-500 dark:bg-slate-800">
+              {String(this.state.error.message).slice(0, 200)}
+            </p>
+          )}
+          <button onClick={this.handleReset} className="btn-secondary press mt-4">
+            <RotateCcw size={16} /> Tentar novamente
+          </button>
+        </div>
+      )
+    }
 
     return (
       <div

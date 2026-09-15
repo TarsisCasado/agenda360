@@ -123,3 +123,36 @@ describe('device — describeDeviceNotifications (estado semantico da UI)', () =
     expect(describeDeviceNotifications()).toBe('prompt')
   })
 })
+
+// ---------------------------------------------------------------------------
+// CP4.1 — o TEMA NAO participa da decisao de push.
+//
+// No QA em iPhone apareceram duas mensagens diferentes (uma em tema claro,
+// outra em escuro), levantando a suspeita de que o tema influenciava a
+// disponibilidade de push. Nao influencia: a decisao depende SO de
+// (a) plataforma/instalacao, (b) Notification.permission e (c) ambiente de
+// build (isPushConfigured). Estes casos travam isso.
+// ---------------------------------------------------------------------------
+describe('describeDeviceNotifications — independente do tema', () => {
+  const themes = ['light', 'dark']
+
+  it.each(themes)('iPhone no Safari (nao instalado) -> ios-not-installed no tema %s', (theme) => {
+    setEnv({ ua: IPHONE, permission: 'default' })
+    globalThis.document = { documentElement: { classList: { contains: (c) => c === theme } } }
+    globalThis.window.matchMedia = (q) => ({
+      matches: q.includes('prefers-color-scheme: dark') ? theme === 'dark' : false,
+    })
+    expect(describeDeviceNotifications()).toBe('ios-not-installed')
+    delete globalThis.document
+  })
+
+  it.each(themes)('iPhone instalado com permissao default -> prompt no tema %s', (theme) => {
+    setEnv({ ua: IPHONE, iosStandalone: true, permission: 'default' })
+    globalThis.window.matchMedia = (q) => ({
+      matches: q.includes('display-mode: standalone')
+        ? true
+        : q.includes('prefers-color-scheme: dark') && theme === 'dark',
+    })
+    expect(describeDeviceNotifications()).toBe('prompt')
+  })
+})
