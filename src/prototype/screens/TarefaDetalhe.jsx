@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Sparkles, CornerUpLeft, Ban, BellOff, Bell, UserPlus } from 'lucide-react'
-import { useProto, useAcoes } from '../store/contexto'
+import { useProto, useAcoes, useDesktop } from '../store/contexto'
 import { tarefaPorId, memoriaPorId } from '../store/reducer'
 import { ESTADO, RESPONSABILIDADE, EU, rotuloDeData, rotuloDeMomento, somarDias, iso, nomeDoDia, diaCurto, numeroDoDia, inicioDaSemana } from '../mock/dados'
 import { sugerirPassos, espera } from '../mock/ia'
 import { Secao, Botao, Chip, Marcar, Folha, Area } from '../parts/base'
 import { Pessoa, SeloResponsabilidade, LinhaDeDelegacao, EscolherPessoa } from '../parts/pessoas'
+import { MenuAcoes } from '../parts/movel'
 import { descreverAlerta, referenciaDe } from '../mock/alerta'
 import TarefaForm from '../forms/TarefaForm'
 import { cx } from '../../lib/utils'
@@ -30,6 +31,7 @@ export default function TarefaDetalhe() {
   const navegar = useNavigate()
   const { estado } = useProto()
   const acoes = useAcoes()
+  const desktop = useDesktop()
   const t = tarefaPorId(estado, id)
   const [sugestoes, setSugestoes] = useState(null)
   const [selecionadas, setSelecionadas] = useState([])
@@ -129,7 +131,9 @@ export default function TarefaDetalhe() {
       {/* 2) O DIA -------------------------------------------------------- */}
       <Secao titulo="Quando fazer">
         <p className="mb-2.5 text-[13px] leading-relaxed text-muted">
-          Escolher o dia não reserva horário — é só o dia em que você pretende fazer.
+          {desktop
+            ? 'Escolher o dia não reserva horário — é só o dia em que você pretende fazer.'
+            : 'Só o dia; o horário é a seção seguinte.'}
         </p>
         <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
           {dias.map((d) => (
@@ -209,10 +213,10 @@ export default function TarefaDetalhe() {
           )}
         </p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-faint">
-          {referenciaDe(t)
-            ? 'Alerta relativo acompanha a referência: mudar o horário move o lembrete junto.'
-            : 'Esta tarefa não tem horário nem prazo — um alerta aqui precisaria de data e hora específicas.'}
-          {' '}Configure em <strong className="font-semibold">Editar</strong>.
+          {desktop && (referenciaDe(t)
+            ? 'Alerta relativo acompanha a referência: mudar o horário move o lembrete junto. '
+            : 'Esta tarefa não tem horário nem prazo — um alerta aqui precisaria de data e hora específicas. ')}
+          Configure em <strong className="font-semibold">Editar</strong>.
         </p>
       </Secao>
 
@@ -319,6 +323,7 @@ export default function TarefaDetalhe() {
 // nome na MESMA tarefa; nao nasce copia nenhuma.
 // ---------------------------------------------------------------------------
 function Responsabilidade({ t, acoes, aoDelegar, aoDevolver, aoBloquear }) {
+  const desktop = useDesktop()
   const meu = (t.responsavelId || EU) === EU
   const delegadaPorMim = t.delegadorId === EU && !meu
   const recebida = meu && t.delegadorId && t.delegadorId !== EU
@@ -342,7 +347,10 @@ function Responsabilidade({ t, acoes, aoDelegar, aoDevolver, aoBloquear }) {
         </p>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      {/* No telefone só as decisões de RESPONSABILIDADE ficam à vista; bloqueio
+          e acompanhar entram no menu. Cinco botões e um parágrafo explicando
+          notificação eram meia tela antes de "quando fazer". */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         {/* Recebida e ainda sem resposta: as duas saídas, lado a lado. */}
         {recebida && t.responsabilidade === RESPONSABILIDADE.AGUARDANDO && (
           <>
@@ -359,19 +367,47 @@ function Responsabilidade({ t, acoes, aoDelegar, aoDevolver, aoBloquear }) {
         <Botao variante="secundario" onClick={aoDelegar}>
           <UserPlus size={15} /> {delegadaPorMim ? 'Trocar responsável' : 'Delegar…'}
         </Botao>
-        <Botao variante="fantasma" onClick={aoBloquear}>
-          <Ban size={15} /> {t.bloqueio ? 'Rever bloqueio' : 'Registrar bloqueio'}
-        </Botao>
-        <Botao variante="fantasma" className="ml-auto" onClick={() => acoes.alternarAcompanhar(t.id)}>
-          {t.acompanhando ? <><BellOff size={15} /> Silenciar</> : <><Bell size={15} /> Acompanhar</>}
-        </Botao>
+
+        {desktop ? (
+          <>
+            <Botao variante="fantasma" onClick={aoBloquear}>
+              <Ban size={15} /> {t.bloqueio ? 'Rever bloqueio' : 'Registrar bloqueio'}
+            </Botao>
+            <Botao variante="fantasma" className="ml-auto" onClick={() => acoes.alternarAcompanhar(t.id)}>
+              {t.acompanhando ? <><BellOff size={15} /> Silenciar</> : <><Bell size={15} /> Acompanhar</>}
+            </Botao>
+          </>
+        ) : (
+          <MenuAcoes
+            titulo="Responsabilidade"
+            subtitulo={t.titulo}
+            rotulo="Mais ações de responsabilidade"
+            acoes={[
+              {
+                rotulo: t.bloqueio ? 'Rever bloqueio' : 'Registrar bloqueio',
+                icone: Ban,
+                fazer: aoBloquear,
+              },
+              {
+                rotulo: t.acompanhando ? 'Silenciar esta tarefa' : 'Acompanhar esta tarefa',
+                icone: t.acompanhando ? BellOff : Bell,
+                fazer: () => acoes.alternarAcompanhar(t.id),
+              },
+            ]}
+          />
+        )}
       </div>
 
-      <p className="mt-2 text-[12px] leading-relaxed text-faint">
-        {t.acompanhando
-          ? 'Você recebe notificação dos eventos relevantes desta tarefa. O histórico registra tudo de qualquer forma.'
-          : 'Silenciada: os eventos continuam no histórico abaixo, mas não interrompem você.'}
-      </p>
+      {desktop && (
+        <p className="mt-2 text-[12px] leading-relaxed text-faint">
+          {t.acompanhando
+            ? 'Você recebe notificação dos eventos relevantes desta tarefa. O histórico registra tudo de qualquer forma.'
+            : 'Silenciada: os eventos continuam no histórico abaixo, mas não interrompem você.'}
+        </p>
+      )}
+      {!desktop && !t.acompanhando && (
+        <p className="mt-2 text-[12px] text-faint">Silenciada — continua no histórico.</p>
+      )}
     </Secao>
   )
 }

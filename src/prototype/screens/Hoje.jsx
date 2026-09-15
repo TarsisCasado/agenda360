@@ -1,10 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { Check, CalendarClock, Bell, CornerUpRight, ChevronRight, CornerDownLeft, Ban, Clock3 } from 'lucide-react'
-import { useProto, useAcoes } from '../store/contexto'
+import { useProto, useAcoes, useDesktop } from '../store/contexto'
 import { paraHoje, atrasadas, porOrganizar, agendaDoDia, planejadasDoDia, decisoes, MOTIVO } from '../store/reducer'
 import { ESTADO, RESPONSABILIDADE, rotuloDeData, somarDias, iso, nomeDoDia, numeroDoDia, mesCurto, AGORA_DEMO, emMinutos, saudacao } from '../mock/dados'
 import { Vazio, Botao } from '../parts/base'
+import { Sanfona } from '../parts/movel'
 import { alertaCurto } from '../mock/alerta'
 import TarefaForm from '../forms/TarefaForm'
 import { cx } from '../../lib/utils'
@@ -31,6 +32,7 @@ import { cx } from '../../lib/utils'
 export default function Hoje() {
   const { estado } = useProto()
   const acoes = useAcoes()
+  const desktop = useDesktop()
   const navegar = useNavigate()
   const [sugestao, setSugestao] = useState(true)
   const [form, setForm] = useState(null)
@@ -49,6 +51,26 @@ export default function Hoje() {
   // andando não é assunto meu hoje; uma que voltou, travou ou está com prazo em
   // cima, é. Por isso Hoje continua sendo seleção, e não "tudo que existe".
   const decisao = decisoes(estado)
+
+  // UX1.2.1 — a sugestão do Copiloto deixa de ser um bloco separado e passa a
+  // ser um dado ligado ao item que ela propõe. No telefone ela aparece embaixo
+  // da própria tarefa; no desktop continua onde estava.
+  const sugestaoContextual = sugestao
+    ? {
+        alvo: 't-repasse',
+        texto: 'Você tem 40 min livres antes da reunião. Adiantar o fechamento do repasse?',
+        curta: 'Você tem 40 min livres antes da reunião.',
+        rotulo: 'Reservar',
+        aceitar: () => { acoes.reservarHorario('t-repasse', estado.hoje, '08:45', '09:00'); setSugestao(false) },
+        dispensar: () => setSugestao(false),
+      }
+    : null
+
+  // Uma decisão que já está travada aparece inteira; o resto fica atrás de uma
+  // linha. "3 decisões precisam de você" é uma linha; três cartões são meia
+  // tela antes do conteúdo.
+  const urgente = decisao.find((t) => t.motivoDecisao?.startsWith('Devolvida')) || decisao[0] || null
+  const demais = decisao.filter((t) => t.id !== urgente?.id)
   const amanha = iso(somarDias(new Date(`${estado.hoje}T12:00:00`), 1))
   const concluidasHoje = estado.tarefas.filter(
     (t) => t.estado === ESTADO.FEITO && t.planejadaPara === estado.hoje,
@@ -69,7 +91,7 @@ export default function Hoje() {
           os quatro cards de contagem continuam fora: eles diziam QUANTOS, e a
           pergunta desta tela é QUAIS. */}
       <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-        <h1 className="px-titulo-tela">
+        <h1 className={cx('px-titulo-tela', !desktop && 'text-[21px]')}>
           {saudacao(AGORA_DEMO)}, {estado.pessoa}
         </h1>
         <p className="text-[12.5px] text-muted lg:text-[13px]">
@@ -79,7 +101,30 @@ export default function Hoje() {
       </header>
 
       {/* AGORA / PRÓXIMO ---------------------------------------------------- */}
-      {destaque && (
+      {destaque && (!desktop ? (
+        // No telefone o título é a informação, e ele precisa da largura toda.
+        // Hora e contagem cabem numa linha fina acima; a ação vira um link
+        // curto na mesma linha, em vez de um botão disputando espaço.
+        <Link
+          to={destaque.especie === 'reserva' ? `/prototipo/tarefas/${destaque.tarefaId}` : '/prototipo/agenda'}
+          className="press mt-3 block rounded-row border border-accent/30 bg-accent-soft/45 px-3.5 py-2.5"
+        >
+          <span className="flex items-baseline gap-2">
+            <span className="px-hora text-[17px] font-semibold leading-none">{destaque.inicio}</span>
+            <span className="px-motivo text-accent-text">
+              {emCurso ? 'acontecendo agora' : faltam <= 90 ? `em ${faltam} min` : `às ${destaque.inicio}`}
+            </span>
+            <span className="px-motivo ml-auto">até {destaque.fim}</span>
+          </span>
+          <span className="mt-1 block text-[15px] font-semibold leading-snug">{destaque.titulo}</span>
+          {(destaque.local || destaque.especie === 'reserva') && (
+            <span className="px-motivo mt-0.5 block">
+              {destaque.local}
+              {destaque.especie === 'reserva' ? 'horário reservado' : ''}
+            </span>
+          )}
+        </Link>
+      ) : (
         <div className="mt-3 flex items-center gap-3 rounded-row border border-accent/30 bg-accent-soft/45 px-3.5 py-2.5">
           <span className="px-hora flex-none text-[19px] font-semibold leading-none">{destaque.inicio}</span>
           <div className="min-w-0 flex-1">
@@ -95,16 +140,132 @@ export default function Hoje() {
             to={destaque.especie === 'reserva' ? `/prototipo/tarefas/${destaque.tarefaId}` : '/prototipo/agenda'}
             className="press shrink-0 rounded-control border border-hairline bg-surface px-2.5 py-1.5 text-[12.5px] font-semibold text-accent-text transition hover:border-accent"
           >
-            {/* No telefone o rótulo curto devolve a largura ao título, que é a
-                informação que importa nessa faixa. */}
-            <span className="lg:hidden">{destaque.especie === 'reserva' ? 'Abrir' : 'Agenda'}</span>
-            <span className="hidden lg:inline">
-              {destaque.especie === 'reserva' ? 'Abrir tarefa' : 'Ver na agenda'}
-            </span>
+            {destaque.especie === 'reserva' ? 'Abrir tarefa' : 'Ver na agenda'}
           </Link>
         </div>
-      )}
+      ))}
 
+      {!desktop ? (
+        // ------------------------------------------------------------------
+        // TELEFONE — o primeiro viewport responde "o que acontece agora?" e
+        // "qual é a próxima coisa importante?". Meu dia vem inteiro porque é o
+        // conteúdo; decisões vêm por uma linha, com a mais travada à mostra.
+        // ------------------------------------------------------------------
+        <>
+          <section className="mt-4">
+            <header className="mb-1 flex items-center justify-between">
+              <h2 className="px-secao">Meu dia</h2>
+              <Link to="/prototipo/agenda" className="press text-[12px] font-semibold text-accent-text">
+                Agenda
+              </Link>
+            </header>
+
+            {meuDia.length === 0 && <Vazio>Dia livre.</Vazio>}
+            {meuDia.map((item) => (
+              <LinhaComSugestao
+                key={item.id}
+                item={item}
+                agora={agora}
+                sugestao={sugestaoContextual?.alvo === item.tarefaId ? sugestaoContextual : null}
+                aoAbrir={(id) => navegar(`/prototipo/tarefas/${id}`)}
+                aoConcluir={(id) => acoes.mudarEstado(id, ESTADO.FEITO)}
+              />
+            ))}
+
+            {concluidasHoje.length > 0 && (
+              <details className="group mt-1">
+                <summary className="px-motivo flex cursor-pointer list-none items-center gap-1.5 py-2 marker:hidden">
+                  <Check size={12} className="text-positive" />
+                  {concluidasHoje.length} {concluidasHoje.length === 1 ? 'concluída' : 'concluídas'} hoje
+                  <ChevronRight size={12} className="transition group-open:rotate-90" />
+                </summary>
+                <div className="opacity-60">
+                  {concluidasHoje.map((t) => (
+                    <div key={t.id} className="px-linha items-center gap-2.5 py-1.5">
+                      <span className="flex-1 truncate text-[13.5px] line-through">{t.titulo}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </section>
+
+          {/* DECISÕES — uma linha, e só abre quem quiser. */}
+          {decisao.length > 0 && (
+            <>
+              {urgente && (
+                <div className="mt-4">
+                  <h2 className="px-secao mb-1">Precisa de você</h2>
+                  <LinhaDecisao t={urgente} estado={estado} acoes={acoes} navegar={navegar} />
+                </div>
+              )}
+              {demais.length > 0 && (
+                <Sanfona
+                  contagem={demais.length}
+                  titulo={demais.length === 1 ? 'outra decisão esperando' : 'outras decisões esperando'}
+                  tom="atencao"
+                >
+                  {demais.map((t) => (
+                    <LinhaDecisao key={t.id} t={t} estado={estado} acoes={acoes} navegar={navegar} />
+                  ))}
+                </Sanfona>
+              )}
+            </>
+          )}
+
+          {/* PRIORIDADES do dia — também atrás de uma linha: são tarefas que já
+              estão em Meu dia, e repeti-las abertas era metade do amontoado. */}
+          {(tarefas.length > 0 || vencidas.length > 0) && (
+            <Sanfona
+              contagem={tarefas.length + vencidas.length}
+              titulo="prioridades de hoje"
+              detalhe={vencidas.length ? `${vencidas.length} com prazo vencido` : null}
+            >
+              {vencidas.map((t) => (
+                <LinhaPrioridade
+                  key={t.id}
+                  t={t}
+                  motivo={MOTIVO.ATRASADA}
+                  detalhe={`prazo ${rotuloDeData(t.prazo, estado.hoje)}`}
+                  aviso
+                  aoConcluir={() => acoes.mudarEstado(t.id, ESTADO.FEITO)}
+                  aoReagendar={() => acoes.escolherParaHoje(t.id, true)}
+                  rotuloReagendar="Fazer hoje"
+                  aoAbrir={() => navegar(`/prototipo/tarefas/${t.id}`)}
+                />
+              ))}
+              {tarefas.map((t) => (
+                <LinhaPrioridade
+                  key={t.id}
+                  t={t}
+                  motivo={t.motivo}
+                  detalhe={t.reserva ? `${t.reserva.inicio}–${t.reserva.fim}` : t.contexto}
+                  aoConcluir={() => acoes.mudarEstado(t.id, ESTADO.FEITO)}
+                  aoReagendar={() => acoes.reagendar(t.id, amanha)}
+                  aoAbrir={() => navegar(`/prototipo/tarefas/${t.id}`)}
+                />
+              ))}
+              <Botao
+                variante="secundario"
+                className="mt-2 w-full"
+                onClick={() => setForm({ estado: ESTADO.A_FAZER, planejadaPara: estado.hoje })}
+              >
+                Nova tarefa para hoje
+              </Botao>
+            </Sanfona>
+          )}
+
+          {soltas.length > 0 && (
+            <Link
+              to="/prototipo/memoria?filtro=por-organizar"
+              className="press mt-3 flex items-center justify-between rounded-row border border-hairline px-3.5 py-2.5 text-[13.5px]"
+            >
+              <span>Por organizar <span className="text-muted">· {soltas.length}</span></span>
+              <ChevronRight size={15} className="text-muted" />
+            </Link>
+          )}
+        </>
+      ) : (
       <div className="mt-5 gap-x-8 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
         {/* MEU DIA ---------------------------------------------------------- */}
         <section>
@@ -230,6 +391,8 @@ export default function Hoje() {
         </section>
       </div>
 
+      )}
+
       <TarefaForm aberta={Boolean(form)} aoFechar={() => setForm(null)} padroes={form || {}} />
     </div>
   )
@@ -237,7 +400,7 @@ export default function Hoje() {
 
 // Uma linha do dia: hora à esquerda, espécie na barra, ação à direita quando faz
 // sentido. Compromisso não se conclui — tarefa sim.
-function ItemDoDia({ item, agora, aoAbrir, aoConcluir }) {
+function ItemDoDia({ item, agora, aoAbrir, aoConcluir, sugestao }) {
   const passou = item.ordem !== '99:99' && item.fim && item.fim <= agora
   const tarefa = item.especie === 'tarefa' || item.especie === 'reserva'
   const id = item.tarefaId
@@ -288,6 +451,32 @@ function ItemDoDia({ item, agora, aoAbrir, aoConcluir }) {
         >
           Concluir
         </button>
+      )}
+    </div>
+  )
+}
+
+// A linha do dia com a sugestão do Copiloto PRESA nela. Uma sugestão sobre o
+// repasse flutuando no fim da tela obriga a reconstruir mentalmente de que item
+// ela falava; aqui ela está embaixo do item, e a ação cabe na mesma linha.
+function LinhaComSugestao({ item, agora, aoAbrir, aoConcluir, sugestao }) {
+  return (
+    <div>
+      <ItemDoDia item={item} agora={agora} aoAbrir={aoAbrir} aoConcluir={aoConcluir} />
+      {sugestao && (
+        <div className="px-entra -mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 pb-2 pl-[54px]">
+          <span className="text-[12.5px] leading-snug text-secondary">{sugestao.curta}</span>
+          <button
+            type="button"
+            onClick={sugestao.aceitar}
+            className="press rounded-[7px] border border-accent/45 px-2 py-0.5 text-[12px] font-semibold text-accent-text"
+          >
+            {sugestao.rotulo}
+          </button>
+          <button type="button" onClick={sugestao.dispensar} className="press px-1 text-[12px] text-muted">
+            dispensar
+          </button>
+        </div>
       )}
     </div>
   )

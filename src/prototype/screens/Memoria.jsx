@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { Search, FileText, Lightbulb, Link2, X, CornerUpRight, PenLine, Archive } from 'lucide-react'
+import { Search, FileText, Lightbulb, Link2, X, CornerUpRight, PenLine, Archive, Plus } from 'lucide-react'
 import { useProto, useDesktop } from '../store/contexto'
 import { TIPO_MEMORIA, rotuloDeData } from '../mock/dados'
 import { Vazio, Chip } from '../parts/base'
+import { Seletor, TituloDeTela } from '../parts/movel'
 import { dominio } from '../parts/url'
 import Leitura from './Leitura'
 import { cx } from '../../lib/utils'
@@ -61,6 +62,61 @@ export default function Memoria() {
 
   return (
     <div className="px-entra">
+      {!desktop ? (
+        // Um título, uma ação, uma busca e UM seletor. O eixo de tipo/estado
+        // era uma fileira de seis chips que empurrava a lista para fora do
+        // primeiro viewport — e só um deles pode estar ativo por vez.
+        <>
+          <TituloDeTela
+            titulo="Memória"
+            detalhe={`${ativos.length} itens`}
+            acao={
+              <Link
+                to="/prototipo/memoria/nova"
+                aria-label="Nova nota"
+                className="press grid h-9 w-9 place-items-center rounded-control bg-accent text-white shadow-raised"
+              >
+                <Plus size={19} />
+              </Link>
+            }
+          />
+
+          <div className="mt-3 flex items-center gap-2 rounded-row border border-hairline bg-surface px-3 py-2 focus-within:border-accent">
+            <Search size={16} className="flex-none text-muted" />
+            <input
+              value={termo}
+              onChange={(e) => setTermo(e.target.value)}
+              placeholder="Buscar em tudo que guardei"
+              className="w-full bg-transparent text-[14.5px] outline-none placeholder:text-faint"
+            />
+            {termo && (
+              <button type="button" onClick={() => setTermo('')} aria-label="Limpar busca" className="press text-muted">
+                <X size={15} />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-2 flex items-center gap-2">
+            <Seletor
+              rotulo="Mostrar"
+              valor={filtro}
+              aoEscolher={trocarFiltro}
+              opcoes={[
+                { chave: 'tudo', label: 'Tudo', contagem: ativos.length },
+                { chave: 'por-organizar', label: 'Por organizar', contagem: soltos.length },
+                { chave: 'nota', label: 'Notas', contagem: ativos.filter((m) => m.tipo === 'nota').length },
+                { chave: 'ideia', label: 'Ideias', contagem: ativos.filter((m) => m.tipo === 'ideia').length },
+                { chave: 'link', label: 'Links', contagem: ativos.filter((m) => m.tipo === 'link').length },
+                ...(arquivados.length ? [{ chave: 'arquivados', label: 'Arquivados', contagem: arquivados.length }] : []),
+              ]}
+            />
+            {(termo || filtro !== 'tudo') && (
+              <span className="px-motivo ml-auto">{lista.length} de {estado.memoria.length}</span>
+            )}
+          </div>
+        </>
+      ) : (
+      <>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <h1 className="px-titulo-tela">Memória</h1>
@@ -112,6 +168,8 @@ export default function Memoria() {
           <span className="px-motivo">{lista.length} de {estado.memoria.length}</span>
         )}
       </div>
+      </>
+      )}
 
       <div className={cx('mt-3', desktop && 'grid grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-6 lg:items-start')}>
         <div className="min-w-0">

@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
-import { useProto } from '../store/contexto'
+import { useProto, useDesktop } from '../store/contexto'
 import { relatorio } from '../store/reducer'
 import { inicioDaSemana, somarDias, iso, diaCurto, numeroDoDia, mesCurto, rotuloDeData, ESTADO } from '../mock/dados'
 import { Secao, Chip, Vazio } from '../parts/base'
+import { Segmentos, TituloDeTela } from '../parts/movel'
 import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,7 @@ import { cx } from '../../lib/utils'
 // ---------------------------------------------------------------------------
 export default function Relatorios() {
   const { estado } = useProto()
+  const desktop = useDesktop()
   const [periodo, setPeriodo] = useState('semana')
   const [aberto, setAberto] = useState(null) // 'concluidas' | 'abertas' | 'delegadas'
 
@@ -42,6 +44,20 @@ export default function Relatorios() {
 
   return (
     <div className="px-entra">
+      {!desktop ? (
+        <>
+          <TituloDeTela titulo="Relatórios" detalhe="o que aconteceu" />
+          <Segmentos
+            className="mt-3"
+            valor={periodo}
+            aoEscolher={setPeriodo}
+            opcoes={[
+              { chave: 'semana', label: 'Esta semana' },
+              { chave: 'passada', label: 'Semana passada' },
+            ]}
+          />
+        </>
+      ) : (
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="px-titulo-tela">Relatórios</h1>
@@ -52,6 +68,7 @@ export default function Relatorios() {
           <Chip on={periodo === 'passada'} onClick={() => setPeriodo('passada')}>Semana passada</Chip>
         </div>
       </header>
+      )}
 
       {/* O PERÍODO, sempre visível — é o que dá sentido a todo o resto. */}
       <p className="mt-3 rounded-row border border-hairline bg-surface-2 px-3.5 py-2 text-[12.5px] text-secondary">
@@ -62,7 +79,7 @@ export default function Relatorios() {
         {periodo === 'semana' && ' · a semana ainda está correndo, então os números são parciais.'}
       </p>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className={cx('mt-4 grid', desktop ? 'gap-3 sm:grid-cols-3' : 'grid-cols-1 gap-2')}>
         <Indicador
           rotulo="Concluídas"
           valor={r.concluidas.length}
@@ -186,7 +203,31 @@ export default function Relatorios() {
   )
 }
 
+// No telefone o indicador é uma LINHA: número à esquerda, rótulo e explicação à
+// direita. Três cartões quadrados empilhados eram três "cards dentro de card"
+// ocupando o primeiro viewport inteiro para dizer três números.
 function Indicador({ rotulo, valor, nota, ativo, aoAbrir }) {
+  const desktop = useDesktop()
+  if (!desktop) {
+    return (
+      <button
+        type="button"
+        onClick={aoAbrir}
+        aria-expanded={ativo}
+        className={cx(
+          'press flex items-center gap-3 rounded-row border px-3.5 py-2.5 text-left transition',
+          ativo ? 'border-accent bg-accent-soft/50' : 'border-hairline',
+        )}
+      >
+        <span className="w-[42px] flex-none text-[22px] font-semibold leading-none">{valor}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13.5px] font-medium leading-snug">{rotulo}</span>
+          <span className="px-motivo mt-0.5 block leading-snug">{nota}</span>
+        </span>
+        <ChevronRight size={15} className={cx('flex-none text-muted transition', ativo && 'rotate-90')} />
+      </button>
+    )
+  }
   return (
     <button
       type="button"

@@ -1,5 +1,5 @@
 import { Sun, Moon, Monitor, Check } from 'lucide-react'
-import { useProto, useAcoes, useTema } from '../store/contexto'
+import { useProto, useAcoes, useTema, useDesktop } from '../store/contexto'
 import { Secao, Chip } from '../parts/base'
 import { cx } from '../../lib/utils'
 
@@ -21,6 +21,7 @@ export default function Configuracoes() {
   const { estado } = useProto()
   const acoes = useAcoes()
   const { escolhido, escuro } = useTema()
+  const desktop = useDesktop()
   const eu = estado.pessoas?.find((p) => p.eu)
   const acompanhadas = estado.tarefas.filter((t) => t.acompanhando).length
 
@@ -35,7 +36,8 @@ export default function Configuracoes() {
       </header>
 
       <Secao titulo="Tema">
-        <div className="flex flex-wrap gap-2">
+        {/* No telefone, lista nativa: uma escolha por linha, alvo largo. */}
+        <div className={cx(desktop ? 'flex flex-wrap gap-2' : 'space-y-1')}>
           {TEMAS.map((t) => (
             <button
               key={t.valor}
@@ -43,17 +45,21 @@ export default function Configuracoes() {
               onClick={() => acoes.definirTema(t.valor)}
               aria-pressed={escolhido === t.valor}
               className={cx(
-                'press flex min-w-[112px] flex-1 flex-col items-start gap-2 rounded-row border px-3.5 py-3 text-left transition',
+                'press rounded-row border transition',
+                desktop
+                  ? 'flex min-w-[112px] flex-1 flex-col items-start gap-2 px-3.5 py-3 text-left'
+                  : 'flex w-full items-center gap-3 px-4 py-3 text-left',
                 escolhido === t.valor
                   ? 'border-accent bg-accent-soft text-accent-text'
                   : 'border-hairline text-secondary hover:border-accent',
               )}
             >
               <t.icone size={18} />
-              <span className="flex items-center gap-1.5 text-[14px] font-medium">
+              <span className={cx('flex items-center gap-1.5 font-medium', desktop ? 'text-[14px]' : 'flex-1 text-[14.5px]')}>
                 {t.label}
-                {escolhido === t.valor && <Check size={14} />}
+                {desktop && escolhido === t.valor && <Check size={14} />}
               </span>
+              {!desktop && escolhido === t.valor && <Check size={16} />}
             </button>
           ))}
         </div>

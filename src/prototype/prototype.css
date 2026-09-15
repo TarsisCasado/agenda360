@@ -433,6 +433,10 @@
   .px-mes-celula:hover { border-color: rgb(var(--c-accent) / 0.55); }
 }
 .px-mes-celula:focus-visible { outline: 2px solid rgb(var(--c-accent)); outline-offset: 1px; }
+/* No telefone a célula é um ALVO e um indicador, não um contêiner de texto:
+   92px de altura empurrariam o resumo do dia para fora da tela, e o resumo é
+   justamente a resposta que o mês tem de dar. */
+.px-mes-compacto { min-height: 42px; }
 .px-mes-fora { background: transparent; border-color: transparent; }
 .px-mes-hoje { border-color: rgb(var(--c-accent)); background: rgb(var(--c-accent-soft) / 0.5); }
 .px-mes-item {

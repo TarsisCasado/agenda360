@@ -98,7 +98,9 @@ export function Folha({ aberta, aoFechar, titulo, subtitulo, children, rodape, l
 
   if (!aberta) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-start lg:pt-[8vh]">
+    // z acima da Superfície de tela cheia (z-60): uma escolha curta PODE
+    // aparecer sobre uma tela — o que não pode é uma tela dentro de uma folha.
+    <div className="fixed inset-0 z-[70] flex items-end justify-center lg:items-start lg:pt-[8vh]">
       <button aria-label="Fechar" onClick={aoFechar} className="animate-backdrop absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
       <div
         role="dialog"

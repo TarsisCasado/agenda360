@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Sparkles, Send, BookmarkPlus, ExternalLink } from 'lucide-react'
-import { useProto, useAcoes } from '../store/contexto'
+import { useProto, useAcoes, useDesktop } from '../store/contexto'
 import { inicioDaSemana, somarDias, iso, nomeDoDia } from '../mock/dados'
 import { responder, revisar, espera, ATALHOS } from '../mock/ia'
 import { Botao } from '../parts/base'
@@ -36,6 +36,7 @@ export default function Copiloto() {
   const navegar = useNavigate()
   const { estado } = useProto()
   const acoes = useAcoes()
+  const desktop = useDesktop()
 
   const contextoTipo = params.get('contexto')
   const contextoId = params.get('id')
@@ -258,7 +259,15 @@ export default function Copiloto() {
             ))}
           </div>
 
-          {/* O contrato, dito antes de alguém precisar descobrir sozinho. */}
+          {/* O contrato, dito antes de alguém precisar descobrir sozinho. No
+              telefone ele cabe numa linha: dois cartões explicativos antes da
+              primeira mensagem são exatamente o "painel administrativo" que o
+              Copiloto não deve parecer. */}
+          {!desktop ? (
+            <p className="mt-4 text-[12.5px] leading-relaxed text-muted">
+              Perguntas respondem na hora. Qualquer alteração vira proposta e espera você.
+            </p>
+          ) : (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <div className="rounded-row border border-hairline px-4 py-3">
               <p className="px-secao">Perguntar</p>
@@ -276,6 +285,7 @@ export default function Copiloto() {
               </p>
             </div>
           </div>
+          )}
         </div>
       )}
 
@@ -301,10 +311,18 @@ export default function Copiloto() {
         </button>
       </form>
 
-      <p className="mt-2 text-[11.5px] leading-relaxed text-faint">
-        Protótipo: as respostas são fixas, não há modelo de linguagem. Perguntas
-        respondem direto; qualquer alteração vira proposta e espera você.
-      </p>
+      {/* No telefone a nota só precisa aparecer antes da conversa começar —
+          depois dela, o que importa é a conversa. No desktop fica como estava. */}
+      {desktop ? (
+        <p className="mt-2 text-[11.5px] leading-relaxed text-faint">
+          Protótipo: as respostas são fixas, não há modelo de linguagem. Perguntas
+          respondem direto; qualquer alteração vira proposta e espera você.
+        </p>
+      ) : vazio ? (
+        <p className="mt-2 text-[11.5px] leading-relaxed text-faint">
+          Protótipo: as respostas são fixas, não há modelo de linguagem.
+        </p>
+      ) : null}
     </div>
   )
 }

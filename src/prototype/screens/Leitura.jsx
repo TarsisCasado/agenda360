@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import { Sparkles, ExternalLink, PenLine, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
-import { useProto, useAcoes } from '../store/contexto'
+import { useProto, useAcoes, useDesktop } from '../store/contexto'
 import { memoriaPorId } from '../store/reducer'
 import { TIPO_MEMORIA, rotuloDeData } from '../mock/dados'
 import { Secao, Botao, Chip } from '../parts/base'
+import { MenuAcoes } from '../parts/movel'
 import { dominio } from '../parts/url'
 import { cx } from '../../lib/utils'
 
@@ -22,6 +23,7 @@ export default function Leitura({ id, embutida }) {
   const { estado } = useProto()
   const acoes = useAcoes()
   const navegar = useNavigate()
+  const desktop = useDesktop()
   const m = memoriaPorId(estado, id)
   const [proposta, setProposta] = useState(null)
   const [confirmando, setConfirmando] = useState(false)
@@ -55,8 +57,38 @@ export default function Leitura({ id, embutida }) {
         {m.texto}
       </div>
 
-      {/* O que se pode fazer com um item da memória — sem que nada disso o
-          transforme em tarefa. Guardar por guardar é uso legítimo. */}
+      {/* No telefone, uma fileira de quatro botões abaixo do texto compete com
+          a leitura. A ação que muda o ESTADO do item (guardar como referência)
+          fica à vista; editar, arquivar e excluir entram no menu. */}
+      {!desktop ? (
+        <div className="mt-4 flex items-center gap-2">
+          {m.porOrganizar && (
+            <Botao variante="secundario" onClick={() => acoes.organizarMemoria(m.id)}>
+              Guardar como referência
+            </Botao>
+          )}
+          <MenuAcoes
+            titulo={m.titulo}
+            rotulo="Ações da nota"
+            acoes={[
+              { rotulo: 'Editar', icone: PenLine, fazer: () => navegar(`/prototipo/memoria/${m.id}/editar`) },
+              {
+                rotulo: m.arquivada ? 'Desarquivar' : 'Arquivar',
+                icone: m.arquivada ? ArchiveRestore : Archive,
+                fazer: () => acoes.arquivarMemoria(m.id, !m.arquivada),
+              },
+              {
+                rotulo: 'Excluir',
+                icone: Trash2,
+                perigo: true,
+                fazer: () => { acoes.excluirMemoria(m.id); navegar('/prototipo/memoria') },
+              },
+            ]}
+          />
+        </div>
+      ) : (
+      // No desktop cabem todos: guardar por guardar é uso legítimo, e nenhuma
+      // destas ações transforma o item em tarefa.
       <div className="mt-5 flex flex-wrap items-center gap-2">
         {m.porOrganizar && (
           <Botao variante="secundario" onClick={() => acoes.organizarMemoria(m.id)}>
@@ -82,6 +114,8 @@ export default function Leitura({ id, embutida }) {
           </Botao>
         )}
       </div>
+      )}
+
       {m.arquivada && (
         <p className="mt-2 text-[12.5px] text-faint">
           Arquivado — fora da lista de trabalho, ainda encontrável pela busca.

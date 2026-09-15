@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, ListTodo, CalendarDays, PenLine, Sparkles } from 'lucide-react'
+import { X, ListTodo, CalendarDays, PenLine, Sparkles, ArrowRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cx } from '../../lib/utils'
 import { useProto, useAcoes, useDesktop } from '../store/contexto'
@@ -8,24 +8,41 @@ import { somarDias, iso, rotuloDeData } from '../mock/dados'
 import { Botao } from '../parts/base'
 
 // ---------------------------------------------------------------------------
-// CENTRAL DE ACAO — a porta unica do [+], igual no desktop e no telefone.
+// CENTRAL DE ACAO — a porta unica do [+].
 //
-// O UX1.1.1 tinha DUAS portas: um botao "Capturar" que abria uma superficie e
-// botoes separados de criacao. Duas portas para a mesma intencao obrigam a
-// pessoa a classificar antes de escrever — exatamente o contrario de CAPTURE
-// FIRST, ORGANIZE LATER.
+// A arquitetura foi aprovada no UX1.2; o UX1.2.1 mexe na APRESENTACAO. O que
+// saiu foi texto que explicava o que o proprio controle ja diz: "Uma frase
+// basta. Organizo depois.", "Ou crie direto", "Fechar nao cria nada". Um campo
+// grande sob a pergunta "O que voce quer registrar?" ja e o convite; a frase
+// abaixo dele so ocupava a metade superior do telefone.
 //
-// Agora ha uma so, e a propria central JA e a captura: o campo "O que voce quer
-// registrar?" esta ali, aberto, sem nada antes dele. Os atalhos ficam ao lado
-// para quem JA SABE o que quer criar — e nenhum deles passa pela IA.
+// O que ficou: a pergunta, o campo, e quatro atalhos numa linha.
 //
-// NO TELEFONE O TECLADO NAO SOBE SOZINHO. Abrir o [+] para tocar num atalho e
-// tao legitimo quanto abrir para escrever; um teclado que salta cobre metade da
-// tela e responde uma pergunta que ninguem fez.
+// GUARDAR so aparece quando ha o que guardar. Um botao primario desabilitado
+// ocupando a tela desde o primeiro instante e ruido com aparencia de acao.
 //
-// Fechar nao cria nada. O que foi escrito vira rascunho da sessao, para que
-// desistir nao seja o mesmo que perder.
+// E a regra que o UX1.2.1 tornou explicita: BOTTOM SHEET E PARA INTERACAO
+// CURTA. Escolher "Nova tarefa" FECHA esta superficie e abre a apropriada —
+// empilhar um formulario de dez campos por cima desta folha era justamente o
+// "amontoado" que o QA viu.
+//
+// No telefone o teclado continua sem subir sozinho.
+//
+// ESCOPO: o UX1.2.1 congelou o desktop, e esta peça é compartilhada. Por isso a
+// simplificação do §5 vale para o TELEFONE; no desktop a folha continua
+// exatamente como foi aprovada no UX1.2. Duas composições no mesmo componente é
+// o preço de não mexer numa tela já aprovada — e está declarado aqui em vez de
+// acontecer no silêncio.
 // ---------------------------------------------------------------------------
+// Dois rótulos para o mesmo atalho: o longo é o que o desktop aprovou; o curto
+// é o que cabe em quatro colunas no telefone.
+const ATALHOS = [
+  { chave: 'tarefa', rotulo: 'Tarefa', rotuloLongo: 'Nova tarefa', icone: ListTodo },
+  { chave: 'compromisso', rotulo: 'Compromisso', rotuloLongo: 'Novo compromisso', icone: CalendarDays },
+  { chave: 'nota', rotulo: 'Nota', rotuloLongo: 'Nova nota', icone: PenLine },
+  { chave: 'copiloto', rotulo: 'Copiloto', rotuloLongo: 'Conversar com o Copiloto', icone: Sparkles },
+]
+
 export default function CentralDeAcao({ aberto, aoFechar, aoNovaTarefa, aoNovoCompromisso, aoNovaNota }) {
   const { estado } = useProto()
   const acoes = useAcoes()
@@ -51,21 +68,6 @@ export default function CentralDeAcao({ aberto, aoFechar, aoNovaTarefa, aoNovoCo
     return () => clearTimeout(t)
   }, [aberto, estado.rascunho, desktop])
 
-  // Escape é tratado AQUI, e não pelo atalho global: fechar por fora fecharia
-  // sem passar por `fechar()`, e o rascunho — a promessa de que desistir não é
-  // perder — ficaria para trás.
-  useEffect(() => {
-    if (!aberto) return undefined
-    const tecla = (e) => {
-      if (e.key !== 'Escape') return
-      e.stopPropagation()
-      if (texto.trim()) acoes.guardarRascunho({ texto: texto.trim() })
-      aoFechar()
-    }
-    window.addEventListener('keydown', tecla)
-    return () => window.removeEventListener('keydown', tecla)
-  }, [aberto, texto, acoes, aoFechar])
-
   // A interpretacao roda em segundo plano e nunca bloqueia o campo.
   useEffect(() => {
     if (!aberto || texto.trim().length < 6) { setSugestao(null); return undefined }
@@ -81,6 +83,21 @@ export default function CentralDeAcao({ aberto, aoFechar, aoNovaTarefa, aoNovoCo
     return () => { vivo = false; setPensando(false) }
   }, [texto, aberto, estado.hoje, amanha])
 
+  // Escape é tratado AQUI, e não pelo atalho global: fechar por fora fecharia
+  // sem passar por `fechar()`, e o rascunho — a promessa de que desistir não é
+  // perder — ficaria para trás.
+  useEffect(() => {
+    if (!aberto) return undefined
+    const tecla = (e) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      if (texto.trim()) acoes.guardarRascunho({ texto: texto.trim() })
+      aoFechar()
+    }
+    window.addEventListener('keydown', tecla)
+    return () => window.removeEventListener('keydown', tecla)
+  }, [aberto, texto, acoes, aoFechar])
+
   if (!aberto) return null
 
   const fechar = () => {
@@ -90,6 +107,15 @@ export default function CentralDeAcao({ aberto, aoFechar, aoNovaTarefa, aoNovoCo
   }
 
   const guardar = () => { acoes.guardar(texto); aoFechar() }
+
+  // Fecha ANTES de abrir a superfície longa — nunca uma sheet sobre a outra.
+  const irPara = (chave) => {
+    aoFechar()
+    if (chave === 'tarefa') aoNovaTarefa?.()
+    else if (chave === 'compromisso') aoNovoCompromisso?.()
+    else if (chave === 'nota') aoNovaNota?.()
+    else navegar('/prototipo/copiloto')
+  }
 
   const confirmarSugestao = () => {
     if (sugestao.especie === 'compromisso') {
@@ -102,16 +128,7 @@ export default function CentralDeAcao({ aberto, aoFechar, aoNovaTarefa, aoNovoCo
     aoFechar()
   }
 
-  const atalho = (Icone, rotulo, acao) => (
-    <button
-      key={rotulo}
-      type="button"
-      onClick={() => { aoFechar(); acao() }}
-      className="press flex items-center gap-2 rounded-control border border-hairline px-3 py-2 text-[13px] font-medium text-secondary transition hover:border-accent hover:text-accent-text"
-    >
-      <Icone size={15} /> {rotulo}
-    </button>
-  )
+  const temTexto = Boolean(texto.trim())
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-start lg:pt-[12vh]">
@@ -124,55 +141,99 @@ export default function CentralDeAcao({ aberto, aoFechar, aoNovaTarefa, aoNovoCo
         role="dialog"
         aria-modal="true"
         aria-label="Criar ou capturar"
-        className="animate-sheet relative w-full max-w-[560px] rounded-t-sheet border border-hairline bg-surface p-5 pb-7 shadow-float lg:rounded-sheet lg:p-6"
+        className="animate-sheet pb-safe relative w-full max-w-[560px] rounded-t-sheet border border-hairline bg-surface p-4 shadow-float lg:rounded-sheet lg:p-6"
       >
-        <div className="mb-3 flex items-start justify-between gap-4">
-          <h2 className="text-[17px] font-semibold leading-snug">O que você quer registrar?</h2>
+        <div className="mb-2 flex items-start justify-between gap-4">
+          <h2 className={cx('font-semibold leading-snug', desktop ? 'text-[17px]' : 'text-[16.5px]')}>
+            O que você quer registrar?
+          </h2>
           <button onClick={fechar} aria-label="Fechar" className="press -m-1 p-1 text-muted">
             <X size={19} />
           </button>
         </div>
 
-        {/* O campo É a captura. Não há um botão que abre outra superfície. */}
+
+        {/* O campo É a captura. */}
         <textarea
           ref={campo}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          rows={3}
+          rows={temTexto ? 3 : 2}
           aria-label="O que você quer registrar?"
-          placeholder="Uma frase basta. Organizo depois."
-          className="w-full resize-none bg-transparent text-[16px] leading-relaxed text-primary outline-none placeholder:text-faint"
+          placeholder={desktop ? 'Uma frase basta. Organizo depois.' : undefined}
+          /* No telefone, sem placeholder: a pergunta acima já é o rótulo, e o
+             campo se anuncia pela superfície — um retângulo tocável. */
+          className={cx(
+            'w-full resize-none text-[16px] leading-relaxed text-primary outline-none placeholder:text-faint',
+            desktop
+              ? 'bg-transparent'
+              : 'rounded-control bg-surface-2 px-3 py-2.5 transition focus:bg-surface focus:ring-1 focus:ring-accent',
+          )}
         />
 
-        {/* GUARDAR e sempre a acao principal e nunca depende da IA. */}
-        <div className="mt-3 flex items-center gap-3 border-t border-hairline pt-3.5">
-          <Botao variante="primario" onClick={guardar} disabled={!texto.trim()} className={cx(!texto.trim() && 'opacity-40')}>
-            Guardar
-          </Botao>
-          {pensando && <span className="text-[12.5px] text-faint">lendo…</span>}
-        </div>
-
-        {/* Atalhos: para quem JÁ SABE. Somem enquanto há texto, para não
-            competir com o que a pessoa está escrevendo. */}
-        {!texto.trim() && (
-          <div className="mt-4 border-t border-hairline pt-4">
-            <p className="px-secao mb-2">Ou crie direto</p>
-            <div className="grid grid-cols-2 gap-2">
-              {atalho(ListTodo, 'Nova tarefa', () => aoNovaTarefa?.())}
-              {atalho(CalendarDays, 'Novo compromisso', () => aoNovoCompromisso?.())}
-              {atalho(PenLine, 'Nova nota', () => aoNovaNota?.())}
-              {atalho(Sparkles, 'Conversar com o Copiloto', () => navegar('/prototipo/copiloto'))}
+        {desktop ? (
+          /* DESKTOP — exatamente o que foi aprovado no UX1.2. */
+          <>
+            <div className="mt-3 flex items-center gap-3 border-t border-hairline pt-3.5">
+              <Botao variante="primario" onClick={guardar} disabled={!temTexto} className={cx(!temTexto && 'opacity-40')}>
+                Guardar
+              </Botao>
+              {pensando && <span className="text-[12.5px] text-faint">lendo…</span>}
             </div>
-          </div>
+
+            {!temTexto && (
+              <div className="mt-4 border-t border-hairline pt-4">
+                <p className="px-secao mb-2">Ou crie direto</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {ATALHOS.map((a) => (
+                    <button
+                      key={a.chave}
+                      type="button"
+                      onClick={() => irPara(a.chave)}
+                      className="press flex items-center gap-2 rounded-control border border-hairline px-3 py-2 text-[13px] font-medium text-secondary transition hover:border-accent hover:text-accent-text"
+                    >
+                      <a.icone size={15} /> {a.rotuloLongo}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* GUARDAR aparece junto do que ele guarda, e só quando há conteúdo. */}
+            {temTexto && (
+              <div className="px-entra mt-2.5 flex items-center gap-3">
+                <Botao variante="primario" onClick={guardar}>Guardar</Botao>
+                {pensando && <span className="text-[12.5px] text-faint">lendo…</span>}
+              </div>
+            )}
+
+            {/* Quatro atalhos numa linha. Cada um FECHA esta folha e abre a
+                superfície apropriada — nunca uma sheet sobre a outra. */}
+            <div className="mt-3 grid grid-cols-4 gap-1.5 border-t border-hairline pt-3">
+              {ATALHOS.map((a) => (
+                <button
+                  key={a.chave}
+                  type="button"
+                  onClick={() => irPara(a.chave)}
+                  className="press flex flex-col items-center gap-1.5 rounded-control py-2.5 text-[12px] font-medium text-secondary transition hover:bg-surface-2 hover:text-accent-text"
+                >
+                  <a.icone size={19} />
+                  {a.rotulo}
+                </button>
+              ))}
+            </div>
+          </>
         )}
 
         {/* A sugestao vem depois, secundaria, e sempre pode ser ignorada. */}
         {sugestao && !pensando && (
-          <div className="px-entra mt-4 rounded-row border border-hairline bg-surface-2 px-4 py-3.5">
-            <p className="text-[13.5px] text-secondary">{sugestao.frase}</p>
+          <div className="px-entra mt-3 rounded-row border border-hairline bg-surface-2 px-3.5 py-3">
+            <p className="text-[13px] text-secondary">{sugestao.frase}</p>
 
             {sugestao.especie === 'compromisso' && (
-              <p className="mt-2 text-[15px] font-semibold">
+              <p className="mt-1.5 text-[14.5px] font-semibold leading-snug">
                 {sugestao.dados.titulo}
                 <span className="px-hora ml-2 text-[13px] font-normal text-secondary">
                   {rotuloDeData(sugestao.dados.data, estado.hoje)} · {hora}
@@ -181,7 +242,7 @@ export default function CentralDeAcao({ aberto, aoFechar, aoNovaTarefa, aoNovoCo
             )}
 
             {ajustando && sugestao.especie === 'compromisso' && (
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-2.5 flex items-center gap-2">
                 <label className="text-[12.5px] text-muted" htmlFor="px-hora-ajuste">Horário</label>
                 <input
                   id="px-hora-ajuste"
@@ -192,18 +253,32 @@ export default function CentralDeAcao({ aberto, aoFechar, aoNovaTarefa, aoNovoCo
               </div>
             )}
 
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Botao variante="secundario" onClick={confirmarSugestao}>{sugestao.acao}</Botao>
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={confirmarSugestao}
+                className="press inline-flex items-center gap-1.5 rounded-control border border-hairline bg-surface px-3 py-1.5 text-[13px] font-semibold text-accent-text transition hover:border-accent"
+              >
+                {sugestao.acao} <ArrowRight size={13} />
+              </button>
               {sugestao.especie === 'compromisso' && !ajustando && (
-                <Botao variante="fantasma" onClick={() => setAjustando(true)}>Ajustar</Botao>
+                <button
+                  type="button"
+                  onClick={() => setAjustando(true)}
+                  className={cx('press rounded-control px-2.5 py-1.5 text-[13px] text-muted')}
+                >
+                  Ajustar
+                </button>
               )}
             </div>
           </div>
         )}
 
-        <p className="mt-4 text-[12px] leading-relaxed text-faint">
-          Fechar não cria nada. O que você escreveu continua aqui.
-        </p>
+        {desktop && (
+          <p className="mt-4 text-[12px] leading-relaxed text-faint">
+            Fechar não cria nada. O que você escreveu continua aqui.
+          </p>
+        )}
       </div>
     </div>
   )

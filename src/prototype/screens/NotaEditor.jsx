@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, Loader2 } from 'lucide-react'
-import { useProto, useAcoes } from '../store/contexto'
+import { useProto, useAcoes, useDesktop } from '../store/contexto'
 import { memoriaPorId } from '../store/reducer'
 import { Botao } from '../parts/base'
+import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
 // NOVA NOTA — o bloco de notas de volta.
@@ -29,6 +30,7 @@ export default function NotaEditor() {
   const navegar = useNavigate()
   const { estado } = useProto()
   const acoes = useAcoes()
+  const desktop = useDesktop()
 
   const existente = idDaRota ? memoriaPorId(estado, idDaRota) : null
   const [id, setId] = useState(idDaRota || null)
@@ -101,7 +103,7 @@ export default function NotaEditor() {
         onChange={(e) => setTitulo(e.target.value)}
         placeholder="Título (opcional)"
         aria-label="Título da nota"
-        className="px-editor mt-5 text-[21px] font-semibold leading-snug"
+        className={cx('px-editor text-[21px] font-semibold leading-snug', desktop ? 'mt-5' : 'mt-4')}
       />
 
       <textarea
@@ -110,16 +112,20 @@ export default function NotaEditor() {
         onChange={(e) => setTexto(e.target.value)}
         rows={16}
         aria-label="Conteúdo da nota"
-        placeholder="Escreva. Não precisa classificar nada agora."
-        className="px-editor mt-2 min-h-[46vh]"
+        placeholder={desktop ? 'Escreva. Não precisa classificar nada agora.' : 'Escreva.'}
+        className={cx('px-editor', desktop ? 'mt-2 min-h-[46vh]' : 'mt-1.5 min-h-[52vh]')}
       />
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-hairline pt-4">
+      {/* UX1.2.1 — no telefone o rodapé explicava duas regras que a tela já
+          cumpre sozinha; sobrou a única coisa que precisa estar aqui: sair. */}
+      <div className={cx('border-t border-hairline pt-4', desktop ? 'mt-4 flex flex-wrap items-center gap-2' : 'mt-2')}>
         <Botao variante="primario" onClick={concluir}>Concluir</Botao>
-        <p className="text-[12px] leading-relaxed text-faint">
-          Uma nota escrita de propósito não entra em “Por organizar”. Sair sem
-          escrever nada não cria nota nenhuma.
-        </p>
+        {desktop && (
+          <p className="text-[12px] leading-relaxed text-faint">
+            Uma nota escrita de propósito não entra em “Por organizar”. Sair sem
+            escrever nada não cria nota nenhuma.
+          </p>
+        )}
       </div>
     </div>
   )

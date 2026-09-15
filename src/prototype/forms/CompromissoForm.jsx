@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useProto, useAcoes } from '../store/contexto'
+import { useProto, useAcoes, useDesktop } from '../store/contexto'
 import { somarDias, iso, inicioDaSemana, diaCurto, numeroDoDia } from '../mock/dados'
-import { Folha, Campo, Texto, Area, Escolha, Botao, Chip } from '../parts/base'
+import { Campo, Texto, Area, Escolha, Botao, Chip } from '../parts/base'
+import { Superficie } from '../parts/movel'
 import AlertaCampo from '../parts/AlertaCampo'
 
 // ---------------------------------------------------------------------------
@@ -27,6 +28,7 @@ const CATEGORIAS = ['Operação', 'Comercial', 'Financeiro', 'Diretoria', 'Pesso
 export default function CompromissoForm({ aberta, aoFechar, compromisso, padroes = {} }) {
   const { estado } = useProto()
   const acoes = useAcoes()
+  const desktop = useDesktop()
   const editando = Boolean(compromisso)
   const [f, setF] = useState(() => inicial(compromisso, padroes, estado.hoje))
   const [mais, setMais] = useState(false)
@@ -59,12 +61,19 @@ export default function CompromissoForm({ aberta, aoFechar, compromisso, padroes
     aoFechar()
   }
 
+  const primario = (
+    <Botao variante="primario" onClick={salvar} disabled={!f.titulo.trim()} className="px-3 py-1.5">
+      {editando ? 'Salvar' : 'Criar'}
+    </Botao>
+  )
+
   return (
-    <Folha
+    <Superficie
       aberta={aberta}
       aoFechar={aoFechar}
       titulo={editando ? 'Editar compromisso' : 'Novo compromisso'}
       subtitulo={editando ? compromisso.titulo : null}
+      acao={primario}
       rodape={
         <>
           <Botao variante="primario" onClick={salvar} disabled={!f.titulo.trim()}>
@@ -119,9 +128,22 @@ export default function CompromissoForm({ aberta, aoFechar, compromisso, padroes
         </p>
 
         {!mais ? (
-          <button type="button" onClick={() => setMais(true)} className="press text-[13px] font-semibold text-accent-text">
-            Mais detalhes
-          </button>
+          desktop ? (
+            <button type="button" onClick={() => setMais(true)} className="press text-[13px] font-semibold text-accent-text">
+              Mais detalhes
+            </button>
+          ) : (
+            // No telefone o gatilho precisa ser um alvo largo e dizer o que
+            // está adiando — senão "Mais detalhes" vira um link perdido.
+            <button
+              type="button"
+              onClick={() => setMais(true)}
+              className="press flex w-full items-center gap-3 rounded-control border border-hairline px-3.5 py-2.5 text-left text-[13.5px] font-semibold text-accent-text"
+            >
+              <span className="flex-none">Mais opções</span>
+              <span className="min-w-0 flex-1 truncate text-right text-[12px] font-normal text-muted">local · categoria · alerta · notas</span>
+            </button>
+          )
         ) : (
           <div className="space-y-4 border-t border-hairline pt-4">
             <Campo rotulo="Onde">
@@ -142,8 +164,20 @@ export default function CompromissoForm({ aberta, aoFechar, compromisso, padroes
             </Campo>
           </div>
         )}
+
+        {!desktop && editando && (
+          <div className="border-t border-hairline pt-4">
+            <Botao
+              variante="perigo"
+              className="w-full"
+              onClick={() => { acoes.excluirCompromisso(compromisso.id); aoFechar() }}
+            >
+              Excluir compromisso
+            </Botao>
+          </div>
+        )}
       </div>
-    </Folha>
+    </Superficie>
   )
 }
 

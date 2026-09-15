@@ -195,7 +195,6 @@ function Lateral({ recolhida, aoAlternar, aoCentral, aoBuscar, aoNotificacoes })
 
         <Grupo titulo="Utilidade" recolhida={recolhida}>
           <Item label="Buscar" icon={Search} recolhida={recolhida} onClick={aoBuscar} />
-          <Item label="Notificações" icon={Bell} recolhida={recolhida} onClick={aoNotificacoes} insignia={pendentes} />
         </Grupo>
 
         <Grupo titulo="Destinos" recolhida={recolhida}>
@@ -214,7 +213,11 @@ function Lateral({ recolhida, aoAlternar, aoCentral, aoBuscar, aoNotificacoes })
         </Grupo>
       </nav>
 
-      <div className="mt-2 border-t border-hairline px-2 pt-3">
+      {/* UX1.2.1 — Notificações desceu para junto do perfil. Buscar é o que se
+          usa NO meio do trabalho e continua em cima; notificação é sobre o que
+          chegou, e mora ao lado de quem sou eu. O contador continua aqui. */}
+      <div className="mt-2 space-y-0.5 border-t border-hairline px-2 pt-3">
+        <Item label="Notificações" icon={Bell} recolhida={recolhida} onClick={aoNotificacoes} insignia={pendentes} />
         <Item to="/prototipo/config" label="Perfil e configurações" icon={Settings} recolhida={recolhida} />
         {!recolhida && (
           <p className="px-3 pt-3 text-[11px] leading-relaxed text-faint">Protótipo · dados fictícios</p>

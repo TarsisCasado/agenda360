@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useProto, useAcoes } from '../store/contexto'
+import { useProto, useAcoes, useDesktop } from '../store/contexto'
 import { ESTADO, somarDias, iso, inicioDaSemana, diaCurto, numeroDoDia, rotuloDeData } from '../mock/dados'
-import { Folha, Campo, Texto, Area, Escolha, Botao, Chip } from '../parts/base'
+import { Campo, Texto, Area, Escolha, Botao, Chip } from '../parts/base'
+import { Superficie } from '../parts/movel'
 import AlertaCampo from '../parts/AlertaCampo'
 import { Pessoa } from '../parts/pessoas'
 import { EU } from '../mock/dados'
@@ -14,8 +15,13 @@ import { EU } from '../mock/dados'
 // merece um formulario de verdade, e nenhum dos dois caminhos depende da IA.
 //
 // O que fica a vista: titulo, estado, dia, prazo. O resto — descricao,
-// prioridade, contexto, lembrete, horario reservado — abre em "Mais detalhes",
-// porque nao e o que se preenche na maioria das vezes.
+// prioridade, contexto, responsavel, alerta, horario reservado — abre em
+// "Mais opcoes", porque nao e o que se preenche na maioria das vezes.
+//
+// UX1.2.1 — NO TELEFONE ISTO E UMA TELA, nao uma folha. Dez campos dentro de
+// uma bottom sheet sao um formulario de desktop espremido, e foi assim que o
+// QA humano leu. Em tela cheia o cabecalho fica sendo Cancelar · titulo ·
+// Criar, o conteudo rola, e "Mais opcoes" continua adiando o que e raro.
 //
 // CONTEXTO VEM PREENCHIDO: criar a partir da coluna "Em andamento" ja nasce em
 // andamento; criar a partir de um dia ja nasce naquele dia. Quem escolheu o
@@ -31,6 +37,7 @@ const CONTEXTOS = ['Operação', 'Comercial', 'Financeiro', 'Diretoria', 'Pessoa
 export default function TarefaForm({ aberta, aoFechar, tarefa, padroes = {} }) {
   const { estado } = useProto()
   const acoes = useAcoes()
+  const desktop = useDesktop()
   const editando = Boolean(tarefa)
   const [f, setF] = useState(() => inicial(tarefa, padroes))
   const [mais, setMais] = useState(false)
@@ -69,12 +76,19 @@ export default function TarefaForm({ aberta, aoFechar, tarefa, padroes = {} }) {
     aoFechar()
   }
 
+  const primario = (
+    <Botao variante="primario" onClick={salvar} disabled={!f.titulo.trim()} className="px-3 py-1.5">
+      {editando ? 'Salvar' : 'Criar'}
+    </Botao>
+  )
+
   return (
-    <Folha
+    <Superficie
       aberta={aberta}
       aoFechar={aoFechar}
       titulo={editando ? 'Editar tarefa' : 'Nova tarefa'}
       subtitulo={editando ? tarefa.titulo : null}
+      acao={primario}
       rodape={
         <>
           <Botao variante="primario" onClick={salvar} disabled={!f.titulo.trim()}>
@@ -145,9 +159,22 @@ export default function TarefaForm({ aberta, aoFechar, tarefa, padroes = {} }) {
         </div>
 
         {!mais ? (
-          <button type="button" onClick={() => setMais(true)} className="press text-[13px] font-semibold text-accent-text">
-            Mais detalhes
-          </button>
+          desktop ? (
+            <button type="button" onClick={() => setMais(true)} className="press text-[13px] font-semibold text-accent-text">
+              Mais detalhes
+            </button>
+          ) : (
+            // No telefone o gatilho precisa ser um alvo largo e dizer o que
+            // está adiando — senão "Mais detalhes" vira um link perdido.
+            <button
+              type="button"
+              onClick={() => setMais(true)}
+              className="press flex w-full items-center gap-3 rounded-control border border-hairline px-3.5 py-2.5 text-left text-[13.5px] font-semibold text-accent-text"
+            >
+              <span className="flex-none">Mais opções</span>
+              <span className="min-w-0 flex-1 truncate text-right text-[12px] font-normal text-muted">prioridade · responsável · alerta · horário</span>
+            </button>
+          )
         ) : (
           <div className="space-y-4 border-t border-hairline pt-4">
             <Campo rotulo="Detalhes">
@@ -219,8 +246,22 @@ export default function TarefaForm({ aberta, aoFechar, tarefa, padroes = {} }) {
             />
           </div>
         )}
+
+        {/* No telefone não há rodapé: excluir vive no fim do conteúdo, longe do
+            polegar que acabou de salvar. */}
+        {!desktop && editando && (
+          <div className="border-t border-hairline pt-4">
+            <Botao
+              variante="perigo"
+              className="w-full"
+              onClick={() => { acoes.excluirTarefa(tarefa.id); aoFechar() }}
+            >
+              Excluir tarefa
+            </Botao>
+          </div>
+        )}
       </div>
-    </Folha>
+    </Superficie>
   )
 }
 

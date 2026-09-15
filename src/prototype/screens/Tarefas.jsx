@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MoreHorizontal, Check, CalendarClock, Bell, CornerUpRight, Ban } from 'lucide-react'
+import { Plus, MoreHorizontal, Check, CalendarClock, Bell, CornerUpRight, Ban, LayoutGrid, List as ListIcon } from 'lucide-react'
 import { useProto, useDesktop, useAcoes } from '../store/contexto'
 import { colunaDe, ehMinha, delegadasPorMim, recebidas } from '../store/reducer'
-import { ESTADO, rotuloDeData } from '../mock/dados'
+import { ESTADO, RESPONSABILIDADE, rotuloDeData } from '../mock/dados'
 import { Vazio, Chip, Botao, Folha, Marcar } from '../parts/base'
+import { Seletor, BotaoDeFiltros, Segmentos, MenuAcoes, TituloDeTela } from '../parts/movel'
 import { alertaCurto } from '../mock/alerta'
 import { Pessoa, SeloResponsabilidade, EscolherPessoa } from '../parts/pessoas'
 import TarefaForm from '../forms/TarefaForm'
@@ -115,6 +116,85 @@ export default function Tarefas() {
 
   return (
     <div className="px-entra">
+      {!desktop ? (
+        // ------------------------------------------------------------------
+        // TELEFONE (UX1.2.1) — a tela tinha TRÊS eixos empilhados antes do
+        // conteúdo: escopo, filtros e estado. Três fileiras é meia tela para
+        // decidir o que ver antes de ver qualquer coisa.
+        //
+        // Agora são dois controles numa linha (escopo e filtros, ambos com a
+        // escolha atual visível) e o estado logo abaixo. O conteúdo começa no
+        // primeiro viewport. Nada sumiu: o que era fileira virou seletor.
+        // ------------------------------------------------------------------
+        <>
+          <TituloDeTela
+            titulo="Tarefas"
+            acao={
+              <span className="flex items-center gap-1">
+                <MenuAcoes
+                  titulo="Tarefas"
+                  rotulo="Modo de exibição"
+                  acoes={[
+                    {
+                      rotulo: visao === 'quadro' ? 'Ver em lista' : 'Ver em quadro',
+                      icone: visao === 'quadro' ? ListIcon : LayoutGrid,
+                      fazer: () => setVisao(visao === 'quadro' ? 'lista' : 'quadro'),
+                    },
+                  ]}
+                />
+                <button
+                  type="button"
+                  onClick={() => setForm({ padroes: {} })}
+                  aria-label="Nova tarefa"
+                  className="press grid h-9 w-9 place-items-center rounded-control bg-accent text-white shadow-raised"
+                >
+                  <Plus size={19} />
+                </button>
+              </span>
+            }
+          />
+
+          <div className="mt-3 flex items-center gap-2">
+            <Seletor
+              rotulo="De quem"
+              valor={escopo}
+              aoEscolher={setEscopo}
+              opcoes={ESCOPOS.map((e) => ({
+                chave: e.chave,
+                label: e.label,
+                contagem: e.chave === 'todas'
+                  ? estado.tarefas.length
+                  : e.chave === 'minhas'
+                    ? estado.tarefas.filter(ehMinha).length
+                    : e.chave === 'delegadas'
+                      ? delegadasPorMim(estado).length
+                      : recebidas(estado).length,
+              }))}
+            />
+            <BotaoDeFiltros
+              opcoes={FILTROS}
+              ativos={filtros}
+              aoAlternar={alternarFiltro}
+              aoLimpar={() => setFiltros([])}
+            />
+            {filtros.length > 0 && (
+              <span className="px-motivo ml-auto">
+                {estado.tarefas.filter(passa).length} de {estado.tarefas.length}
+              </span>
+            )}
+          </div>
+
+          {visao === 'quadro' && (
+            <Segmentos
+              className="mt-2"
+              valor={colunaMovel}
+              aoEscolher={setColunaMovel}
+              opcoes={COLUNAS.map((c) => ({ chave: c.estado, label: c.curto, contagem: porColuna(c.estado).length }))}
+            />
+          )}
+        </>
+      ) : (
+      <>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="px-titulo-tela">Tarefas</h1>
         <div className="flex items-center gap-2">
@@ -182,6 +262,8 @@ export default function Tarefas() {
           {estado.tarefas.filter(passa).length} de {estado.tarefas.length} atividades
         </p>
       )}
+      </>
+      )}
 
       {visao === 'lista' ? (
         <Lista tarefas={estado.tarefas.filter(passa)} aoAbrir={(t) => navegar(`/prototipo/tarefas/${t.id}`)} aoMover={setMover} />
@@ -203,28 +285,13 @@ export default function Tarefas() {
         </div>
       ) : (
         <>
-          {/* No telefone: uma coluna legivel por vez, com orientacao clara. */}
-          <div className="mt-4 flex gap-1 rounded-control border border-hairline p-0.5">
-            {COLUNAS.map((c) => (
-              <button
-                key={c.estado}
-                type="button"
-                onClick={() => setColunaMovel(c.estado)}
-                aria-pressed={colunaMovel === c.estado}
-                className={cx(
-                  'press flex-1 whitespace-nowrap rounded-[7px] px-1.5 py-2 text-[12.5px] transition',
-                  colunaMovel === c.estado ? 'bg-accent-soft font-semibold text-accent-text' : 'text-muted',
-                )}
-              >
-                {c.curto}
-                <span className="ml-1 text-[11px] opacity-70">{porColuna(c.estado).length}</span>
-              </button>
-            ))}
-          </div>
-          <div ref={pagerRef} className="mt-4">
+          {/* O seletor de estado já está no topo: aqui fica só a coluna. Uma
+              coluna por viewport continua sendo a leitura certa no telefone. */}
+          <div ref={pagerRef} className="mt-3">
             <Coluna
               {...COLUNAS.find((c) => c.estado === colunaMovel)}
               semCabecalho
+              compacto
               tarefas={porColuna(colunaMovel)}
               arrastandoToque={toque.taskId}
               alvoToque={toque.alvo}
@@ -236,8 +303,8 @@ export default function Tarefas() {
               aoAdicionar={() => setForm({ padroes: { estado: colunaMovel } })}
             />
           </div>
-          <p className="mt-3 text-[12px] leading-relaxed text-faint">
-            Segure um cartão para arrastar, ou use <strong className="font-semibold">Mover para…</strong> no menu do cartão.
+          <p className="mt-2.5 text-[11.5px] text-faint">
+            Segure para arrastar entre estados.
           </p>
         </>
       )}
@@ -256,7 +323,7 @@ export default function Tarefas() {
 
 // ---------------------------------------------------------------------------
 function Coluna({
-  titulo, estado: col, tarefas, semCabecalho,
+  titulo, estado: col, tarefas, semCabecalho, compacto,
   arrasto, setArrasto, aoSoltar, aoAbrir, aoMover, aoAdicionar,
   arrastandoToque, alvoToque,
 }) {
@@ -308,6 +375,7 @@ function Coluna({
             {arrasto?.coluna === col && arrasto?.antesDe === t.id && <div className="px-insercao" />}
             <CartaoTarefa
               t={t}
+              compacto={compacto}
               arrastando={arrasto?.id === t.id || arrastandoToque === t.id}
               aoAbrir={aoAbrir}
               aoMover={aoMover}
@@ -339,7 +407,38 @@ function Coluna({
 }
 
 // ---------------------------------------------------------------------------
-function CartaoTarefa({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
+// ---------------------------------------------------------------------------
+// O CARTAO.
+//
+// UX1.2.1 — no telefone ele estava virando FICHA ADMINISTRATIVA: cinco
+// etiquetas, avatar, selo e origem, tudo ao mesmo tempo, num objeto de 5cm.
+//
+// A versao compacta segue uma regra simples: MOSTRAR O QUE DECIDE.
+//   . titulo;
+//   . uma linha com QUANDO e, quando pertinente, prioridade e quem responde;
+//   . uma terceira linha SO quando ha excecao — bloqueada, devolvida,
+//     aguardando aceite. Se nada esta travado, a linha nao existe.
+// Contexto, alerta, passos e origem continuam na tarefa; aparecem ao abrir.
+// ---------------------------------------------------------------------------
+function CartaoTarefa({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna, compacto }) {
+  if (compacto) {
+    return (
+      <CartaoCompacto
+        t={t}
+        arrastando={arrastando}
+        aoAbrir={aoAbrir}
+        aoMover={aoMover}
+        setArrasto={setArrasto}
+        coluna={coluna}
+      />
+    )
+  }
+  return (
+    <CartaoCompleto t={t} arrastando={arrastando} aoAbrir={aoAbrir} aoMover={aoMover} setArrasto={setArrasto} coluna={coluna} />
+  )
+}
+
+function CartaoCompleto({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
   const { estado } = useProto()
   const acoes = useAcoes()
   const feito = t.estado === ESTADO.FEITO
@@ -428,6 +527,87 @@ function CartaoTarefa({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
           className="press -mr-1 -mt-0.5 grid h-6 w-6 flex-none place-items-center rounded-[6px] text-muted transition hover:bg-surface-2 hover:text-primary"
         >
           <MoreHorizontal size={15} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+
+// A versão do telefone. Mesmo objeto, mesma pega, menos ruído.
+function CartaoCompacto({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
+  const { estado } = useProto()
+  const acoes = useAcoes()
+  const feito = t.estado === ESTADO.FEITO
+  const atrasada = t.prazo && t.prazo < estado.hoje && !feito
+  const meu = (t.responsavelId || 'p-tarsis') === 'p-tarsis'
+
+  // A EXCEÇÃO — e só ela ganha a terceira linha.
+  // O motivo do bloqueio inteiro não cabe num selo de cartão — e não precisa:
+  // o que o cartão tem de dizer é QUE está travada. O porquê está no detalhe.
+  const excecao = t.bloqueio
+    ? { texto: 'bloqueada', classe: 'px-selo-bloqueada' }
+    : t.responsabilidade === RESPONSABILIDADE.DEVOLVIDA
+      ? { texto: 'devolvida', classe: 'px-selo-devolvida' }
+      : t.responsabilidade === RESPONSABILIDADE.AGUARDANDO
+        ? { texto: 'aguardando aceite', classe: 'px-selo-aguardando' }
+        : null
+
+  return (
+    <div
+      data-task-id={t.id}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        setArrasto({ id: t.id, coluna, antesDe: null })
+      }}
+      onDragEnd={() => setArrasto(null)}
+      className={cx('px-cartao px-pega', arrastando && 'opacity-40')}
+      data-arrastando={arrastando ? 'true' : 'false'}
+      data-concluido={feito ? 'true' : 'false'}
+    >
+      <div className="flex items-start gap-2.5">
+        <Marcar
+          feito={feito}
+          label={feito ? `Reabrir ${t.titulo}` : `Concluir ${t.titulo}`}
+          onClick={() => acoes.mudarEstado(t.id, feito ? ESTADO.A_FAZER : ESTADO.FEITO)}
+          className="mt-0.5"
+        />
+        <button type="button" onClick={() => aoAbrir(t)} className="min-w-0 flex-1 text-left">
+          <span className={cx('block text-[14px] font-medium leading-[1.35]', feito && 'line-through')}>
+            {t.titulo}
+          </span>
+
+          <span className="px-motivo mt-1 flex flex-wrap items-center gap-x-2">
+            {atrasada ? (
+              <span className="font-medium text-warning">atrasada · {rotuloDeData(t.prazo, estado.hoje)}</span>
+            ) : t.reserva ? (
+              <span className="px-hora inline-flex items-center gap-1 font-medium text-accent-text">
+                <CalendarClock size={11} />
+                {rotuloDeData(t.reserva.data, estado.hoje)} {t.reserva.inicio}
+              </span>
+            ) : t.planejadaPara ? (
+              <span>{rotuloDeData(t.planejadaPara, estado.hoje)}</span>
+            ) : t.prazo ? (
+              <span>prazo {rotuloDeData(t.prazo, estado.hoje)}</span>
+            ) : (
+              <span className="text-faint">sem data</span>
+            )}
+            {t.prioridade === 'alta' && <span className="text-danger">alta</span>}
+            {!meu && <Pessoa id={t.responsavelId} />}
+          </span>
+
+          {excecao && (
+            <span className={cx('px-selo mt-1.5 max-w-full truncate', excecao.classe)}>{excecao.texto}</span>
+          )}
+        </button>
+        <button
+          type="button"
+          aria-label={`Ações de ${t.titulo}`}
+          onClick={() => aoMover(t)}
+          className="press -mr-1 grid h-8 w-8 flex-none place-items-center rounded-[8px] text-muted"
+        >
+          <MoreHorizontal size={16} />
         </button>
       </div>
     </div>
