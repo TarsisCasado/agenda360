@@ -400,7 +400,7 @@ export default function Hoje() {
 
 // Uma linha do dia: hora à esquerda, espécie na barra, ação à direita quando faz
 // sentido. Compromisso não se conclui — tarefa sim.
-function ItemDoDia({ item, agora, aoAbrir, aoConcluir, sugestao }) {
+function ItemDoDia({ item, agora, aoAbrir, aoConcluir }) {
   const desktop = useDesktop()
   const passou = item.ordem !== '99:99' && item.fim && item.fim <= agora
   const tarefa = item.especie === 'tarefa' || item.especie === 'reserva'

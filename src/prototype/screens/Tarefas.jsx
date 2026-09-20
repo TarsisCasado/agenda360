@@ -31,6 +31,10 @@ import { cx } from '../../lib/utils'
 // estar em andamento E sem data ao mesmo tempo. Virou filtro, onde sempre
 // deveria ter estado.
 // ---------------------------------------------------------------------------
+// Espelha `ZONA_BORDA_PX` do hook do produto, que não a exporta. Se as duas
+// discordarem, o quadro anda numa faixa e o alvo muda noutra.
+const ZONA_BORDA_PX = 64
+
 const COLUNAS = [
   // `curto` existe porque no telefone os tres nomes disputam a mesma linha:
   // "Em andamento" quebrava em duas e desalinhava o seletor inteiro.
@@ -80,9 +84,14 @@ export default function Tarefas() {
   const colunaRefs = useRef([])
   const etapaRef = useRef(0)
   const irParaEtapaRef = useRef(null)
-  // Posição de inserção durante o arrasto no toque (ver `Observador`, abaixo).
-  const antesDeToque = useRef(null)
-  const [insercaoToque, setInsercaoToque] = useState(null)
+  // ALVO DO ARRASTO NO TOQUE — coluna e posição, decididos pelo protótipo (ver
+  // `Observador`, abaixo). O ref é o que o `onDrop` lê; o estado é o que a tela
+  // pinta. São a mesma informação, separados só porque um gesto não pode
+  // depender de um render para saber onde soltar.
+  const alvoRef = useRef({ coluna: null, antesDe: null })
+  const [alvoToque, setAlvoToque] = useState({ coluna: null, antesDe: null })
+  const [bordaAtiva, setBordaAtiva] = useState(0)
+  const animacao = useRef(0)
   etapaRef.current = etapa
 
   const noEscopo = useCallback((t) => {
@@ -135,11 +144,30 @@ export default function Tarefas() {
     return () => { cancelAnimationFrame(frame); el.removeEventListener('scroll', ler) }
   }, [desktop, visao])
 
-  const irParaEtapa = useCallback((i) => {
+  const irParaEtapa = useCallback((i, { comOToqueAtivo = false } = {}) => {
     const node = colunaRefs.current[i]
     const el = pagerRef.current
     if (!node || !el) return
-    el.scrollTo({ left: node.offsetLeft - (el.clientWidth - node.offsetWidth) / 2, behavior: 'smooth' })
+    const destino = node.offsetLeft - (el.clientWidth - node.offsetWidth) / 2
+    cancelAnimationFrame(animacao.current)
+    if (!comOToqueAtivo) {
+      el.scrollTo({ left: destino, behavior: 'smooth' })
+    } else {
+      // COM O DEDO ENCOSTADO O QUADRO ANDA POR NOSSA CONTA.
+      // `behavior: 'smooth'` é uma animação do navegador sobre o mesmo scroller
+      // em que há um toque ativo — e o WebKit trata toque no scroller como
+      // motivo para descartar a animação. Ou seja: o quadro deixaria de andar
+      // exatamente no momento em que PRECISA andar, que é com um cartão na mão.
+      // Escrever `scrollLeft` quadro a quadro não depende dessa arbitragem.
+      const inicio = el.scrollLeft
+      const t0 = performance.now()
+      const passo = (t) => {
+        const p = Math.min(1, (t - t0) / 260)
+        el.scrollLeft = inicio + (destino - inicio) * (1 - (1 - p) ** 3)
+        if (p < 1) animacao.current = requestAnimationFrame(passo)
+      }
+      animacao.current = requestAnimationFrame(passo)
+    }
     setEtapa(i)
   }, [])
   irParaEtapaRef.current = irParaEtapa
@@ -166,63 +194,103 @@ export default function Tarefas() {
     if (b.dir !== dir || agora - b.em > 1100) borda.current = { dir, avisos: 1, em: agora }
     else borda.current = { dir, avisos: b.avisos + 1, em: agora }
     if (borda.current.avisos < 2) return
+    // Avancou: a contagem recomeca. Sem isto, continuar encostado atravessaria
+    // uma coluna a cada aviso do hook; com isto, cada travessia pede um novo
+    // dwell — da para atravessar duas colunas sem soltar, uma decisao por vez.
+    borda.current = { dir, avisos: 0, em: agora }
 
     const i = Math.min(COLUNAS.length - 1, Math.max(0, etapaRef.current + dir))
     if (i === etapaRef.current) return
     etapaRef.current = i
-    irParaEtapaRef.current?.(i)
+    irParaEtapaRef.current?.(i, { comOToqueAtivo: true })
   }, [])
 
   // --- toque: o mesmo gesto validado no produto -----------------------------
   const toque = useTouchCardDrag({
     pagerRef,
     enabled: !desktop && visao === 'quadro',
-    // A MESMA função de mover do arrasto de desktop e do "Mover para…". O
-    // `antesDe` vem do observador passivo abaixo, que só LÊ a posição do dedo.
-    onDrop: (taskId, coluna) => {
-      if (coluna) acoes.moverTarefa(taskId, coluna, antesDeToque.current)
-      antesDeToque.current = null
+    // A MESMA função de mover do arrasto de desktop e do "Mover para…". Quem
+    // diz ONDE é o observador abaixo; o hook entrega a coluna sob o dedo como
+    // reserva, para o caso de soltar sem ter movido.
+    onDrop: (taskId, colunaDoHook) => {
+      const { coluna, antesDe } = alvoRef.current
+      const destino = coluna ?? colunaDoHook
+      const tarefa = estado.tarefas.find((t) => t.id === taskId)
+      // Levantar e soltar no mesmo lugar não é movimento: não reordena nada.
+      if (destino && !(destino === tarefa?.estado && !antesDe)) {
+        acoes.moverTarefa(taskId, destino, antesDe)
+      }
+      alvoRef.current = { coluna: null, antesDe: null }
+      setAlvoToque({ coluna: null, antesDe: null })
+      setBordaAtiva(0)
       borda.current = { dir: 0, avisos: 0, em: 0 }
-      setInsercaoToque(null)
     },
     onAdvance: avancarEtapa,
   })
 
   // -------------------------------------------------------------------------
-  // OBSERVADOR DE POSIÇÃO (UX1.2.1 → UX1.2.2).
+  // OBSERVADOR DE ALVO (UX1.2.1 → UX1.2.2 → UX1.2.2.1).
   //
-  // O hook do produto entrega "solte a tarefa X na coluna Y" — ele não diz ONDE
-  // dentro da coluna. Em vez de reescrever o gesto (o briefing pede para não
-  // reinventá-lo) ou de alterar o hook, que é código do produto e é usado pelo
-  // quadro real, este listener PASSIVO só lê a posição do dedo enquanto o hook
-  // já está com o cartão na mão. Ele não chama preventDefault, não tem máquina
-  // de estados e não pode brigar com a rolagem: se sumisse, o arrasto continuaria
-  // funcionando — só cairia no fim da coluna.
+  // O hook do produto entrega "solte a tarefa X na coluna Y", e Y é a coluna
+  // que estiver sob o dedo. Isso é certo no meio do quadro e ERRADO na borda:
+  // ali o dedo já está sobre a FRESTA da coluna vizinha, que ainda não entrou
+  // em foco — soltar naquele ponto derruba o cartão numa coluna que o usuário
+  // nem está vendo. Foi o que obrigou o QA anterior a "voltar para dentro antes
+  // de soltar", e um gesto que precisa de instrução não está pronto.
+  //
+  // Então o protótipo decide: na faixa da borda vale a coluna EM FOCO; fora
+  // dela, a coluna sob o dedo. O mesmo listener lê a posição de inserção e
+  // acende a fresta da borda. Ele é PASSIVO: não chama `preventDefault`, não
+  // tem máquina de estados e não disputa o dedo com ninguém.
   // -------------------------------------------------------------------------
   useEffect(() => {
     const el = pagerRef.current
     if (!el || desktop || !toque.taskId) return undefined
+
+    const aplicar = (coluna, antesDe) => {
+      const a = alvoRef.current
+      if (a.coluna === coluna && a.antesDe === antesDe) return
+      alvoRef.current = { coluna, antesDe }
+      setAlvoToque({ coluna, antesDe })
+    }
+
     const ler = (e) => {
       const t = e.touches?.[0]
       if (!t) return
+      const r = el.getBoundingClientRect()
+      const lado = t.clientX > r.right - ZONA_BORDA_PX ? 1 : t.clientX < r.left + ZONA_BORDA_PX ? -1 : 0
+      setBordaAtiva(lado)
+      // SAIR DA BORDA ZERA A CONTAGEM. O hook so avisa quando o dedo esta na
+      // faixa, e nunca avisa que saiu — sem este reset, voltar para o meio do
+      // quadro devagar ainda somava um aviso e o quadro andava mais uma coluna
+      // depois de o usuario ja ter decidido parar.
+      if (!lado) borda.current = { dir: 0, avisos: 0, em: 0 }
+
       const sob = document.elementFromPoint(t.clientX, t.clientY)
-      const cartao = sob?.closest?.('[data-task-id]')
-      const alvo = cartao && cartao.dataset.taskId !== toque.taskId ? cartao : null
-      if (!alvo) {
-        if (antesDeToque.current !== null) { antesDeToque.current = null; setInsercaoToque(null) }
-        return
+      const colunaSob = sob?.closest?.('[data-testid^="board-column-"]')
+      // Fora de qualquer coluna não há destino: é assim que se desiste sem
+      // levantar o dedo sobre a coluna errada.
+      if (!colunaSob) { aplicar(null, null); return }
+
+      const coluna = lado
+        ? COLUNAS[etapaRef.current].estado
+        : colunaSob.dataset.testid.replace('board-column-', '')
+
+      // Metade de cima do cartão sob o dedo: entra ANTES dele; metade de baixo:
+      // depois. Na borda não há posição — o destino ali é a coluna, não o ponto.
+      let antesDe = null
+      const cartao = lado ? null : sob?.closest?.('[data-task-id]')
+      if (cartao && cartao.dataset.taskId !== toque.taskId) {
+        const rc = cartao.getBoundingClientRect()
+        const irmaos = [...colunaSob.querySelectorAll('[data-task-id]')]
+        const i = irmaos.indexOf(cartao)
+        antesDe = t.clientY < rc.top + rc.height / 2
+          ? cartao.dataset.taskId
+          : irmaos[i + 1]?.dataset.taskId ?? null
       }
-      // Metade de cima do cartão: entra ANTES dele. Metade de baixo: depois.
-      const r = alvo.getBoundingClientRect()
-      const antes = t.clientY < r.top + r.height / 2
-      const irmaos = [...alvo.parentElement.parentElement.querySelectorAll('[data-task-id]')]
-      const i = irmaos.indexOf(alvo)
-      const destino = antes ? alvo.dataset.taskId : irmaos[i + 1]?.dataset.taskId ?? null
-      if (antesDeToque.current !== destino) {
-        antesDeToque.current = destino
-        setInsercaoToque(destino)
-      }
+      aplicar(coluna, antesDe)
     }
+
     el.addEventListener('touchmove', ler, { passive: true })
     return () => el.removeEventListener('touchmove', ler)
   }, [desktop, toque.taskId])
@@ -446,11 +514,12 @@ export default function Tarefas() {
               O encaixe (`snap`) sai de cena enquanto um cartão está na mão: com
               ele ligado, o avanço de borda e o encaixe disputam o mesmo scroll e
               o quadro treme entre duas colunas. */}
+          <div className="relative -mx-4 mt-3">
           <div
             ref={pagerRef}
             data-testid="board-pager"
             className={cx(
-              'no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto overscroll-x-contain px-4',
+              'no-scrollbar flex gap-2 overflow-x-auto overscroll-x-contain px-4',
               arrastando ? 'snap-none' : 'snap-x snap-mandatory',
             )}
           >
@@ -466,8 +535,8 @@ export default function Tarefas() {
                   compacto
                   tarefas={porColuna(c.estado)}
                   arrastandoToque={toque.taskId}
-                  alvoToque={toque.alvo}
-                  insercaoToque={toque.alvo === c.estado ? insercaoToque : null}
+                  alvoToque={alvoToque.coluna}
+                  insercaoToque={alvoToque.coluna === c.estado ? alvoToque.antesDe : null}
                   arrasto={arrasto}
                   setArrasto={setArrasto}
                   aoSoltar={soltar}
@@ -477,6 +546,16 @@ export default function Tarefas() {
                 />
               </div>
             ))}
+          </div>
+
+            {/* As frestas só existem com um cartão na mão: fora do arrasto a
+                borda não faz nada e não deve prometer nada. */}
+            {toque.taskId && etapa > 0 && (
+              <div className="px-borda px-borda-esq" data-testid="borda-esq" data-ativa={bordaAtiva === -1 ? 'true' : 'false'} />
+            )}
+            {toque.taskId && etapa < COLUNAS.length - 1 && (
+              <div className="px-borda px-borda-dir" data-testid="borda-dir" data-ativa={bordaAtiva === 1 ? 'true' : 'false'} />
+            )}
           </div>
           <p className="mt-2.5 text-[11.5px] text-faint">
             Deslize para mudar de coluna. Segure um cartão para arrastá-lo entre elas.
@@ -734,7 +813,7 @@ function CartaoCompleto({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna })
 //
 // Sem chips: texto corrido separado por "·". Chip é para estado selecionável,
 // não para enfeitar metadado.
-function CartaoCompacto({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
+function CartaoCompacto({ t, arrastando, aoAbrir, aoMover }) {
   const { estado } = useProto()
   const acoes = useAcoes()
   const feito = t.estado === ESTADO.FEITO
@@ -773,14 +852,11 @@ function CartaoCompacto({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna })
   ].filter(Boolean)
 
   return (
+    // Sem `draggable`: no telefone o arrasto é por toque, e o atributo trazia
+    // junto a folha do navegador — a mesma de onde vinha, por acidente, a única
+    // proteção contra a seleção de texto do iOS (ver `prototype.css`).
     <div
       data-task-id={t.id}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = 'move'
-        setArrasto({ id: t.id, coluna, antesDe: null })
-      }}
-      onDragEnd={() => setArrasto(null)}
       className={cx('px-cartao px-pega', arrastando && 'opacity-40')}
       data-arrastando={arrastando ? 'true' : 'false'}
       data-concluido={feito ? 'true' : 'false'}

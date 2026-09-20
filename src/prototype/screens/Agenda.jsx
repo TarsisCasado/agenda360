@@ -4,7 +4,7 @@ import { Plus, Sparkles, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide
 import { useProto, useDesktop } from '../store/contexto'
 import { agendaDoDia, planejadasDoDia, ocupacaoDoDia, conflitosDoDia } from '../store/reducer'
 import { inicioDaSemana, somarDias, iso, diaCurto, numeroDoDia, rotuloDeData, nomeDoDia, AGORA_DEMO } from '../mock/dados'
-import { Secao, Vazio, Botao } from '../parts/base'
+import { Botao } from '../parts/base'
 import { Segmentos, TituloDeTela } from '../parts/movel'
 import CompromissoForm from '../forms/CompromissoForm'
 import { cx } from '../../lib/utils'
@@ -397,7 +397,6 @@ function GradeSemana({ dias, aoNovo, aoAbrir, aoDia }) {
 
 function Dia({ data, aoNovo, aoAbrir, desktop }) {
   const { estado } = useProto()
-  const eventos = agendaDoDia(estado, data)
   const planejadas = planejadasDoDia(estado, data)
 
   if (!desktop) {
@@ -448,28 +447,6 @@ function Dia({ data, aoNovo, aoAbrir, desktop }) {
       </div>
       <Legenda />
     </div>
-  )
-}
-
-function ItemDia({ e, aoAbrir }) {
-  const reserva = e.especie === 'reserva'
-  const conteudo = (
-    <>
-      <span className="px-hora w-[44px] flex-none pt-0.5 text-[13px] text-muted">{e.inicio}</span>
-      <span className={cx('px-especie self-stretch', reserva ? 'px-reserva' : 'px-compromisso')} />
-      <span className="min-w-0 flex-1">
-        <span className="block text-[14.5px] font-medium leading-snug">{e.titulo}</span>
-        <span className="px-motivo mt-0.5 block">
-          {reserva ? 'Horário reservado' : 'Compromisso'} · {e.inicio}–{e.fim}
-          {e.local ? ` · ${e.local}` : ''}
-        </span>
-      </span>
-    </>
-  )
-  return reserva ? (
-    <Link to={`/prototipo/tarefas/${e.tarefaId}`} className="px-linha px-toque">{conteudo}</Link>
-  ) : (
-    <button type="button" onClick={() => aoAbrir(e)} className="px-linha px-toque w-full text-left">{conteudo}</button>
   )
 }
 

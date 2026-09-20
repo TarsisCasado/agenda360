@@ -111,6 +111,83 @@
 }
 .px-pega:active { cursor: grabbing; }
 
+/* ---------------------------------------------------------------------------
+   UX1.2.2.1 — A REGRA QUE FALTAVA, E POR QUE ELA NAO APARECIA EM TESTE.
+
+   No iPhone o cartao nao se movia: segurar 380ms levantava o cartao e, logo em
+   seguida, o iOS abria a SELECAO DE TEXTO sobre o titulo — alcas azuis, menu
+   "Copiar / Buscar Selecao". Dali em diante o gesto e do WebKit: a pagina para
+   de receber o toque, chega um `touchcancel`, o fantasma e desmontado e o dedo
+   passa a arrastar uma selecao em vez do cartao.
+
+   O que enganou o teste: nenhuma folha de estilo deste projeto declarava
+   `user-select`. Quem tornava o cartao nao-selecionavel era a folha do PROPRIO
+   NAVEGADOR, pela regra que o Blink aplica a `[draggable=true]`. No Chromium
+   (onde a automacao roda) o cartao media `user-select: none` e o gesto passava;
+   no Safari do iPhone, que nao tem arrasto HTML5 e portanto nao aplica essa
+   regra, o mesmo cartao media `user-select: auto` — selecionavel. O teste media
+   um navegador e o usuario segurava outro.
+
+   `-webkit-touch-callout: none` (que o produto ja declara em `[data-task-id]`)
+   nao resolve: ele suprime o balao de link/imagem, nao a selecao de texto.
+
+   Por isso a propriedade e declarada AQUI, explicitamente, em vez de herdada de
+   um atributo cujo efeito depende do navegador.
+   --------------------------------------------------------------------------- */
+.px-cartao,
+.px-cartao * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* O CARTAO NA MAO.
+   O clone (`.board-ghost`) e do produto e nasce `position: fixed`, movido por
+   `transform` em coordenadas de viewport. So que `.px-cartao` declara
+   `position: relative`, tem a MESMA especificidade e e carregado DEPOIS (o
+   prototipo e um pedaco tardio) — entao o clone do prototipo virava um elemento
+   no fluxo, grudado no fim do `body`, e o `transform` o levava para uns 1000px
+   abaixo da dobra. O fantasma existia no DOM e NUNCA aparecia na tela: nem no
+   iPhone, nem no teste, que so o contava.
+   A regra abaixo tem especificidade maior e devolve o posicionamento — e da ao
+   cartao peso suficiente para nao haver duvida de que o dedo esta CARREGANDO
+   aquele cartao. */
+.board-ghost.px-cartao {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  pointer-events: none;
+  margin: 0;
+  opacity: 1;
+  border-color: rgb(var(--c-accent));
+  background: rgb(var(--c-board-card));
+  box-shadow: 0 18px 34px -10px rgb(0 0 0 / 0.38), 0 0 0 2px rgb(var(--c-accent) / 0.5);
+  transform-origin: 50% 50%;
+}
+
+/* A FRESTA DA BORDA. Com um cartao na mao, encostar na borda leva o quadro para
+   a coluna vizinha — mas isso so e descobrivel se a borda DISSER que esta ali.
+   A faixa aparece quando ha vizinha e acende quando o dedo entra nela. */
+.px-borda {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  pointer-events: none;
+  opacity: 0.35;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.px-borda[data-ativa='true'] { opacity: 1; }
+.px-borda-esq {
+  left: 0;
+  background: linear-gradient(90deg, rgb(var(--c-accent) / 0.45), transparent);
+}
+.px-borda-dir {
+  right: 0;
+  background: linear-gradient(270deg, rgb(var(--c-accent) / 0.45), transparent);
+}
+
 /* Coluna do quadro: superficie rebaixada, para os cartoes flutuarem sobre ela. */
 .px-coluna {
   border-radius: 14px;
