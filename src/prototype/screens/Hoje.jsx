@@ -401,6 +401,7 @@ export default function Hoje() {
 // Uma linha do dia: hora à esquerda, espécie na barra, ação à direita quando faz
 // sentido. Compromisso não se conclui — tarefa sim.
 function ItemDoDia({ item, agora, aoAbrir, aoConcluir, sugestao }) {
+  const desktop = useDesktop()
   const passou = item.ordem !== '99:99' && item.fim && item.fim <= agora
   const tarefa = item.especie === 'tarefa' || item.especie === 'reserva'
   const id = item.tarefaId
@@ -435,9 +436,13 @@ function ItemDoDia({ item, agora, aoAbrir, aoConcluir, sugestao }) {
           {item.especie === 'reserva' && <span className="text-accent-text">horário reservado · {item.inicio}–{item.fim}</span>}
           {item.especie === 'tarefa' && (
             <>
-              <span>escolhida para hoje</span>
+              {/* "escolhida para hoje" dentro de MEU DIA é a seção se repetindo:
+                  no telefone ela sai e sobra o que decide. */}
+              {desktop && <span>escolhida para hoje</span>}
               {item.tarefa.contexto && <span>{item.tarefa.contexto}</span>}
-              {item.tarefa.prioridade === 'alta' && <span className="text-danger">alta</span>}
+              {item.tarefa.prioridade === 'alta' && (
+                <span className="text-danger">{desktop ? 'alta' : 'Alta'}</span>
+              )}
             </>
           )}
         </span>

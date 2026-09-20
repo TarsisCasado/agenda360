@@ -540,9 +540,9 @@ function Mes({ aoDia, desktop }) {
         {desktop && <span className="px-motivo">Barra = ocupação conhecida pelo Agenda</span>}
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
+      <div className={cx('grid grid-cols-7', desktop ? 'gap-1' : 'gap-x-0 gap-y-0.5')}>
         {['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map((d) => (
-          <span key={d} className="px-secao pb-1 text-center">{d}</span>
+          <span key={d} className={cx('px-secao text-center', desktop ? 'pb-1' : 'pb-1.5 text-[10px]')}>{d}</span>
         ))}
         {celulas.map((d) => {
           const doMes = new Date(`${d}T12:00:00`).getMonth() === mesAtual
@@ -552,36 +552,56 @@ function Mes({ aoDia, desktop }) {
             ...eventos.map((e) => ({ chave: e.id, texto: e.titulo, hora: e.inicio, especie: e.especie })),
             ...planejadas.map((t) => ({ chave: t.id, texto: t.titulo, especie: 'tarefa' })),
           ]
-          // No telefone cabe menos: mostrar duas linhas e "+N" e mais honesto
-          // do que espremer quatro ate ninguem conseguir ler.
-          const limite = desktop ? CABEM : 2
-          const visiveis = itens.slice(0, limite)
+          const visiveis = itens.slice(0, CABEM)
           const sobrando = itens.length - visiveis.length
           const ocupacao = ocupacaoDoDia(estado, d)
+
+          // -----------------------------------------------------------------
+          // No TELEFONE a célula é o próprio dia: número, e um traço de que há
+          // algo ali. Sem caixa, sem borda, sem fundo — a grade some e sobram
+          // os dias, que é o que se procura num calendário.
+          // -----------------------------------------------------------------
+          if (!desktop) {
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setSelecionado(d)}
+                aria-label={`${numeroDoDia(d)} — ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}`}
+                aria-pressed={d === selecionado}
+                className={cx(
+                  'px-dia press',
+                  !doMes && 'px-dia-fora',
+                  d === estado.hoje && 'px-dia-hoje',
+                  d === selecionado && 'px-dia-sel',
+                )}
+              >
+                <span className="px-dia-numero">{numeroDoDia(d)}</span>
+                <span className="px-dia-pontos" aria-hidden="true">
+                  {doMes && eventos.slice(0, 3).map((e) => (
+                    <span key={e.id} className="px-dia-ponto" />
+                  ))}
+                  {doMes && planejadas.length > 0 && eventos.length < 3 && (
+                    <span className="px-dia-ponto px-dia-ponto-tarefa" />
+                  )}
+                </span>
+              </button>
+            )
+          }
 
           return (
             <button
               key={d}
               type="button"
-              onClick={() => (desktop ? aoDia(d) : setSelecionado(d))}
+              onClick={() => aoDia(d)}
               aria-label={`${numeroDoDia(d)} — ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}`}
-              aria-pressed={!desktop ? d === selecionado : undefined}
-              className={cx(
-                'px-mes-celula press',
-                // Célula curta: o mês é orientação, e o conteúdo do dia
-                // aparece logo abaixo. Uma grade que toma a tela inteira
-                // empurra justamente a resposta para fora do viewport.
-                !desktop && 'px-mes-compacto gap-0 px-1 py-0.5',
-                !doMes && 'px-mes-fora',
-                d === estado.hoje && 'px-mes-hoje',
-                !desktop && d === selecionado && d !== estado.hoje && 'border-accent',
-              )}
+              className={cx('px-mes-celula press', !doMes && 'px-mes-fora', d === estado.hoje && 'px-mes-hoje')}
             >
               <span className="flex items-baseline justify-between gap-1">
                 <span className={cx('px-hora text-[12.5px]', !doMes && 'text-faint', d === estado.hoje && 'font-semibold text-accent-text')}>
                   {numeroDoDia(d)}
                 </span>
-                {itens.length > 0 && doMes && desktop && (
+                {itens.length > 0 && doMes && (
                   <span className="text-[9.5px] text-faint">{itens.length}</span>
                 )}
               </span>
@@ -590,27 +610,14 @@ function Mes({ aoDia, desktop }) {
                 <span className="px-ocupacao" style={{ width: `${Math.min(100, (ocupacao / maior) * 100)}%` }} aria-hidden="true" />
               )}
 
-              {/* No telefone o título NÃO cabe numa célula de 48px: espremê-lo
-                  até caber é o jeito de tornar ilegíveis as duas coisas. Aqui o
-                  mês serve para ORIENTAR e ESCOLHER — o conteúdo do dia aparece
-                  inteiro logo abaixo, na mesma tela. */}
-              {doMes && desktop && visiveis.map((i) => (
-                <span key={i.chave} className={cx('px-mes-item', i.especie !== 'compromisso' && 'px-mes-tarefa')}>
-                  {i.hora ? <span className="px-hora">{i.hora} </span> : null}{i.texto}
+              {doMes && visiveis.map((i2) => (
+                <span key={i2.chave} className={cx('px-mes-item', i2.especie !== 'compromisso' && 'px-mes-tarefa')}>
+                  {i2.hora ? <span className="px-hora">{i2.hora} </span> : null}{i2.texto}
                 </span>
               ))}
 
-              {doMes && desktop && sobrando > 0 && (
+              {doMes && sobrando > 0 && (
                 <span className="px-motivo px-0.5 text-[10px]">+{sobrando}</span>
-              )}
-
-              {doMes && !desktop && itens.length > 0 && (
-                <span className="mt-auto flex items-center gap-[3px] pb-0.5">
-                  {eventos.slice(0, 3).map((e) => (
-                    <span key={e.id} className="h-[5px] w-[5px] rounded-full bg-accent" />
-                  ))}
-                  {planejadas.length > 0 && <span className="h-[5px] w-[5px] rounded-full bg-hairline" />}
-                </span>
               )}
             </button>
           )

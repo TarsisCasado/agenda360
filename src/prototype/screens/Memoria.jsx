@@ -200,12 +200,18 @@ export default function Memoria() {
                     </span>
                   )}
 
+                  {/* UX1.2.2 — no telefone a linha carregava tipo, domínio,
+                      data, estado, referência e relações ao mesmo tempo, e
+                      quebrava em duas. O ícone à esquerda já diz o TIPO; o
+                      domínio e "referência" estão no detalhe. Ficam a data, o
+                      estado que pede ação e as relações, que são o que faz a
+                      memória valer. */}
                   <span className="px-motivo mt-1 flex flex-wrap items-center gap-x-1.5">
-                    <span>{NOME_TIPO[m.tipo]}</span>
-                    {m.url && <span className="truncate text-faint">· {dominio(m.url)}</span>}
-                    <span>· {rotuloDeData(m.criadoEm, estado.hoje)}</span>
+                    {desktop && <span>{NOME_TIPO[m.tipo]}</span>}
+                    {desktop && m.url && <span className="truncate text-faint">· {dominio(m.url)}</span>}
+                    <span>{desktop ? '· ' : ''}{rotuloDeData(m.criadoEm, estado.hoje)}</span>
                     {m.porOrganizar && <span className="text-accent-text">· por organizar</span>}
-                    {m.referencia && <span>· referência</span>}
+                    {desktop && m.referencia && <span>· referência</span>}
                     {relacionadas.length > 0 && (
                       <span className="inline-flex items-center gap-0.5 text-accent-text">
                         · <CornerUpRight size={10} /> {relacionadas.length}{' '}

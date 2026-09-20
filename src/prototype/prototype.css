@@ -489,3 +489,60 @@
   color: rgb(var(--c-text));
 }
 .px-editor::placeholder { color: rgb(var(--c-text-4)); }
+
+/* ---------------------------------------------------------------------------
+   MÊS NO TELEFONE (UX1.2.2).
+
+   A grade com borda e fundo em cada célula lia como PLANILHA. Num calendário
+   pessoal o objeto é o NÚMERO DO DIA, não a caixa: o que existe de verdade são
+   os dias, e a grade é só o arranjo deles.
+
+   Então some a caixa. O número manda; os indicadores de atividade ficam
+   abaixo, menores; hoje é um número marcado; o dia escolhido ganha uma forma
+   cheia; dia sem nada não diz nada; dia de fora do mês quase desaparece.
+--------------------------------------------------------------------------- */
+.px-dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 0 6px;
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.px-dia:focus-visible { outline: 2px solid rgb(var(--c-accent)); outline-offset: -2px; }
+
+.px-dia-numero {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--c-text));
+  line-height: 1;
+}
+.px-dia-fora .px-dia-numero { color: rgb(var(--c-text-4)); }
+
+/* Hoje: um número marcado, não uma célula pintada. */
+.px-dia-hoje .px-dia-numero {
+  font-weight: 700;
+  color: rgb(var(--c-accent-text));
+}
+/* O dia escolhido é o único com forma cheia — é a seleção, e ela tem de ser
+   inconfundível. */
+.px-dia-sel .px-dia-numero {
+  background: rgb(var(--c-accent));
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Indicadores: três pontos bastam para "tem coisa aqui"; a quantidade exata é
+   o resumo abaixo que responde. */
+.px-dia-pontos { display: flex; gap: 3px; height: 5px; align-items: center; }
+.px-dia-ponto { width: 5px; height: 5px; border-radius: 999px; background: rgb(var(--c-accent) / 0.75); }
+.px-dia-ponto-tarefa { background: rgb(var(--c-text-4)); }
+.px-dia-sel .px-dia-ponto { background: rgb(var(--c-accent)); }

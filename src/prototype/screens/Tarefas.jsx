@@ -1,11 +1,11 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MoreHorizontal, Check, CalendarClock, Bell, CornerUpRight, Ban, LayoutGrid, List as ListIcon } from 'lucide-react'
+import { Plus, MoreHorizontal, Check, CalendarClock, Bell, CornerUpRight, Ban, LayoutGrid, List as ListIcon, ChevronRight } from 'lucide-react'
 import { useProto, useDesktop, useAcoes } from '../store/contexto'
 import { colunaDe, ehMinha, delegadasPorMim, recebidas } from '../store/reducer'
 import { ESTADO, RESPONSABILIDADE, rotuloDeData } from '../mock/dados'
 import { Vazio, Chip, Botao, Folha, Marcar } from '../parts/base'
-import { Seletor, BotaoDeFiltros, Segmentos, MenuAcoes, TituloDeTela } from '../parts/movel'
+import { Seletor, BotaoDeFiltros, MenuAcoes, TituloDeTela } from '../parts/movel'
 import { alertaCurto } from '../mock/alerta'
 import { Pessoa, SeloResponsabilidade, EscolherPessoa } from '../parts/pessoas'
 import TarefaForm from '../forms/TarefaForm'
@@ -70,11 +70,20 @@ export default function Tarefas() {
   const [visao, setVisao] = useState('quadro')
   const [filtros, setFiltros] = useState([])
   const [escopo, setEscopo] = useState('todas')
-  const [colunaMovel, setColunaMovel] = useState(ESTADO.A_FAZER)
+  // O quadro do telefone é um PAGER: as três colunas existem no DOM ao mesmo
+  // tempo, uma em foco por vez. `etapa` é o índice da coluna em foco.
+  const [etapa, setEtapa] = useState(0)
   const [form, setForm] = useState(null)      // { tarefa } | { padroes }
   const [mover, setMover] = useState(null)    // tarefa
   const [arrasto, setArrasto] = useState(null) // { id, coluna, antesDe }
   const pagerRef = useRef(null)
+  const colunaRefs = useRef([])
+  const etapaRef = useRef(0)
+  const irParaEtapaRef = useRef(null)
+  // Posição de inserção durante o arrasto no toque (ver `Observador`, abaixo).
+  const antesDeToque = useRef(null)
+  const [insercaoToque, setInsercaoToque] = useState(null)
+  etapaRef.current = etapa
 
   const noEscopo = useCallback((t) => {
     if (escopo === 'minhas') return ehMinha(t)
@@ -97,13 +106,126 @@ export default function Tarefas() {
 
   const porColuna = (col) => colunaDe(estado, col).filter(passa)
 
+  // -------------------------------------------------------------------------
+  // PAGER — ler o scroll para saber a coluna em foco; tocar na etapa para
+  // escrever o scroll. É a mesma mecânica do quadro do produto: o deslize é o
+  // scroll nativo do iOS, com inércia e rubber-band, e não um gesto próprio
+  // disputando o dedo com a rolagem vertical.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const el = pagerRef.current
+    if (!el || desktop) return undefined
+    let frame = 0
+    const ler = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const centro = el.scrollLeft + el.clientWidth / 2
+        let melhor = 0
+        let menor = Infinity
+        colunaRefs.current.forEach((node, i) => {
+          if (!node) return
+          const meio = node.offsetLeft + node.offsetWidth / 2
+          const dist = Math.abs(meio - centro)
+          if (dist < menor) { menor = dist; melhor = i }
+        })
+        setEtapa(melhor)
+      })
+    }
+    el.addEventListener('scroll', ler, { passive: true })
+    return () => { cancelAnimationFrame(frame); el.removeEventListener('scroll', ler) }
+  }, [desktop, visao])
+
+  const irParaEtapa = useCallback((i) => {
+    const node = colunaRefs.current[i]
+    const el = pagerRef.current
+    if (!node || !el) return
+    el.scrollTo({ left: node.offsetLeft - (el.clientWidth - node.offsetWidth) / 2, behavior: 'smooth' })
+    setEtapa(i)
+  }, [])
+  irParaEtapaRef.current = irParaEtapa
+
+  // ---------------------------------------------------------------------------
+  // AVANÇO DE BORDA, COM ESPERA.
+  //
+  // O hook do produto avisa assim que o dedo entra na faixa da borda — o
+  // primeiro aviso é imediato. Trocar de coluna nesse instante é o que torna a
+  // troca acidental: basta passar perto da borda a caminho de outra coisa.
+  //
+  // A ESPERA mora aqui, e não no hook, porque o hook é código do produto e o
+  // quadro real depende dele. O prototipo é quem DECIDE quando agir: exige dois
+  // avisos seguidos na mesma direção (o hook os espaça em ~620ms), o que dá um
+  // dwell curto antes do primeiro salto e um salto por vez depois disso. Perder
+  // o contato com a borda ou inverter a direção zera a contagem.
+  // ---------------------------------------------------------------------------
+  const borda = useRef({ dir: 0, avisos: 0, em: 0 })
+
+  const avancarEtapa = useCallback((dir) => {
+    const agora = Date.now()
+    const b = borda.current
+    // Aviso muito depois do anterior, ou para o outro lado: recomeça a contagem.
+    if (b.dir !== dir || agora - b.em > 1100) borda.current = { dir, avisos: 1, em: agora }
+    else borda.current = { dir, avisos: b.avisos + 1, em: agora }
+    if (borda.current.avisos < 2) return
+
+    const i = Math.min(COLUNAS.length - 1, Math.max(0, etapaRef.current + dir))
+    if (i === etapaRef.current) return
+    etapaRef.current = i
+    irParaEtapaRef.current?.(i)
+  }, [])
+
   // --- toque: o mesmo gesto validado no produto -----------------------------
   const toque = useTouchCardDrag({
     pagerRef,
     enabled: !desktop && visao === 'quadro',
-    onDrop: (taskId, coluna) => { if (coluna) acoes.moverTarefa(taskId, coluna) },
-    onAdvance: () => {},
+    // A MESMA função de mover do arrasto de desktop e do "Mover para…". O
+    // `antesDe` vem do observador passivo abaixo, que só LÊ a posição do dedo.
+    onDrop: (taskId, coluna) => {
+      if (coluna) acoes.moverTarefa(taskId, coluna, antesDeToque.current)
+      antesDeToque.current = null
+      borda.current = { dir: 0, avisos: 0, em: 0 }
+      setInsercaoToque(null)
+    },
+    onAdvance: avancarEtapa,
   })
+
+  // -------------------------------------------------------------------------
+  // OBSERVADOR DE POSIÇÃO (UX1.2.1 → UX1.2.2).
+  //
+  // O hook do produto entrega "solte a tarefa X na coluna Y" — ele não diz ONDE
+  // dentro da coluna. Em vez de reescrever o gesto (o briefing pede para não
+  // reinventá-lo) ou de alterar o hook, que é código do produto e é usado pelo
+  // quadro real, este listener PASSIVO só lê a posição do dedo enquanto o hook
+  // já está com o cartão na mão. Ele não chama preventDefault, não tem máquina
+  // de estados e não pode brigar com a rolagem: se sumisse, o arrasto continuaria
+  // funcionando — só cairia no fim da coluna.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const el = pagerRef.current
+    if (!el || desktop || !toque.taskId) return undefined
+    const ler = (e) => {
+      const t = e.touches?.[0]
+      if (!t) return
+      const sob = document.elementFromPoint(t.clientX, t.clientY)
+      const cartao = sob?.closest?.('[data-task-id]')
+      const alvo = cartao && cartao.dataset.taskId !== toque.taskId ? cartao : null
+      if (!alvo) {
+        if (antesDeToque.current !== null) { antesDeToque.current = null; setInsercaoToque(null) }
+        return
+      }
+      // Metade de cima do cartão: entra ANTES dele. Metade de baixo: depois.
+      const r = alvo.getBoundingClientRect()
+      const antes = t.clientY < r.top + r.height / 2
+      const irmaos = [...alvo.parentElement.parentElement.querySelectorAll('[data-task-id]')]
+      const i = irmaos.indexOf(alvo)
+      const destino = antes ? alvo.dataset.taskId : irmaos[i + 1]?.dataset.taskId ?? null
+      if (antesDeToque.current !== destino) {
+        antesDeToque.current = destino
+        setInsercaoToque(destino)
+      }
+    }
+    el.addEventListener('touchmove', ler, { passive: true })
+    return () => el.removeEventListener('touchmove', ler)
+  }, [desktop, toque.taskId])
 
   const alternarFiltro = (f) =>
     setFiltros((s) => (s.includes(f) ? s.filter((x) => x !== f) : [...s, f]))
@@ -113,6 +235,9 @@ export default function Tarefas() {
     acoes.moverTarefa(arrasto.id, coluna, arrasto.antesDe)
     setArrasto(null)
   }
+
+  // Um cartão está na mão — por mouse no desktop ou por dedo no telefone.
+  const arrastando = Boolean(arrasto || toque.taskId)
 
   return (
     <div className="px-entra">
@@ -184,13 +309,38 @@ export default function Tarefas() {
             )}
           </div>
 
+          {/* BARRA DE ETAPAS — diz o nome, a quantidade e a POSIÇÃO no fluxo.
+              As setas entre os nomes são o que impede isto de virar outra barra
+              de filtros: A fazer → Em andamento → Concluído é uma sequência, e
+              o quadro embaixo se move na mesma direção. Sem caixa, sem borda:
+              só a etapa em foco recebe peso. */}
           {visao === 'quadro' && (
-            <Segmentos
-              className="mt-2"
-              valor={colunaMovel}
-              aoEscolher={setColunaMovel}
-              opcoes={COLUNAS.map((c) => ({ chave: c.estado, label: c.curto, contagem: porColuna(c.estado).length }))}
-            />
+            <div
+              role="tablist"
+              aria-label="Etapa do fluxo"
+              data-testid="board-stages"
+              className="no-scrollbar mt-3 flex items-center gap-1 overflow-x-auto"
+            >
+              {COLUNAS.map((c, i) => (
+                <div key={c.estado} className="flex flex-none items-center">
+                  {i > 0 && <ChevronRight size={13} className="mx-0.5 flex-none text-faint" aria-hidden="true" />}
+                  <button
+                    role="tab"
+                    aria-selected={i === etapa}
+                    onClick={() => irParaEtapa(i)}
+                    className={cx(
+                      'press flex min-h-[38px] items-center gap-1.5 rounded-control px-2.5 text-[13px] transition',
+                      i === etapa ? 'bg-accent-soft font-semibold text-accent-text' : 'text-muted',
+                    )}
+                  >
+                    {c.curto}
+                    <span className={cx('px-hora text-[12px]', i === etapa ? 'opacity-80' : 'text-faint')}>
+                      {porColuna(c.estado).length}
+                    </span>
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </>
       ) : (
@@ -285,26 +435,51 @@ export default function Tarefas() {
         </div>
       ) : (
         <>
-          {/* O seletor de estado já está no topo: aqui fica só a coluna. Uma
-              coluna por viewport continua sendo a leitura certa no telefone. */}
-          <div ref={pagerRef} className="mt-3">
-            <Coluna
-              {...COLUNAS.find((c) => c.estado === colunaMovel)}
-              semCabecalho
-              compacto
-              tarefas={porColuna(colunaMovel)}
-              arrastandoToque={toque.taskId}
-              alvoToque={toque.alvo}
-              arrasto={arrasto}
-              setArrasto={setArrasto}
-              aoSoltar={soltar}
-              aoAbrir={(t) => navegar(`/prototipo/tarefas/${t.id}`)}
-              aoMover={setMover}
-              aoAdicionar={() => setForm({ padroes: { estado: colunaMovel } })}
-            />
+          {/* O QUADRO NO TELEFONE.
+              As três colunas existem ao mesmo tempo; cada uma ocupa 90% da
+              largura útil e os 10% restantes mostram uma FRESTA da vizinha — o
+              bastante para dizer "há mais para o lado" sem virar uma segunda
+              coluna disputando a leitura. É o que devolve a sensação de QUADRO
+              que o seletor de estado tinha perdido: mover deixa de parecer
+              trocar um campo e volta a ser atravessar um espaço.
+
+              O encaixe (`snap`) sai de cena enquanto um cartão está na mão: com
+              ele ligado, o avanço de borda e o encaixe disputam o mesmo scroll e
+              o quadro treme entre duas colunas. */}
+          <div
+            ref={pagerRef}
+            data-testid="board-pager"
+            className={cx(
+              'no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto overscroll-x-contain px-4',
+              arrastando ? 'snap-none' : 'snap-x snap-mandatory',
+            )}
+          >
+            {COLUNAS.map((c, i) => (
+              <div
+                key={c.estado}
+                ref={(n) => (colunaRefs.current[i] = n)}
+                className="flex w-[92%] shrink-0 snap-center flex-col"
+              >
+                <Coluna
+                  {...c}
+                  semCabecalho
+                  compacto
+                  tarefas={porColuna(c.estado)}
+                  arrastandoToque={toque.taskId}
+                  alvoToque={toque.alvo}
+                  insercaoToque={toque.alvo === c.estado ? insercaoToque : null}
+                  arrasto={arrasto}
+                  setArrasto={setArrasto}
+                  aoSoltar={soltar}
+                  aoAbrir={(t) => navegar(`/prototipo/tarefas/${t.id}`)}
+                  aoMover={setMover}
+                  aoAdicionar={() => setForm({ padroes: { estado: c.estado } })}
+                />
+              </div>
+            ))}
           </div>
           <p className="mt-2.5 text-[11.5px] text-faint">
-            Segure para arrastar entre estados.
+            Deslize para mudar de coluna. Segure um cartão para arrastá-lo entre elas.
           </p>
         </>
       )}
@@ -316,7 +491,12 @@ export default function Tarefas() {
         padroes={form?.padroes || {}}
       />
 
-      <MoverPara tarefa={mover} aoFechar={() => setMover(null)} />
+      <MoverPara
+        tarefa={mover}
+        aoFechar={() => setMover(null)}
+        aoAbrir={(t) => navegar(`/prototipo/tarefas/${t.id}`)}
+        aoEditar={(t) => setForm({ tarefa: t })}
+      />
     </div>
   )
 }
@@ -325,7 +505,7 @@ export default function Tarefas() {
 function Coluna({
   titulo, estado: col, tarefas, semCabecalho, compacto,
   arrasto, setArrasto, aoSoltar, aoAbrir, aoMover, aoAdicionar,
-  arrastandoToque, alvoToque,
+  arrastandoToque, alvoToque, insercaoToque,
 }) {
   const alvo = (arrasto && arrasto.coluna === col) || alvoToque === col
 
@@ -366,13 +546,17 @@ function Coluna({
       <div className="flex-1 space-y-1">
         {tarefas.length === 0 && (
           <p className="px-1 py-5 text-center text-[12.5px] text-faint">
-            {arrasto ? 'Solte aqui' : 'Nada aqui'}
+            {arrasto || arrastandoToque ? 'Solte aqui' : 'Nada aqui'}
           </p>
         )}
 
         {tarefas.map((t) => (
           <div key={t.id} onDragOver={(e) => sobre(e, t.id)}>
-            {arrasto?.coluna === col && arrasto?.antesDe === t.id && <div className="px-insercao" />}
+            {/* A MESMA linha de inserção do mouse serve ao dedo: onde o cartão
+                vai cair, dito uma vez só. */}
+            {((arrasto?.coluna === col && arrasto?.antesDe === t.id) || insercaoToque === t.id) && (
+              <div className="px-insercao" />
+            )}
             <CartaoTarefa
               t={t}
               compacto={compacto}
@@ -389,9 +573,10 @@ function Coluna({
             ser facil de acertar, inclusive numa coluna vazia. */}
         <div
           onDragOver={(e) => sobre(e, null)}
-          className={cx('rounded-[10px] transition-all', arrasto ? 'h-9' : 'h-1')}
+          className={cx('rounded-[10px] transition-all', arrasto || arrastandoToque ? 'h-9' : 'h-1')}
         >
-          {arrasto?.coluna === col && !arrasto?.antesDe && <div className="px-insercao" />}
+          {((arrasto?.coluna === col && !arrasto?.antesDe) ||
+            (alvoToque === col && !insercaoToque && arrastandoToque)) && <div className="px-insercao" />}
         </div>
       </div>
 
@@ -535,23 +720,57 @@ function CartaoCompleto({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna })
 
 
 // A versão do telefone. Mesmo objeto, mesma pega, menos ruído.
+//
+// UX1.2.2 — UMA LINHA DE META, E SÓ UMA.
+//
+// O cartão tinha até três camadas: quando + prioridade + rosto, e embaixo um
+// selo de exceção. Quatro informações simultâneas num objeto de 5cm é uma
+// ficha, não um cartão.
+//
+// A regra agora é: o que muda a decisão AGORA ganha a linha; o resto está no
+// detalhe, a um toque. Quando a tarefa está travada — bloqueada, devolvida,
+// esperando aceite — é ISSO que decide, e a linha é dela. Quando não está, a
+// linha é o quando, com prioridade e responsável só se acrescentarem algo.
+//
+// Sem chips: texto corrido separado por "·". Chip é para estado selecionável,
+// não para enfeitar metadado.
 function CartaoCompacto({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna }) {
   const { estado } = useProto()
   const acoes = useAcoes()
   const feito = t.estado === ESTADO.FEITO
   const atrasada = t.prazo && t.prazo < estado.hoje && !feito
   const meu = (t.responsavelId || 'p-tarsis') === 'p-tarsis'
+  const pessoa = estado.pessoas?.find((p) => p.id === t.responsavelId)
 
-  // A EXCEÇÃO — e só ela ganha a terceira linha.
-  // O motivo do bloqueio inteiro não cabe num selo de cartão — e não precisa:
-  // o que o cartão tem de dizer é QUE está travada. O porquê está no detalhe.
+  // A EXCEÇÃO manda na linha quando existe.
   const excecao = t.bloqueio
-    ? { texto: 'bloqueada', classe: 'px-selo-bloqueada' }
+    ? { texto: `Bloqueada · ${t.bloqueio}`, tom: 'text-danger' }
     : t.responsabilidade === RESPONSABILIDADE.DEVOLVIDA
-      ? { texto: 'devolvida', classe: 'px-selo-devolvida' }
+      ? { texto: 'Devolvida · precisa de decisão', tom: 'text-danger' }
       : t.responsabilidade === RESPONSABILIDADE.AGUARDANDO
-        ? { texto: 'aguardando aceite', classe: 'px-selo-aguardando' }
+        ? { texto: `Aguardando aceite${pessoa && !pessoa.eu ? ` · ${pessoa.nome}` : ''}`, tom: 'text-warning' }
         : null
+
+  // Atraso também é condição que pede decisão — entra com o mesmo peso.
+  const linha = excecao || (atrasada
+    ? { texto: `Atrasada · ${rotuloDeData(t.prazo, estado.hoje)}`, tom: 'text-warning' }
+    : null)
+
+  // Sem exceção: quando, e só o que ajuda a decidir junto dele.
+  const quando = atrasada
+    ? null
+    : t.reserva
+      ? `${rotuloDeData(t.reserva.data, estado.hoje)} · ${t.reserva.inicio}`
+      : t.planejadaPara
+        ? rotuloDeData(t.planejadaPara, estado.hoje)
+        : t.prazo
+          ? `Prazo ${rotuloDeData(t.prazo, estado.hoje)}`
+          : null
+  const partes = [
+    quando,
+    t.prioridade === 'alta' && !atrasada ? 'Alta' : null,
+    !meu && pessoa ? pessoa.nome : null,
+  ].filter(Boolean)
 
   return (
     <div
@@ -577,28 +796,18 @@ function CartaoCompacto({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna })
           <span className={cx('block text-[14px] font-medium leading-[1.35]', feito && 'line-through')}>
             {t.titulo}
           </span>
-
-          <span className="px-motivo mt-1 flex flex-wrap items-center gap-x-2">
-            {atrasada ? (
-              <span className="font-medium text-warning">atrasada · {rotuloDeData(t.prazo, estado.hoje)}</span>
-            ) : t.reserva ? (
-              <span className="px-hora inline-flex items-center gap-1 font-medium text-accent-text">
-                <CalendarClock size={11} />
-                {rotuloDeData(t.reserva.data, estado.hoje)} {t.reserva.inicio}
-              </span>
-            ) : t.planejadaPara ? (
-              <span>{rotuloDeData(t.planejadaPara, estado.hoje)}</span>
-            ) : t.prazo ? (
-              <span>prazo {rotuloDeData(t.prazo, estado.hoje)}</span>
-            ) : (
-              <span className="text-faint">sem data</span>
-            )}
-            {t.prioridade === 'alta' && <span className="text-danger">alta</span>}
-            {!meu && <Pessoa id={t.responsavelId} />}
-          </span>
-
-          {excecao && (
-            <span className={cx('px-selo mt-1.5 max-w-full truncate', excecao.classe)}>{excecao.texto}</span>
+          {/* A cor vem por classe utilitária, e por isso a linha NÃO usa
+              `px-motivo` quando há tom: `px-motivo` define `color` e venceria a
+              utilitária por ordem de folha, apagando justamente o destaque. */}
+          {(linha || partes.length > 0) && (
+            <span
+              className={cx(
+                'mt-1 block truncate text-[12px]',
+                linha ? `font-medium ${linha.tom}` : 'px-motivo',
+              )}
+            >
+              {linha ? linha.texto : partes.join(' · ')}
+            </span>
           )}
         </button>
         <button
@@ -614,16 +823,24 @@ function CartaoCompacto({ t, arrastando, aoAbrir, aoMover, setArrasto, coluna })
   )
 }
 
-// "Mover para..." — no toque e a via principal, nao o plano B.
+// ---------------------------------------------------------------------------
+// AÇÕES DO CARTÃO — o "..." do telefone.
 //
-// A folha reune as duas acoes rapidas do cartao, e elas ficam em blocos
-// separados de proposito: MOVER e execucao, DELEGAR e responsabilidade. Junta-
-// las numa lista so faria "Concluído" e "Rubens" parecerem a mesma especie de
-// escolha.
-function MoverPara({ tarefa, aoFechar }) {
+// MOVER continua sendo a via explícita ao gesto: o arrasto nunca pode ser a
+// única maneira. Ele abre primeiro e a coluna atual vem marcada.
+//
+// O resto do que se faz com uma tarefa — abrir, editar, delegar, reservar
+// horário, excluir — mora aqui em vez de na superfície do cartão. São ações que
+// dependem do contexto e que ninguém procura no meio de uma lista; tê-las
+// permanentemente à vista era metade do ruído.
+// ---------------------------------------------------------------------------
+function MoverPara({ tarefa, aoFechar, aoAbrir, aoEditar }) {
   const acoes = useAcoes()
+  const { estado } = useProto()
   const [delegando, setDelegando] = useState(false)
+  const [confirmando, setConfirmando] = useState(false)
   if (!tarefa) return null
+
   if (delegando) {
     return (
       <EscolherPessoa
@@ -634,6 +851,25 @@ function MoverPara({ tarefa, aoFechar }) {
       />
     )
   }
+
+  const pessoa = estado.pessoas?.find((p) => p.id === tarefa.responsavelId)
+  const secundarias = [
+    { rotulo: 'Abrir tarefa', fazer: () => aoAbrir?.(tarefa) },
+    { rotulo: 'Editar', fazer: () => aoEditar?.(tarefa) },
+    {
+      rotulo: pessoa && !pessoa.eu ? `Trocar responsável (${pessoa.nome})` : 'Delegar…',
+      // Esta NÃO fecha a folha: ela troca o conteúdo dela pelo seletor de
+      // pessoa. Fechar antes desmontaria o componente e o seletor nunca abriria.
+      manterAberta: true,
+      fazer: () => setDelegando(true),
+    },
+    tarefa.planejadaPara && !tarefa.reserva
+      ? { rotulo: 'Reservar horário', fazer: () => acoes.reservarHorario(tarefa.id, tarefa.planejadaPara, '09:00', '10:00') }
+      : tarefa.reserva
+        ? { rotulo: 'Retirar horário reservado', fazer: () => acoes.retirarReserva(tarefa.id) }
+        : null,
+  ].filter(Boolean)
+
   return (
     <Folha aberta aoFechar={aoFechar} titulo="Mover para" subtitulo={tarefa.titulo} largura="max-w-[420px]">
       <div className="space-y-1.5">
@@ -657,16 +893,33 @@ function MoverPara({ tarefa, aoFechar }) {
         })}
       </div>
 
-      <div className="mt-4 border-t border-hairline pt-4">
-        <p className="px-secao mb-2">Responsabilidade</p>
-        <button
-          type="button"
-          onClick={() => setDelegando(true)}
-          className="press flex w-full items-center gap-3 rounded-row border border-hairline px-4 py-3 text-left text-[14.5px] transition hover:border-accent hover:text-accent-text"
-        >
-          <Pessoa id={tarefa.responsavelId} />
-          <span className="flex-1">Delegar…</span>
-        </button>
+      <div className="mt-4 space-y-1 border-t border-hairline pt-4">
+        {secundarias.map((a) => (
+          <button
+            key={a.rotulo}
+            type="button"
+            onClick={() => { if (!a.manterAberta) aoFechar(); a.fazer() }}
+            className="press flex w-full items-center rounded-row px-4 py-2.5 text-left text-[14px] text-secondary transition hover:bg-surface-2"
+          >
+            {a.rotulo}
+          </button>
+        ))}
+        {confirmando ? (
+          <div className="flex items-center gap-2 px-1 pt-1">
+            <Botao variante="perigo" onClick={() => { acoes.excluirTarefa(tarefa.id); aoFechar() }}>
+              Excluir mesmo
+            </Botao>
+            <Botao variante="fantasma" onClick={() => setConfirmando(false)}>Cancelar</Botao>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmando(true)}
+            className="press flex w-full items-center rounded-row px-4 py-2.5 text-left text-[14px] text-danger transition hover:bg-danger/5"
+          >
+            Excluir
+          </button>
+        )}
       </div>
     </Folha>
   )
