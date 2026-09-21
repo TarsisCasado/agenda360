@@ -74,7 +74,7 @@ function precisaBuildar() {
   let maisNovo = 0
   const varrer = (dir) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (e.name === '__smoke__') continue
+      if (e.name === '__smoke__' || e.name === '__baseline__') continue
       const full = path.join(dir, e.name)
       if (e.isDirectory()) varrer(full)
       else maisNovo = Math.max(maisNovo, fs.statSync(full).mtimeMs)
