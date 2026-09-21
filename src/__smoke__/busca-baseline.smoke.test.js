@@ -33,7 +33,10 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 // meses, e e pouco o bastante para caber num teste.
 const QUANTAS_TAREFAS = 200
 const QUANTOS_LINKS = 40
-const QUANTAS_NOTAS = 60
+// 56 geradas + 5 nomeadas = 61 notas NESTE workspace, exatamente o mesmo
+// volume da baseline do C3 (202 tarefas / 41 links / 61 notas). A comparacao
+// antes x depois so vale com o volume identico.
+const QUANTAS_NOTAS = 56
 
 const SEMENTE = `((n, nl, nn) => {
   const KEY = 'agenda360.db.v2'
@@ -57,6 +60,21 @@ const SEMENTE = `((n, nl, nn) => {
   db.inbox_items = [
     { id: 'qa-nota', workspace_id: ws, created_by: uid, type: 'note', status: 'inbox', origin: 'manual',
       title: 'Padrao de preparacao', content: 'checklist unico assinado por quem entrega os seminovos',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 'qa-nota-acento', workspace_id: ws, created_by: uid, type: 'note', status: 'inbox', origin: 'manual',
+      title: 'Garantia estendida', content: 'argumento de fechamento na proposta, nao na venda',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 'qa-nota-sem-titulo', workspace_id: ws, created_by: uid, type: 'note', status: 'inbox', origin: 'manual',
+      title: '', content: 'primeira linha vira titulo quando nao ha titulo',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 'qa-lista', workspace_id: ws, created_by: uid, type: 'checklist', status: 'inbox', origin: 'manual',
+      title: 'Lista de conferencia do patio', content: 'pneus, documentos, chave reserva',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 'qa-nota-arquivada', workspace_id: ws, created_by: uid, type: 'note', status: 'archived', origin: 'manual',
+      title: 'Politica antiga de desconto', content: 'valores que valiam ate marco',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 'qa-nota-outro-ws', workspace_id: 'outro-workspace-0000', created_by: uid, type: 'note', status: 'inbox',
+      origin: 'manual', title: 'Segredo do outro espaco', content: 'nao pode vazar para a busca deste workspace',
       created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
     ...Array.from({ length: nn }, (_, i) => ({ id: 'qa-nota-' + i, workspace_id: ws, created_by: uid, type: 'note',
       status: 'inbox', origin: 'manual', title: 'Nota ' + i, content: 'conteudo ' + i,
@@ -172,7 +190,7 @@ afterAll(async () => {
   // A medida vai para o relatorio do checkpoint; sem isso ela morre no log.
   if (Object.keys(medidas).length) {
     console.log('\n[UX1.4] BASELINE DE PERFORMANCE DA BUSCA', JSON.stringify({
-      volume: { tarefas: QUANTAS_TAREFAS + 2, links: QUANTOS_LINKS + 1, notas: QUANTAS_NOTAS + 1 },
+      volume: { tarefas: QUANTAS_TAREFAS + 2, links: QUANTOS_LINKS + 1, notas: QUANTAS_NOTAS + 5 },
       ...medidas,
     }, null, 2))
   }
@@ -215,13 +233,33 @@ describe('[BASELINE] Busca atual — o que ela encontra', () => {
     await fecharPaleta()
   }, 60000)
 
-  it('[MUDA:C1] NAO encontra notas — `inbox_items` esta fora da busca — depois: notas passam a ser encontradas por titulo e corpo', async () => {
+  // -------------------------------------------------------------------------
+  // TRANSICAO DE CONTRATO — UX1.4 (C3) -> UX1.5 (C1).
+  //
+  // Ate o commit anterior este teste existia com o rotulo [MUDA:C1] e a
+  // asserção INVERTIDA. Ele dizia:
+  //
+  //   it('[MUDA:C1] NAO encontra notas — `inbox_items` esta fora da busca
+  //       — depois: notas passam a ser encontradas por titulo e corpo', ...)
+  //     expect(porTitulo).not.toMatch(/Padrao de preparacao/i)
+  //     expect(porCorpo).not.toMatch(/Padrao de preparacao/i)
+  //
+  // O C1 fez exatamente o que aquele rotulo anunciava, entao o teste NAO foi
+  // apagado: foi virado do avesso, com o `not` removido, e promovido de
+  // [MUDA:C1] a [BASELINE] — de comportamento com data de validade a
+  // comportamento que passa a ser preservado daqui para a frente.
+  // -------------------------------------------------------------------------
+  it('[BASELINE] encontra a nota pelo TITULO (contrato novo do C1)', async () => {
     await abrirPaleta()
-    const porTitulo = achados(await buscar('Padrao de preparacao'))
-    expect(porTitulo.join(' | ')).not.toMatch(/Padrao de preparacao/i)
+    const r = achados(await buscar('Padrao de preparacao'))
+    expect(r.join(' | ')).toMatch(/Padrao de preparacao/i)
+    await fecharPaleta()
+  }, 60000)
 
-    const porCorpo = achados(await buscar('checklist unico assinado'))
-    expect(porCorpo.join(' | ')).not.toMatch(/Padrao de preparacao/i)
+  it('[BASELINE] encontra a nota pelo CORPO (contrato novo do C1)', async () => {
+    await abrirPaleta()
+    const r = achados(await buscar('checklist unico assinado'))
+    expect(r.join(' | ')).toMatch(/Padrao de preparacao/i)
     await fecharPaleta()
   }, 60000)
 
@@ -242,6 +280,168 @@ describe('[BASELINE] Busca atual — o que ela encontra', () => {
   }, 60000)
 })
 
+describe('[C1] Busca encontra o que foi guardado', () => {
+  it('[C1] nota SEM titulo e achada pela primeira linha do corpo', async () => {
+    await abrirPaleta()
+    const r = achados(await buscar('primeira linha vira titulo'))
+    expect(r.join(' | ')).toMatch(/primeira linha vira titulo/i)
+    await fecharPaleta()
+  }, 60000)
+
+  it('[C1] o tipo real do item e respeitado: checklist tambem e achado', async () => {
+    await abrirPaleta()
+    const r = achados(await buscar('conferencia do patio'))
+    expect(r.join(' | ')).toMatch(/Lista de conferencia do patio/i)
+    await fecharPaleta()
+  }, 60000)
+
+  it('[C1] nota arquivada continua recuperavel — guardar nao e esconder', async () => {
+    await abrirPaleta()
+    const r = achados(await buscar('Politica antiga'))
+    expect(r.join(' | ')).toMatch(/Politica antiga de desconto/i)
+    await fecharPaleta()
+  }, 60000)
+
+  it('[C1] uma busca traz tipos DIFERENTES ao mesmo tempo, cada um no seu grupo', async () => {
+    await abrirPaleta()
+    const r = await buscar('seminovos')
+    const texto = r.join(' | ')
+    expect(texto).toMatch(/Conferir documentacao dos seminovos/i) // tarefa
+    expect(texto).toMatch(/Relatorio de mercado/i) // link (pela URL)
+    expect(texto).toMatch(/Padrao de preparacao/i) // nota (pelo corpo)
+    await fecharPaleta()
+  }, 60000)
+
+  it('[C1] a natureza do item aparece em palavra humana, sem jargao interno', async () => {
+    await abrirPaleta()
+    await buscar('Padrao de preparacao')
+    const textoInteiro = await page.evaluate(() => {
+      const raiz = document.querySelector('input[placeholder*="Buscar"]')?.closest('div[class*="fixed"]')
+      return raiz ? raiz.innerText : ''
+    })
+    expect(textoInteiro).toMatch(/Guardado/i)
+    // O usuario nunca ve o nome da tabela nem os estados internos.
+    expect(textoInteiro).not.toMatch(/inbox_items|to_think|processed|archived/i)
+    await fecharPaleta()
+  }, 60000)
+
+  it('[C1] acentuacao segue a regra que ja existia: acento nao atrapalha', async () => {
+    await abrirPaleta()
+    // "preparacao" (sem acento) acha a nota; a normalizacao e a MESMA que ja
+    // valia para tarefas e links, nao uma regra nova.
+    const semAcento = achados(await buscar('preparacao'))
+    expect(semAcento.join(' | ')).toMatch(/Padrao de preparacao/i)
+    await fecharPaleta()
+  }, 60000)
+
+  it('[C1] termo inexistente nao inventa resultado de nota', async () => {
+    await abrirPaleta()
+    const r = achados(await buscar('zzzznaoexistezzzz'))
+    expect(r.join(' | ')).not.toMatch(/Padrao de preparacao|Lista de conferencia/i)
+    await fecharPaleta()
+  }, 60000)
+
+  it('[C1] ISOLAMENTO: nota de outro workspace nao aparece', async () => {
+    await abrirPaleta()
+    const r = achados(await buscar('Segredo do outro espaco'))
+    expect(r.join(' | ')).not.toMatch(/Segredo do outro espaco/i)
+    await fecharPaleta()
+  }, 60000)
+
+  it('[C1] selecionar o resultado abre a nota CERTA', async () => {
+    await abrirPaleta()
+    await buscar('Padrao de preparacao')
+    await page.getByText('Padrao de preparacao', { exact: false }).last().click()
+    await page.waitForTimeout(1200)
+    expect(page.url()).toContain('/ideias/qa-nota')
+    // ...e volta, sem deixar nada pelo caminho.
+    await page.goBack()
+    await page.waitForTimeout(800)
+  }, 60000)
+
+  it('[C1] a ordem de quem ja estava NAO mudou: Criar, Navegar, Tarefas, Links, e so entao Guardado', async () => {
+    await abrirPaleta()
+    const r = await buscar('seminovos')
+    const iTarefa = r.findIndex((x) => /Conferir documentacao dos seminovos/i.test(x))
+    const iLink = r.findIndex((x) => /Relatorio de mercado/i.test(x))
+    const iNota = r.findIndex((x) => /Padrao de preparacao/i.test(x))
+    expect(r[0]).toMatch(/Criar tarefa/i)
+    expect(iTarefa).toBeGreaterThan(0)
+    expect(iLink).toBeGreaterThan(iTarefa)
+    expect(iNota).toBeGreaterThan(iLink) // o grupo novo entra por ultimo
+    await fecharPaleta()
+  }, 60000)
+})
+
+describe('[C1] Buscar e LEITURA PURA', () => {
+  it('[C1] buscar e abrir nao alteram byte nenhum do banco local', async () => {
+    const antes = await page.evaluate(() => localStorage.getItem('agenda360.db.v2'))
+
+    await abrirPaleta()
+    await buscar('seminovos')
+    await buscar('Padrao de preparacao')
+    await page.getByText('Padrao de preparacao', { exact: false }).last().click()
+    await page.waitForTimeout(1500)
+    await page.goBack()
+    await page.waitForTimeout(1000)
+
+    const depois = await page.evaluate(() => localStorage.getItem('agenda360.db.v2'))
+
+    // Uma unica asserção cobre tudo que o briefing pediu separadamente: se o
+    // banco e identico byte a byte, entao nenhum inbox_item mudou, nenhuma
+    // tarefa foi criada, nenhum vinculo foi gravado, nenhum status virou
+    // "processado" e nada foi arquivado.
+    expect(depois).toBe(antes)
+  }, 90000)
+
+  it('[C1] nenhuma chamada de IA acontece durante a busca', async () => {
+    const chamadas = []
+    const ouvir = (req) => {
+      const u = req.url()
+      if (/ai-interpret|functions\/v1|generativelanguage|googleapis/i.test(u)) chamadas.push(u)
+    }
+    page.on('request', ouvir)
+
+    await abrirPaleta()
+    await buscar('Padrao de preparacao')
+    await buscar('seminovos')
+    await fecharPaleta()
+
+    page.off('request', ouvir)
+    expect(chamadas).toEqual([])
+  }, 60000)
+
+  it('[C1] busca com lista vazia de notas nao quebra a paleta', async () => {
+    // Esvazia SO as notas, em memoria, e recarrega: as outras fontes seguem.
+    await page.evaluate(() => {
+      const KEY = 'agenda360.db.v2'
+      const db = JSON.parse(localStorage.getItem(KEY))
+      db.__inbox_backup = db.inbox_items
+      db.inbox_items = []
+      localStorage.setItem(KEY, JSON.stringify(db))
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1200)
+
+    await abrirPaleta()
+    const r = await buscar('seminovos')
+    expect(r.join(' | ')).toMatch(/Conferir documentacao dos seminovos/i) // tarefa continua
+    expect(achados(r).join(' | ')).not.toMatch(/Padrao de preparacao/i)
+    await fecharPaleta()
+
+    // Devolve as notas para os proximos testes deste arquivo.
+    await page.evaluate(() => {
+      const KEY = 'agenda360.db.v2'
+      const db = JSON.parse(localStorage.getItem(KEY))
+      db.inbox_items = db.__inbox_backup || []
+      delete db.__inbox_backup
+      localStorage.setItem(KEY, JSON.stringify(db))
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1200)
+  }, 90000)
+})
+
 describe('[BASELINE] Busca atual — performance', () => {
   it('[BASELINE] mede abertura e filtragem com volume declarado', async () => {
     // METODOLOGIA, para o C1 repetir igual:
@@ -250,11 +450,15 @@ describe('[BASELINE] Busca atual — performance', () => {
     //   . ABERTURA  = do Ctrl+K ate o campo de busca estar visivel;
     //   . FILTRAGEM = de digitar o termo ate a lista refletir o termo,
     //     medida com requestAnimationFrame dentro da pagina;
-    //   . 5 repeticoes; reportamos mediana e pior caso, nao media.
+    //   . 15 repeticoes. O C3 usava 5 e isso se mostrou pouco: a filtragem
+    //     tem distribuicao BIMODAL (ora ~4ms, ora ~50ms), e com 5 amostras a
+    //     mediana pulava de 5 para 46 entre execucoes do MESMO commit.
+    //     Reportamos mediana, p90, minimo e maximo — nunca media.
+    const REPETICOES = 15
     const aberturas = []
     const filtragens = []
 
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < REPETICOES; i += 1) {
       // Garante a paleta FECHADA antes de medir a abertura: Ctrl+K alterna.
       await page.keyboard.press('Escape')
       await page.waitForTimeout(250)
@@ -280,9 +484,18 @@ describe('[BASELINE] Busca atual — performance', () => {
       await page.waitForTimeout(250)
     }
 
-    const mediana = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]
-    medidas.abertura_ms = { mediana: mediana(aberturas), pior: Math.max(...aberturas), amostras: aberturas }
-    medidas.filtragem_ms = { mediana: mediana(filtragens), pior: Math.max(...filtragens), amostras: filtragens }
+    const ordenado = (a) => [...a].sort((x, y) => x - y)
+    const mediana = (a) => ordenado(a)[Math.floor(a.length / 2)]
+    const p90 = (a) => ordenado(a)[Math.min(a.length - 1, Math.ceil(a.length * 0.9) - 1)]
+    const resumo = (a) => ({
+      mediana: mediana(a),
+      p90: p90(a),
+      min: Math.min(...a),
+      max: Math.max(...a),
+      amostras: ordenado(a),
+    })
+    medidas.abertura_ms = resumo(aberturas)
+    medidas.filtragem_ms = resumo(filtragens)
 
     // Sem meta artificial: o teste so falha se a busca ficar inutilizavel.
     // O numero que importa e o registrado acima, para comparacao no C1.
