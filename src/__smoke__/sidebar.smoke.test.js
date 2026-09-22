@@ -174,9 +174,18 @@ describe('a preferencia sobrevive', () => {
 })
 
 describe('navegar com a barra recolhida', () => {
-  it('7. os NOVE destinos continuam la, e nenhum rotulo ficou pela metade', async () => {
+  // TRANSICAO DE CONTRATO — C2 (UX1.5).
+  // Antes: `expect(await links.count()).toBe(9)`, e o titulo dizia "os NOVE
+  // destinos". Eram nove porque a lista era "4 primarios + 5 em Mais", com
+  // Caixa de entrada e Central de links entre eles. O C2 reorganizou a barra em
+  // torno de QUATRO destinos + capacidades agrupadas por papel: Caixa e Links
+  // sairam da barra (viraram caminho dentro de Memoria) e Ideias virou Memoria.
+  // As rotas das tres continuam existindo — o teste 9 e o smoke de rotas
+  // provam isso. O que mudou foi o MENU, nao o alcance.
+  it('7. os SETE itens da barra continuam la, e nenhum rotulo ficou pela metade', async () => {
     const links = barra(page).locator('a')
-    expect(await links.count()).toBe(9)
+    // 4 destinos + Copiloto + Relatorios + Configuracoes
+    expect(await links.count()).toBe(7)
     // Recolhida, nao ha texto visivel dentro da barra alem dos baloes ocultos.
     const visivel = await barra(page).evaluate((el) => {
       const t = []
@@ -190,12 +199,15 @@ describe('navegar com a barra recolhida', () => {
     expect(visivel, 'sobrou rotulo cru dentro do rail').toEqual([])
   }, 90_000)
 
+  // TRANSICAO DE CONTRATO — C2. Antes navegava para `/ideias` e esperava o
+  // destino ativo "Ideias". `/ideias` continua existindo e abrindo, mas deixou
+  // de ser um DESTINO da barra: o destino do primeiro nivel agora e Memoria.
   it('8. o destino ativo continua percebivel', async () => {
-    await ir(page, '/ideias')
+    await ir(page, '/memoria')
     const ativos = await barra(page).locator('a.bg-surface-2').count()
     expect(ativos, 'exatamente um destino ativo').toBe(1)
     const rotulo = await barra(page).locator('a.bg-surface-2').getAttribute('aria-label')
-    expect(rotulo).toBe('Ideias')
+    expect(rotulo).toBe('Memória')
   }, 90_000)
 
   it('9. todo destino continua clicavel e leva ao lugar certo', async () => {
@@ -209,11 +221,12 @@ describe('navegar com a barra recolhida', () => {
 
   it('10. o rotulo aparece por MOUSE e por TECLADO — nao e title do navegador', async () => {
     await ir(page, '/tarefas')
-    const link = barra(page).getByRole('link', { name: 'Ideias', exact: true })
+    // TRANSICAO DE CONTRATO — C2: o destino de exemplo era "Ideias".
+    const link = barra(page).getByRole('link', { name: 'Memória', exact: true })
     // nao delegamos ao navegador: `title` nunca chega ao teclado
     expect(await link.getAttribute('title')).toBeNull()
     const balao = link.locator('.rail-tip')
-    expect(await balao.innerText()).toBe('Ideias')
+    expect(await balao.innerText()).toBe('Memória')
 
     const opacidade = () => balao.evaluate((el) => getComputedStyle(el).opacity)
     expect(await opacidade(), 'balão visível sem interação').toBe('0')

@@ -27,14 +27,24 @@ import { chromium } from 'playwright'
 // ---------------------------------------------------------------------------
 // Destinos do CP5.2: 4 primarios + 5 secundarios. "Semana" e "Mes" sairam
 // daqui de proposito — deixaram de ser destinos e viraram visoes.
+//
+// TRANSICAO DE CONTRATO — C2 (UX1.5). A lista antiga assumia que TODA tela
+// tinha um link no menu, porque era assim: "Ideias", "Caixa de entrada" e
+// "Central de links" eram destinos da barra. O C2 reorganizou a navegacao em
+// quatro destinos e as tres passaram a ser alcancadas por Memoria.
+//
+// O que este smoke precisa continuar provando NAO mudou: toda superficie
+// renderiza sem ErrorBoundary. Entao as telas que sairam do menu ganharam
+// `url` e sao abertas por endereco — exatamente como um bookmark antigo faria.
 const ROTAS = [
   { nome: 'Hoje', conteudo: /Bom dia|Boa tarde|Boa noite/i, primario: true },
   { nome: 'Agenda', conteudo: /Dia|Semana|Mês/, primario: true },
   { nome: 'Tarefas', conteudo: /Fluxo|Semana/, primario: true },
-  { nome: 'Ideias', conteudo: /Ideias/i, primario: true },
+  { nome: 'Memória', conteudo: /Mem[óo]ria/i, primario: true },
   { nome: 'Copiloto', conteudo: /Copiloto/i },
-  { nome: 'Caixa de entrada', conteudo: /Caixa de Entrada/i },
-  { nome: 'Central de links', conteudo: /[Ll]inks/ },
+  { nome: 'Ideias', conteudo: /Ideias/i, url: '/ideias' },
+  { nome: 'Caixa de entrada', conteudo: /Caixa de Entrada/i, url: '/caixa' },
+  { nome: 'Central de links', conteudo: /[Ll]inks/, url: '/links' },
   { nome: 'Relatórios', conteudo: /Relatórios/i },
   { nome: 'Configurações', conteudo: /Configura/i },
 ]
@@ -137,8 +147,10 @@ function reDe(nome) {
   return new RegExp(`^${nome.replace('Calendário', 'Calend.rio').replace('Configurações', 'Configura..es')}$`, 'i')
 }
 
-// Navega pelo MENU (como o usuario) e devolve o diagnostico da tela.
-async function abrir(nome, alvo = page) {
+// Navega pelo MENU (como o usuario) e devolve o diagnostico da tela. Quando a
+// tela nao tem mais link no menu (C2), navega pelo endereco — que e como um
+// bookmark salvo chega la.
+async function abrir(nome, alvo = page, url = null) {
   const erros = []
   const onErr = (e) => erros.push(`exceção: ${(e.message || e).toString().slice(0, 160)}`)
   const on404 = (r) => { if (/\/assets\/.*\.(js|css)$/.test(r.url()) && r.status() >= 400) erros.push(`asset ${r.status()}: ${r.url().split('/').pop()}`) }
@@ -147,6 +159,7 @@ async function abrir(nome, alvo = page) {
   try {
     const link = alvo.locator('a').filter({ hasText: reDe(nome) })
     if (await link.count()) await link.first().click({ timeout: 8000 })
+    else if (url) await alvo.goto(`http://127.0.0.1:${porta}${url}`, { waitUntil: 'domcontentloaded' })
     await alvo.waitForTimeout(1200)
     const texto = await alvo.locator('body').innerText()
     return { boundary: BOUNDARY.test(texto), erros, texto }
@@ -204,8 +217,8 @@ afterAll(async () => {
 })
 
 describe('smoke — todas as superfícies renderizam', () => {
-  it.each(ROTAS)('$nome abre sem ErrorBoundary e com conteúdo próprio', async ({ nome, conteudo }) => {
-    const r = await abrir(nome)
+  it.each(ROTAS)('$nome abre sem ErrorBoundary e com conteúdo próprio', async ({ nome, conteudo, url }) => {
+    const r = await abrir(nome, page, url)
     expect(r.erros, `${nome}: ${r.erros.join(' / ')}`).toEqual([])
     expect(r.boundary, `${nome} caiu no ErrorBoundary`).toBe(false)
     expect(r.texto).toMatch(conteudo)
@@ -273,9 +286,15 @@ describe('smoke — navegação mobile', () => {
       await mob.locator('header button[aria-label="Conta"]').first().click()
       await mob.waitForTimeout(500)
       const menu = await mob.locator('body').innerText()
-      for (const nome of ['Copiloto', 'Caixa de entrada', 'Relatórios', 'Configurações']) {
+      // TRANSICAO DE CONTRATO — C2: "Caixa de entrada" saiu da lista
+      // secundaria porque virou caminho dentro de Memoria, que e um dos quatro
+      // destinos da barra inferior. O que o menu pessoal precisa continuar
+      // oferecendo e o que NAO cabe na barra inferior.
+      for (const nome of ['Copiloto', 'Relatórios', 'Configurações']) {
         expect(menu, `"${nome}" não está no menu secundário do mobile`).toContain(nome)
       }
+      // ...e Memoria, que substituiu Ideias, esta na barra inferior.
+      expect(barra.itens.some((i) => /Mem[óo]ria/i.test(i.rotulo))).toBe(true)
     } finally {
       await ctxM.close()
     }
@@ -309,8 +328,8 @@ describe('smoke — a aba aberta sobrevive a um deploy novo', () => {
       await aba.waitForTimeout(2500)
 
       const quebradas = []
-      for (const { nome, conteudo } of ROTAS) {
-        let r = await abrir(nome, aba)
+      for (const { nome, conteudo, url } of ROTAS) {
+        let r = await abrir(nome, aba, url)
         // Recuperar-se de um chunk que sumiu custa UM reload, que devolve a aba
         // para "Hoje". Nesse caso navegamos de novo — e ai tem de funcionar.
         if (!r.boundary && !conteudo.test(r.texto)) {

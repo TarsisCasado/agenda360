@@ -17,6 +17,7 @@ import Today from './pages/Today'
 // pedido nao existe mais (aba aberta durante um deploy). Ver lib/lazyRoute.js.
 const Tasks = lazyRoute(() => import('./pages/Tasks'))
 const Ideas = lazyRoute(() => import('./pages/Ideas'))
+const Memoria = lazyRoute(() => import('./pages/Memoria'))
 const IdeaEditor = lazyRoute(() => import('./pages/IdeaEditor'))
 const Inbox = lazyRoute(() => import('./pages/Inbox'))
 const DayAgenda = lazyRoute(() => import('./pages/DayAgenda'))
@@ -88,6 +89,10 @@ export default function App() {
                 <Route index element={<Today />} />
                 <Route path="tarefas" element={<Tasks />} />
                 <Route path="ideias" element={<Ideas />} />
+                {/* C2 — Memoria vira destino. As tres telas que ela reune
+                    (Ideias, Caixa, Links) continuam nas rotas de sempre: nada
+                    de link quebrado, nenhum bookmark perdido. */}
+                <Route path="memoria" element={<Memoria />} />
                 <Route path="caixa" element={<Inbox />} />
                 <Route path="dia" element={<DayAgenda />} />
                 {/* CP5.2 — "Semana" e "Mes" deixaram de ser destinos e viraram

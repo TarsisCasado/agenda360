@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Sun, Calendar, ListTodo, Lightbulb, Plus } from 'lucide-react'
+import { Sun, Calendar, ListTodo, Library, Plus } from 'lucide-react'
 import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -14,9 +14,11 @@ const LEFT = [
   { to: '/', label: 'Hoje', icon: Sun, end: true },
   { to: '/dia', label: 'Agenda', icon: Calendar },
 ]
+// C2 — o quarto destino passa a ser Memoria. "Ideias" continua existindo como
+// tela e como rota; o que muda e o nome do LUGAR no primeiro nivel.
 const RIGHT = [
   { to: '/tarefas', label: 'Tarefas', icon: ListTodo },
-  { to: '/ideias', label: 'Ideias', icon: Lightbulb },
+  { to: '/memoria', label: 'Memória', icon: Library },
 ]
 
 function Item({ to, label, icon: Icon, end }) {

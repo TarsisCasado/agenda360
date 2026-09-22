@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { CalendarDays, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { cx } from '../../lib/utils'
-import { PRIMARY, SECONDARY } from '../../lib/navigation'
+import { DESTINOS, GRUPOS_SECUNDARIOS, BASE } from '../../lib/navigation'
 import { lerRecolhida, guardarRecolhida } from '../../lib/sidebarPref'
 
 // ---------------------------------------------------------------------------
@@ -145,21 +145,40 @@ export default function Sidebar({ open, onClose }) {
             recolhida ? 'lg:overflow-visible lg:px-2 overflow-y-auto' : 'overflow-y-auto px-2',
           )}
         >
-          {PRIMARY.map((item) => (
+          {/* OS QUATRO DESTINOS. Sem titulo de secao: eles SAO a navegacao,
+              e rotular o obvio so gastaria altura. */}
+          {DESTINOS.map((item) => (
             <NavItem key={item.to} {...item} onNavigate={onClose} recolhida={recolhida} />
           ))}
 
-          {/* A hierarquia primario/secundario nao se perde no rail: o titulo
-              "Mais" e texto e sai, entao a separacao passa a ser uma linha. */}
-          {recolhida ? (
-            <div className="mx-2 my-3 border-t hair" aria-hidden />
-          ) : (
-            <p className="text-section px-3 pb-1 pt-5">Mais</p>
-          )}
-          {SECONDARY.map((item) => (
-            <NavItem key={item.to} {...item} size="sm" onNavigate={onClose} recolhida={recolhida} />
+          {/* C2 — o que nao e destino passa a dizer QUE PAPEL cumpre. Antes
+              havia um "Mais" unico, e a ordem dentro dele era historica. Agora
+              a estrutura vem de `navigation.js` e a barra so a desenha.
+              Recolhida, o titulo (que e texto) sai e a separacao vira linha. */}
+          {GRUPOS_SECUNDARIOS.map((grupo) => (
+            <div key={grupo.titulo}>
+              {recolhida ? (
+                <div className="mx-2 my-3 border-t hair" aria-hidden />
+              ) : (
+                <p className="text-section px-3 pb-1 pt-5">{grupo.titulo}</p>
+              )}
+              {grupo.itens.map((item) => (
+                <NavItem key={item.to} {...item} size="sm" onNavigate={onClose} recolhida={recolhida} />
+              ))}
+            </div>
           ))}
         </nav>
+
+        {/* BASE — o que sustenta o resto fica no RODAPE, nao no meio da lista
+            de capacidades. Notificacoes e perfil moram no cluster direito da
+            Topbar, onde o sino e o badge ja existem; repeti-los aqui daria dois
+            lugares para a mesma coisa. */}
+        <div className={cx('space-y-1', recolhida ? 'lg:px-2 px-2' : 'px-2')}>
+          <div className="mx-1 mb-1 border-t hair" aria-hidden />
+          {BASE.map((item) => (
+            <NavItem key={item.to} {...item} size="sm" onNavigate={onClose} recolhida={recolhida} />
+          ))}
+        </div>
 
         {/* O controle mora no rodape da propria barra, nos DOIS estados: nao e
             uma aba flutuando sobre o conteudo, e nao muda de lugar quando o
