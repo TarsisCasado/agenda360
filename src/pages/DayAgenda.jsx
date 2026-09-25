@@ -18,6 +18,8 @@ import { DAY_START_HOUR, DAY_END_HOUR } from '../lib/constants'
 import { partitionDayTasks, resolveDayDate } from '../lib/dayView'
 import { blockGeometry } from '../lib/agendaTime'
 import { cx } from '../lib/utils'
+import AcaoCopiloto from '../components/copiloto/AcaoCopiloto'
+import { SUPERFICIE } from '../lib/copilotoContexto'
 
 const HOUR_PX = 60
 const GUTTER = 46
@@ -190,6 +192,18 @@ export default function DayAgenda() {
           <p className="text-caption mt-1">
             {visao === 'dia' ? formatLong(date) : visao === 'semana' ? semanaLabel : 'Mês'}
           </p>
+          {/* O PERIODO VISIVEL viaja junto — e so ele. "Planejar esta semana"
+              olhando 15-21 de setembro e uma conversa diferente de "planejar
+              esta semana" tres meses adiante. */}
+          {/* O convite acompanha o RECORTE aberto: "planejar esta semana"
+              escrito sobre a visao de Dia seria o Copiloto falando de uma
+              tela que a pessoa nao esta vendo. */}
+          <AcaoCopiloto
+            superficie={SUPERFICIE.AGENDA}
+            rotulo={visao === 'dia' ? 'Planejar este dia' : visao === 'mes' ? 'Planejar este mês' : 'Planejar esta semana'}
+            extra={{ periodo: visao === 'semana' ? semanaLabel : visao === 'dia' ? formatLong(date) : 'este mês' }}
+            className="-ml-2 mt-1"
+          />
         </div>
         {visao !== 'mes' && (
           <div className="flex shrink-0 items-center gap-0.5">

@@ -54,6 +54,8 @@ const EVENT_META = {
   restored: { icon: ArchiveRestore, label: 'Restaurada' },
   moved_to_think: { icon: Lightbulb, label: 'Movida para Para pensar' },
   moved_to_inbox: { icon: InboxIcon, label: 'Movida para a Caixa' },
+  // C3: decidida como nota em Memoria (status 'processed').
+  organized: { icon: FileText, label: 'Organizada como nota' },
   seen: { icon: Eye, label: 'Marcada como vista' },
   unseen: { icon: EyeOff, label: 'Desmarcada como vista' },
 }

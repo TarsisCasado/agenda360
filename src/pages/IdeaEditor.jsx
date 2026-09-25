@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ChevronLeft, Check, Loader2, Trash2, ListChecks } from 'lucide-react'
 import { inboxService } from '../services/inboxService'
-import { taskService } from '../services/taskService'
+import { conversionService } from '../services/conversionService'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
@@ -29,6 +29,13 @@ export default function IdeaEditor() {
   const { workspaceId } = useWorkspace()
   const { reload: reloadData } = useData()
   const { toast } = useToast()
+
+  // C3 — DE ONDE A PESSOA VEIO. O editor passou a ser aberto tambem por
+  // Memoria; mandar todo mundo de volta para /ideias faria a Memoria parecer
+  // um desvio para o modulo antigo. Sem state de navegacao (deep link, F5) a
+  // volta continua sendo /ideias, como sempre foi.
+  const voltarPara = location.state?.voltarPara || '/ideias'
+  const voltarRotulo = location.state?.voltarRotulo || 'Ideias'
 
   const [note, setNote] = useState(location.state?.note || null)
   const [title, setTitle] = useState(location.state?.note?.title || '')
@@ -91,34 +98,51 @@ export default function IdeaEditor() {
   const leave = async () => {
     clearTimeout(saveTimer.current)
     await persist(title, content)
-    navigate('/ideias')
+    navigate(voltarPara)
   }
 
   const removeIdea = async () => {
-    if (!note) return navigate('/ideias')
+    if (!note) return navigate(voltarPara)
     if (!window.confirm('Excluir esta ideia?')) return
     try {
       await inboxService.remove(note)
       reloadData()
-      navigate('/ideias')
+      navigate(voltarPara)
     } catch (err) {
       toast('Erro ao excluir: ' + err.message, 'error')
     }
   }
 
+  // -------------------------------------------------------------------------
+  // C3 — DERIVAR ACAO SEM CONSUMIR O CONTEUDO.
+  //
+  // Ate aqui isto chamava `taskService.create` direto: criava a tarefa, copiava
+  // o texto e ia embora para /tarefas. O texto ficava em dois lugares sem
+  // nenhum fio entre eles — a nota nao sabia que tinha gerado uma tarefa, e a
+  // tarefa nao sabia de onde veio. Duplicacao silenciosa, que e exatamente o
+  // que a regra de preservacao da origem proibe.
+  //
+  // Agora passa pelo `conversionService`, que ja era o unico ponto do produto
+  // que cria a Task E grava o vinculo `inbox_task_links` (e deriva a origem da
+  // captura, em vez de aceita-la do formulario). Nenhuma tabela nova: esse
+  // caminho existia e so a Caixa de Entrada o usava.
+  //
+  // E a tela NAO vai mais embora. Sair para /tarefas dizia, sem dizer, que a
+  // nota tinha virado outra coisa. Ela continua aqui, aberta, com o aviso de
+  // que a tarefa foi criada.
+  // -------------------------------------------------------------------------
   const toTask = async () => {
     const taskTitle = (title.trim() || firstLine(content) || 'Nova tarefa').slice(0, 200)
     try {
       clearTimeout(saveTimer.current)
       await persist(title, content)
-      await taskService.create(workspaceId, user.id, {
+      await conversionService.convertInboxItemToTask(workspaceId, user.id, note, {
         title: taskTitle,
         description: content || '',
         date: null,
       })
       reloadData()
-      toast('Ideia transformada em tarefa')
-      navigate('/tarefas')
+      toast('Tarefa criada — esta nota continua aqui')
     } catch (err) {
       toast('Erro ao criar tarefa: ' + err.message, 'error')
     }
@@ -140,7 +164,7 @@ export default function IdeaEditor() {
         style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top))' }}
       >
         <button onClick={leave} className="press flex items-center gap-1 rounded-lg px-2 py-1.5 text-brand-600 dark:text-brand-400">
-          <ChevronLeft size={20} /> <span className="text-sm font-semibold">Ideias</span>
+          <ChevronLeft size={20} /> <span className="text-sm font-semibold">{voltarRotulo}</span>
         </button>
         <span className="flex items-center gap-1.5 text-xs text-slate-400" aria-live="polite">
           {saveState === 'saving' && (<><Loader2 size={13} className="animate-spin" /> Salvando…</>)}

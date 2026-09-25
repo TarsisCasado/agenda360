@@ -10,6 +10,8 @@ import { useTasks } from '../hooks/useTasks'
 import { useData } from '../context/DataContext'
 import { STATUS } from '../lib/constants'
 import { cx } from '../lib/utils'
+import AcaoCopiloto from '../components/copiloto/AcaoCopiloto'
+import { SUPERFICIE } from '../lib/copilotoContexto'
 
 const ABERTAS = [STATUS.TODO, STATUS.IN_PROGRESS, STATUS.RESCHEDULED, STATUS.DELEGATED]
 
@@ -93,7 +95,17 @@ export default function Tasks() {
               {totalAberto > 0 ? `${totalAberto} em aberto` : 'Tudo em dia'}
             </p>
           </div>
-          <ViewSwitcher value={visao} options={VISOES} onChange={trocarVisao} />
+          <div className="flex items-center gap-1">
+            {/* O filtro/recorte atual viaja junto: perguntar "o que devo
+                priorizar?" olhando a semana nao e a mesma pergunta que
+                olhando o fluxo. */}
+            <AcaoCopiloto
+              superficie={SUPERFICIE.TAREFAS}
+              extra={{ filtro: visao }}
+              className="hidden sm:inline-flex"
+            />
+            <ViewSwitcher value={visao} options={VISOES} onChange={trocarVisao} />
+          </div>
         </div>
       </header>
 

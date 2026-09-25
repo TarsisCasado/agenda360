@@ -17,6 +17,8 @@ import {
 import { greetingFor } from '../lib/todayContext'
 import { pluralize } from '../lib/plural'
 import { cx } from '../lib/utils'
+import AcaoCopiloto from '../components/copiloto/AcaoCopiloto'
+import { SUPERFICIE } from '../lib/copilotoContexto'
 
 // ---------------------------------------------------------------------------
 // HOJE — foco e execucao. NAO e um painel.
@@ -182,11 +184,17 @@ export default function Today() {
 
   return (
     <div className="mx-auto w-full max-w-2xl xl:max-w-5xl">
-      <header className="mb-4 px-2">
-        <h1 className="text-display">
-          {greetingFor(agora)}, {primeiroNome}
-        </h1>
-        <p className="text-caption mt-0.5">{formatLong(agora)}</p>
+      {/* C3 — a faisca do Copiloto entra aqui, na linha do titulo, e NAO como
+          uma caixa de IA no topo da tela. Hoje continua sendo a tela de Hoje:
+          nada da composicao principal mudou. */}
+      <header className="mb-4 flex items-end justify-between gap-3 px-2">
+        <div className="min-w-0">
+          <h1 className="text-display">
+            {greetingFor(agora)}, {primeiroNome}
+          </h1>
+          <p className="text-caption mt-0.5">{formatLong(agora)}</p>
+        </div>
+        <AcaoCopiloto superficie={SUPERFICIE.HOJE} className="-mr-1.5 shrink-0" />
       </header>
 
       {loading && tasks.length === 0 ? (

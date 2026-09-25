@@ -185,30 +185,49 @@ describe('[C2] Memoria reune o legado sem apagar nada', () => {
   beforeAll(async () => { ({ ctx, page } = await sessao({ largura: 1440, altura: 900, toque: false })) }, 120000)
   afterAll(async () => { await ctx?.close() })
 
-  it('[C2] Memoria mostra caminho para notas, por organizar e links', async () => {
+  // ------------------------------------------------------------------------
+  // TRANSICAO DE CONTRATO — C2 -> C3 (UX1.6).
+  //
+  // Ate o commit anterior este teste afirmava que Memoria mostrava TRES
+  // ATALHOS, com os textos "Notas e ideias", "Por organizar" e "Links e
+  // referencias" levando a /ideias, /caixa e /links. Era verdade, e era o que
+  // o C2 tinha construido: um hub.
+  //
+  // O C3 tirou o hub de proposito — o QA humano do C2 disse "nao consegui
+  // perceber tanta diferenca", e um destino de primeiro nivel cujo conteudo e
+  // uma lista de links para outras telas e um indice, nao um lugar. O teste
+  // NAO foi apagado: ele foi reescrito para o contrato novo, e o antigo fica
+  // escrito aqui para que a mudanca seja legivel em vez de silenciosa.
+  //
+  // O que continua valendo palavra por palavra: NADA foi apagado. Os tres
+  // recortes existem (agora como filtro, nao como porta) e as tres telas
+  // antigas continuam respondendo nas rotas de sempre — ver o describe
+  // "[C2] Rotas antigas continuam respondendo", que nao mudou.
+  // ------------------------------------------------------------------------
+  it('[C2->C3] Memoria mostra CONTEUDO, e os tres recortes viraram filtro', async () => {
     await irPara(page, '/memoria')
-    const texto = await page.locator('main').innerText()
-    expect(texto).toMatch(/Notas e ideias/i)
-    expect(texto).toMatch(/Por organizar/i)
-    expect(texto).toMatch(/Links e refer/i)
+    // Conteudo de verdade na tela, nao atalhos.
+    expect(await page.locator('[data-testid="memoria-lista"]').isVisible()).toBe(true)
+    // Os tres recortes do C2 continuam existindo, agora como recorte.
+    for (const f of ['por_organizar', 'notas', 'links']) {
+      expect(await page.locator(`[data-testid="memoria-filtro-${f}"]`).count()).toBe(1)
+    }
     await page.screenshot({ path: `${TIROS}/desktop-memoria.png` })
   }, 60000)
 
-  it('[C2] cada caminho leva a tela que ja existia', async () => {
+  // TRANSICAO DE CONTRATO — C2 -> C3. Antes: clicar em cada area SAIA de
+  // Memoria para /ideias, /caixa e /links. Agora trocar de recorte acontece
+  // DENTRO de Memoria: sair da tela para ver o que se guardou era justamente o
+  // que fazia dela um menu. As rotas antigas nao foram removidas — continuam
+  // cobertas, por URL, no describe seguinte.
+  it('[C2->C3] trocar de recorte acontece DENTRO de Memoria', async () => {
     await irPara(page, '/memoria')
-    await page.getByText('Notas e ideias').click()
-    await page.waitForTimeout(1000)
-    expect(page.url()).toContain('/ideias')
-
-    await irPara(page, '/memoria')
-    await page.getByText('Por organizar').click()
-    await page.waitForTimeout(1000)
-    expect(page.url()).toContain('/caixa')
-
-    await irPara(page, '/memoria')
-    await page.getByText('Links e refer').click()
-    await page.waitForTimeout(1000)
-    expect(page.url()).toContain('/links')
+    for (const f of ['por_organizar', 'notas', 'links', 'tudo']) {
+      await page.locator(`[data-testid="memoria-filtro-${f}"]`).click()
+      await page.waitForTimeout(300)
+      expect(new URL(page.url()).pathname).toBe('/memoria')
+      expect(await page.locator(`[data-testid="memoria-filtro-${f}"]`).getAttribute('aria-selected')).toBe('true')
+    }
   }, 90000)
 
   it('[C2] abrir Memoria NAO escreve nada', async () => {
@@ -274,7 +293,12 @@ describe('[C2] iPhone 390x844 — navegacao principal e acesso ao resto', () => 
       const nav = document.querySelector('nav.fixed.inset-x-0.bottom-0')
       const main = document.querySelector('main')
       if (!nav || !main) return null
-      const ultimo = main.querySelector('a:last-of-type')
+      // C3: o conteudo de Memoria deixou de ser uma lista de <a> (os tres
+      // atalhos do hub) e passou a ser a lista de itens guardados. O que este
+      // teste mede nao mudou — o ultimo item de conteudo tem de terminar ACIMA
+      // da barra —, so o seletor de "ultimo item".
+      const itens = main.querySelectorAll('[data-testid="memoria-item"]')
+      const ultimo = itens[itens.length - 1] || main.querySelector('a:last-of-type')
       if (!ultimo) return null
       return nav.getBoundingClientRect().top - ultimo.getBoundingClientRect().bottom
     })
@@ -326,14 +350,21 @@ describe('[C2] iPhone 390x844 — navegacao principal e acesso ao resto', () => 
     expect(await sino.count()).toBeGreaterThan(0)
   }, 60000)
 
-  it('[C2] Memoria leva as tres areas tambem no telefone', async () => {
+  // TRANSICAO DE CONTRATO — C2 -> C3. Antes: tocar em "Notas e ideias" levava
+  // a /ideias e o voltar do navegador trazia de volta. Agora o telefone mostra
+  // a lista do que foi guardado e tocar abre a LEITURA por cima, sem trocar de
+  // rota — entao a garantia equivalente e: continua-se em /memoria, e fechar
+  // devolve a lista. O caminho para as telas antigas segue existindo por URL.
+  it('[C2->C3] no telefone, Memoria mostra o que foi guardado e abre sem sair da rota', async () => {
     await irPara(page, '/memoria')
-    await page.getByText('Notas e ideias').click()
-    await page.waitForTimeout(1000)
-    expect(page.url()).toContain('/ideias')
-    await page.goBack()
-    await page.waitForTimeout(800)
-    expect(page.url()).toContain('/memoria')
+    expect(await page.locator('[data-testid="memoria-item"]').count()).toBeGreaterThan(0)
+    await page.locator('[data-testid="memoria-item"]').first().click()
+    await page.waitForTimeout(600)
+    expect(await page.locator('[data-testid="memoria-folha"]').isVisible()).toBe(true)
+    expect(new URL(page.url()).pathname).toBe('/memoria')
+    await page.locator('[data-testid="memoria-fechar-detalhe"]:visible').first().click()
+    await page.waitForTimeout(500)
+    expect(await page.locator('[data-testid="memoria-lista"]').isVisible()).toBe(true)
     await page.screenshot({ path: `${TIROS}/mobile-memoria.png` })
   }, 60000)
 

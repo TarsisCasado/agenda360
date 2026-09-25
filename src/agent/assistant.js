@@ -145,7 +145,7 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     return out && typeof out === 'object' ? { ...out, interpretation_source: origemDoTurno } : out
   }
 
-  async function executarTurno({ text, identity, categories = [], conversationId }) {
+  async function executarTurno({ text, identity, categories = [], conversationId, surface = null }) {
     if (!identity?.workspaceId || !identity?.userId) {
       throw new Error('Sessao/workspace ausente.')
     }
@@ -172,10 +172,10 @@ export function createAssistant({ registry, runtime, providerManager, contextEng
     // depende de rede e continua identico offline.
     let context
     try {
-      context = await contextEngine.build(identity, { categories, history: historyRows, pending })
+      context = await contextEngine.build(identity, { categories, history: historyRows, pending, surface })
     } catch (err) {
       if (!ehIndisponibilidadeTransitoria(err)) throw err
-      context = contextoBase(identity, { categories, history: historyRows, pending })
+      context = contextoBase(identity, { categories, history: historyRows, pending, surface })
     }
     const interp = await providerManager.interpret(text, context)
     origemDoTurno = interp?.source || null

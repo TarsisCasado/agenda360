@@ -21,10 +21,24 @@ import { contextPreferences } from '../lib/preferences'
 // O que fica de fora offline sao as listas vindas do banco (recentes/atrasadas)
 // — grounding util, nunca requisito para entender a frase.
 // ---------------------------------------------------------------------------
-export function contextoBase(identity, { categories = [], history = [], pending = null, now = new Date() } = {}) {
+//
+// C3 — DE ONDE O TURNO FOI FALADO.
+//
+// A faisca contextual das quatro superficies manda junto um recorte MINIMO do
+// que estava na tela ({ superficie } e, quando existe, periodo / filtro /
+// item). Isso entra no contexto como `surface`, e so isso: a lista visivel, o
+// conteudo integral das notas e o resto do banco continuam fora. O grounding de
+// tarefas ja tem janela propria logo abaixo — duplicar a tela aqui aumentaria o
+// que sai do dispositivo sem responder melhor.
+//
+// Campo OMITIDO quando nao ha superficie: um `surface: null` afirmaria ao
+// modelo que existe um lugar e que ele e vazio.
+// ---------------------------------------------------------------------------
+export function contextoBase(identity, { categories = [], history = [], pending = null, now = new Date(), surface = null } = {}) {
   if (!identity?.workspaceId) throw new Error('workspace ausente no contexto')
 
   return {
+    ...(surface ? { surface } : {}),
     // user_id NAO e enviado ao provider (desnecessario); fica so na identidade.
     workspaceId: identity.workspaceId,
     today: toISODate(now),
@@ -47,8 +61,8 @@ export function contextoBase(identity, { categories = [], history = [], pending 
 }
 
 export function createContextEngine({ tasks = taskService } = {}) {
-  async function build(identity, { categories = [], history = [], pending = null, now = new Date() } = {}) {
-    const base = contextoBase(identity, { categories, history, pending, now })
+  async function build(identity, { categories = [], history = [], pending = null, now = new Date(), surface = null } = {}) {
+    const base = contextoBase(identity, { categories, history, pending, now, surface })
 
     // Janela curta e relevante: ultimos 14 dias ate +7 dias.
     const recent = await tasks.list(identity.workspaceId, {

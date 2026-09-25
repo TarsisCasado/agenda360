@@ -16,6 +16,8 @@ import { PRIORITY_META } from '../lib/constants'
 import { formatShort } from '../lib/date'
 import { SOURCE } from '../agent/providerManager'
 import { ehIndisponibilidadeTransitoria } from '../lib/indisponibilidade'
+import { useLocation } from 'react-router-dom'
+import { saudacaoContextual, sugestoesContextuais } from '../lib/copilotoContexto'
 
 // De onde veio a leitura do ultimo turno (CP6.4). O rotulo era fixo — "Interpretação
 // local" — e continuaria dizendo isso com o provider remoto ligado, ou caido. Tres
@@ -262,6 +264,29 @@ export default function Assistant() {
   // a conversa continua legivel, e "muda para sexta" depois do refresh ainda
   // fala da MESMA atividade.
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // C3 — CHAMADO DE DENTRO DE UMA TELA.
+  //
+  // A faisca de Hoje / Agenda / Tarefas / Memoria navega para ca com um recorte
+  // minimo no state da rota. Duas consequencias, e so duas:
+  //
+  //   1. a tela nao abre vazia — a saudacao ja sabe de onde veio;
+  //   2. o recorte viaja com CADA turno desta visita, como `surface` no
+  //      contexto do agente.
+  //
+  // O QUE NAO ACONTECE: nenhum turno e enviado sozinho. Abrir o Copiloto por
+  // aqui nao pergunta, nao propoe e nao grava — quem fala primeiro e a pessoa.
+  // Um turno automatico seria escrita disparada sem pedido, que e exatamente o
+  // que o contrato PERGUNTAR -> PROPOSTA -> CONFIRMAR existe para impedir.
+  //
+  // `useRef` e nao `useState` de proposito: o contexto e do momento da chamada
+  // e nao deve reagir a re-render; e limpa-lo ao trocar de assunto seria perder
+  // a razao de o Copiloto ter sido aberto.
+  // -------------------------------------------------------------------------
+  const location = useLocation()
+  const contextoRef = useRef(location.state?.copiloto || null)
+  const contextoDeEntrada = contextoRef.current
+
   const [retomando, setRetomando] = useState(true)
   // De onde veio a ultima interpretacao (CP6.4). Comeca nulo: antes do primeiro
   // turno nao ha o que afirmar, e afirmar sem saber e o que se quer evitar aqui.
@@ -342,7 +367,7 @@ export default function Assistant() {
     push({ role: 'user', text: content })
     setBusy(true)
     try {
-      const res = await agentKernel.assistant.ask({ text: content, identity, categories, conversationId: convRef.current })
+      const res = await agentKernel.assistant.ask({ text: content, identity, categories, conversationId: convRef.current, surface: contextoRef.current || undefined })
       if (res?.interpretation_source) setOrigemIA(res.interpretation_source)
       handleOutcome(res)
     } catch (err) {
@@ -392,6 +417,14 @@ export default function Assistant() {
 
   const empty = messages.length === 0 && !pending && !busy && !retomando
 
+  // Sem contexto de superficie, a abertura continua exatamente a de sempre.
+  // Sem o nome: o "Olá, <nome>" ja esta no titulo logo acima, e repetir o
+  // nome duas vezes em duas linhas soa a formulario, nao a conversa.
+  const saudacaoDaVez = contextoDeEntrada ? saudacaoContextual(contextoDeEntrada) : null
+  const sugestoesDaVez = contextoDeEntrada
+    ? sugestoesContextuais(contextoDeEntrada).map((t) => ({ t, i: Sparkles }))
+    : SUGGESTIONS
+
 
   return (
     // COPILOTO — a conversa vive na pagina, nao dentro de um card de chat.
@@ -422,19 +455,21 @@ export default function Assistant() {
         role="log"
         aria-live="polite"
       >
-        {/* Primeiro acesso */}
+        {/* Primeiro acesso. Com contexto de superficie, a saudacao e outra — e
+            as sugestoes tambem. Continuam sendo TEXTO que a pessoa escolhe
+            mandar: clicar numa delas e falar, nunca executar. */}
         {empty && (
-          <div className="animate-in flex flex-col gap-6 pt-4">
+          <div className="animate-in flex flex-col gap-6 pt-4" data-testid="copiloto-abertura">
             <div>
               <h2 className="text-page">
                 Olá, {user?.full_name?.split(' ')[0] || 'por aqui'}
               </h2>
-              <p className="text-body mt-1.5">
-                Diga o que precisa com suas palavras. Eu preparo — você confirma.
+              <p className="text-body mt-1.5" data-testid="copiloto-saudacao">
+                {saudacaoDaVez || 'Diga o que precisa com suas palavras. Eu preparo — você confirma.'}
               </p>
             </div>
             <div className="list">
-              {SUGGESTIONS.map((s) => (
+              {sugestoesDaVez.map((s) => (
                 <button
                   key={s.t}
                   onClick={() => send(s.t)}
