@@ -87,11 +87,34 @@ const folha = (page) => page.locator('[role="dialog"]')
 // ESCOLHA: capturar em linguagem natural virou uma das tres opcoes, em vez de
 // ser o unico caminho. A captura conversacional nao mudou em nada — mudou
 // quantos cliques ate ela, e so para quem ja sabe que queria outra coisa.
+// --------------------------------------------------------------------------
+// TRANSICAO DE CONTRATO — UX1.6 (Mobile 2.0).
+//
+// Ate o commit anterior a folha do `+` era, nos DOIS tamanhos, uma lista de
+// tres itens de menu, e este helper clicava em "Capturar com o Copiloto".
+//
+// No telefone isso mudou de proposito: a folha agora abre CURTA, com um campo
+// ("O que você quer registrar?") e atalhos em pilula — Tarefa, Compromisso,
+// Nota, Copiloto. Escolher passou a ser opcional, porque escrever e mais
+// barato do que escolher quando ja se tem a frase na cabeca.
+//
+// A INVARIANTE DESTE ARQUIVO NAO MUDOU e continua sendo verificada abaixo: as
+// duas portas abrem a MESMA superficie de captura conversacional, e ela nao
+// grava nada sem confirmacao. O que mudou foi o caminho ate ela em 390px.
+//
+// No desktop o popover de tres itens continua igual, e por isso o ramo
+// 'desktop' abaixo esta identico ao que sempre esteve.
+// --------------------------------------------------------------------------
 async function abrirCaptura(page, porta_ = 'mobile') {
-  if (porta_ === 'desktop') await page.getByRole('button', { name: /Nova atividade/i }).click()
-  else await page.locator('nav').last().getByRole('button').first().click()
-  await page.locator('[role="menu"]').waitFor({ timeout: 8000 })
-  await page.locator('[role="menu"]').getByRole('menuitem', { name: /Capturar com o Copiloto/ }).click()
+  if (porta_ === 'desktop') {
+    await page.getByRole('button', { name: /Nova atividade/i }).click()
+    await page.locator('[role="menu"]').waitFor({ timeout: 8000 })
+    await page.locator('[role="menu"]').getByRole('menuitem', { name: /Capturar com o Copiloto/ }).click()
+  } else {
+    await page.locator('nav').last().getByRole('button').first().click()
+    await page.locator('[data-testid="captura-atalho-capturar"]').waitFor({ timeout: 8000 })
+    await page.locator('[data-testid="captura-atalho-capturar"]').click()
+  }
   await folha(page).waitFor({ timeout: 8000 })
   await page.waitForTimeout(400)
 }

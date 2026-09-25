@@ -457,7 +457,10 @@ describe('L/P — a faisca do Copiloto', () => {
     await page.goto(`http://127.0.0.1:${porta}/assistente`, { waitUntil: 'domcontentloaded' })
     const saud = page.locator('[data-testid="copiloto-saudacao"]')
     await saud.waitFor({ state: 'visible', timeout: 15000 })
-    expect(await saud.innerText()).toMatch(/Diga o que precisa com suas palavras/i)
+    // TRANSIÇÃO — UX1.6: a abertura neutra deixou de explicar o mecanismo
+    // ("eu preparo, você confirma") e passou a perguntar, como um mensageiro.
+    // O contrato de segurança não mudou: abrir não envia turno nenhum.
+    expect(await saud.innerText()).toMatch(/Como posso te ajudar/i)
   }, 60000)
 })
 
@@ -562,10 +565,20 @@ describe('Q — 390x844: lista -> detalhe -> volta ao mesmo contexto', () => {
     expect(await tel.locator('[data-testid="memoria-detalhe"]:visible').innerText()).toMatch(/checklist unico/i)
   }, 60000)
 
+  // TRANSIÇÃO — UX1.6: em 390px os cinco filtros deixaram de ser uma fileira
+  // de pílulas (que transbordava e comia 44px da dobra) e passaram a ser um
+  // seletor: o recorte atual, e um toque para trocar. Mesmo estado, mesmos
+  // testids — só que agora a lista de opções precisa ser ABERTA antes.
+  const escolherFiltro = async (chave) => {
+    await tel.locator('[data-testid="memoria-seletor-filtro"]').click()
+    await tel.waitForTimeout(200)
+    await tel.locator(`[data-testid="memoria-filtro-${chave}"]:visible`).click()
+    await tel.waitForTimeout(250)
+  }
+
   it('voltar devolve o MESMO filtro, a MESMA busca e a MESMA lista', async () => {
     await voltarALista()
-    await tel.locator('[data-testid="memoria-filtro-notas"]').click()
-    await tel.waitForTimeout(250)
+    await escolherFiltro('notas')
     await tel.locator('[data-testid="memoria-busca"]').fill('nota 1')
     await tel.waitForTimeout(350)
     const antes = await tel.evaluate(() =>
@@ -577,7 +590,7 @@ describe('Q — 390x844: lista -> detalhe -> volta ao mesmo contexto', () => {
     await tel.waitForTimeout(400)
 
     expect(await tel.locator('[data-testid="memoria-busca"]').inputValue()).toBe('nota 1')
-    expect(await tel.locator('[data-testid="memoria-filtro-notas"]').getAttribute('aria-selected')).toBe('true')
+    expect(await tel.locator('[data-testid="memoria-seletor-filtro"]').innerText()).toMatch(/Notas/)
     const depois = await tel.evaluate(() =>
       [...document.querySelectorAll('[data-testid="memoria-item"]')].map((n) => n.innerText.split('\n')[0]))
     expect(depois).toEqual(antes)

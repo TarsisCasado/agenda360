@@ -21,6 +21,22 @@ const RIGHT = [
   { to: '/memoria', label: 'Memória', icon: Library },
 ]
 
+// ---------------------------------------------------------------------------
+// UX1.6 — ACABAMENTO DO ITEM.
+//
+// Duas mudancas, e so duas: a barra nao muda de destinos nem de ordem.
+//
+//   1. O ALVO passa a ter altura declarada (48px). Antes ele era o que
+//      sobrasse de icone + rotulo + padding — dava perto disso, mas por
+//      acidente. Alvo de toque nao deve depender do tamanho da fonte do
+//      sistema, que o usuario pode aumentar;
+//   2. O ATIVO deixa de ser uma barrinha de 3px encostada na borda superior.
+//      Ali ela divide o pixel com o hairline da propria barra e, no iPhone,
+//      com o brilho do fundo translucido — some justamente onde precisa ser
+//      lida. Agora o icone ativo senta numa pilula suave, que e a mesma
+//      gramatica do destino ativo da barra lateral. Um so jeito de dizer
+//      "voce esta aqui" no produto inteiro.
+// ---------------------------------------------------------------------------
 function Item({ to, label, icon: Icon, end }) {
   return (
     <NavLink
@@ -28,21 +44,22 @@ function Item({ to, label, icon: Icon, end }) {
       end={end}
       className={({ isActive }) =>
         cx(
-          'press relative flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] transition-colors',
-          isActive ? 'font-semibold text-accent' : 'font-medium text-muted',
+          'press relative flex min-h-[48px] flex-1 flex-col items-center justify-center gap-1 pb-1 pt-1.5 text-[11px] transition-colors',
+          isActive ? 'font-semibold text-accent-text' : 'font-medium text-muted',
         )
       }
     >
       {({ isActive }) => (
         <>
-          <Icon size={21} strokeWidth={isActive ? 2.4 : 1.9} />
-          {label}
           <span
             className={cx(
-              'absolute -top-px h-[3px] w-6 rounded-full transition-opacity',
-              isActive ? 'bg-accent opacity-100' : 'opacity-0',
+              'flex h-[26px] w-[46px] items-center justify-center rounded-full transition-colors',
+              isActive && 'bg-accent-soft',
             )}
-          />
+          >
+            <Icon size={20} strokeWidth={isActive ? 2.3 : 1.9} />
+          </span>
+          <span className="leading-none">{label}</span>
         </>
       )}
     </NavLink>
@@ -52,7 +69,7 @@ function Item({ to, label, icon: Icon, end }) {
 export default function BottomNav({ onCreate }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t hair bg-surface/85 pb-safe backdrop-blur-xl lg:hidden">
-      <div className="mx-auto flex max-w-lg items-end justify-around px-1">
+      <div className="mx-auto flex max-w-lg items-center justify-around px-1 pt-1">
         {LEFT.map((it) => (
           <Item key={it.to} {...it} />
         ))}
@@ -61,7 +78,7 @@ export default function BottomNav({ onCreate }) {
           <button
             onClick={onCreate}
             aria-label="Capturar"
-            className="press -mt-6 flex h-[52px] w-[52px] items-center justify-center rounded-[18px] bg-accent text-white shadow-float ring-[5px] ring-canvas"
+            className="press -mt-7 flex h-[54px] w-[54px] items-center justify-center rounded-[19px] bg-accent text-white shadow-float ring-[5px] ring-canvas"
           >
             <Plus size={25} strokeWidth={2.4} />
           </button>

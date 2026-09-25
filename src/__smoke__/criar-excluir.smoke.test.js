@@ -259,19 +259,35 @@ describe('Excluir atividade', () => {
 })
 
 describe('mobile e tema', () => {
-  it('12. no 390 o menu sobe como folha, com alvos >= 44px', async () => {
+  // TRANSIÇÃO DE CONTRATO — UX1.6 (Mobile 2.0).
+  //
+  // Até o commit anterior a folha do `+` no telefone era uma lista de TRÊS
+  // itens de menu, e este teste media a altura deles. Ela passou a abrir curta,
+  // com um campo ("O que você quer registrar?") e quatro atalhos em pílula.
+  //
+  // O que o teste garante NÃO mudou: a folha sobe ancorada embaixo, cabe na
+  // tela e todo alvo tocável tem pelo menos 44px. Mudou o que existe dentro
+  // dela — e agora são quatro portas, não três, porque "Nota" deixou de exigir
+  // uma viagem pela captura conversacional.
+  it('12. no 390 a folha do + sobe ancorada embaixo, com alvos >= 44px', async () => {
     const { ctx: c, page: p } = await abrirApp({ ...devices['iPhone 13'], viewport: { width: 390, height: 844 } })
     await p.goto(`http://127.0.0.1:${porta}/tarefas`, { waitUntil: 'domcontentloaded' })
     await p.waitForTimeout(1600)
     await p.locator('nav').last().getByRole('button').first().click()
-    await p.locator('[role="menu"]').waitFor({ timeout: 8000 })
+    await p.locator('[data-testid="captura-campo"]').waitFor({ timeout: 8000 })
     await p.waitForTimeout(400)
-    const itens = await p.locator('[role="menu"] button').evaluateAll((els) =>
+
+    // O campo é a porta principal, e ele abre PRIMEIRO: escrever é mais barato
+    // que escolher quando já se tem a frase na cabeça.
+    const campo = await p.locator('[data-testid="captura-campo"]').boundingBox()
+    expect(Math.round(campo.height)).toBeGreaterThanOrEqual(40)
+    expect(Math.round(campo.y + campo.height)).toBeLessThanOrEqual(844)
+
+    const atalhos = await p.locator('[data-testid^="captura-atalho-"]').evaluateAll((els) =>
       els.map((el) => { const r = el.getBoundingClientRect(); return { h: Math.round(r.height), bottom: Math.round(r.bottom) } }))
-    expect(itens.length).toBe(3)
-    for (const i of itens) expect(i.h).toBeGreaterThanOrEqual(44)
-    // folha: ancorada embaixo, dentro da tela
-    for (const i of itens) expect(i.bottom).toBeLessThanOrEqual(844)
+    expect(atalhos.length).toBe(4)
+    for (const a of atalhos) expect(a.h).toBeGreaterThanOrEqual(44)
+    for (const a of atalhos) expect(a.bottom).toBeLessThanOrEqual(844)
     await c.close()
   }, 120_000)
 

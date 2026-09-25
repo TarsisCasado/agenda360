@@ -180,6 +180,21 @@ body {
     }
   }
 
+  /* UX1.6 — LINHA TOCAVEL sem moldura de `.row`.
+     As listas novas do telefone (Hoje, Memoria) sao linhas soltas separadas por
+     hairline, entao nao herdam `.row`. O que elas PRECISAM herdar e a guarda de
+     ponteiro: um `hover:` cru fica GRUDADO no iOS depois do toque, e a linha
+     tocada continua realcada como se estivesse selecionada — visto no QA
+     visual. Aqui o realce de hover so existe onde ha ponteiro de verdade. */
+  .tapavel {
+    @apply transition-colors active:bg-surface-2/70;
+  }
+  @media (hover: hover) {
+    .tapavel:hover {
+      @apply bg-surface-2/60;
+    }
+  }
+
   /* -------------------------------------------------------------------------
      TIPOGRAFIA — hierarquia forte, poucos tamanhos.
      ------------------------------------------------------------------------- */

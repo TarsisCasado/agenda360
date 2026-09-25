@@ -36,11 +36,11 @@ export default function LinhaMemoria({ item, selecionado, onAbrir }) {
       aria-current={selecionado ? 'true' : undefined}
       onClick={() => onAbrir(item)}
       className={cx(
-        'flex w-full items-start gap-3 px-3.5 py-3 text-left transition-colors',
+        'flex w-full items-start gap-3 px-3.5 py-3 text-left',
         // O item aberto e marcado por SUPERFICIE, como o destino ativo da
         // barra lateral — nao por borda colorida. Mesma gramatica em todo o
         // produto, entao "selecionado" nao precisa ser aprendido duas vezes.
-        selecionado ? 'bg-surface-2' : 'bg-surface active:bg-surface-2/70 hover:bg-surface-2/60',
+        selecionado ? 'bg-surface-2' : 'tapavel bg-surface',
       )}
     >
       <Icone

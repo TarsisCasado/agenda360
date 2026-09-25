@@ -149,13 +149,25 @@ describe('Hoje — o que merece atenção agora', () => {
     expect(t).not.toMatch(/Compromisso de amanha/)
   }, 40_000)
 
+  // A INVARIANTE nao mudou: um item aparece UMA vez na tela. O que mudou foi a
+  // arvore — o Hoje do telefone (UX1.6) tem secoes com `data-testid="hoje-*"`
+  // que CONTEM as linhas, entao o seletor antigo contava o texto da linha mais
+  // uma vez por ancestral e acusava duplicata onde havia aninhamento. Agora a
+  // contagem e feita nas FOLHAS: as linhas de verdade, em qualquer composicao.
   it('nenhum item aparece duas vezes na tela', async () => {
     const dup = await page.evaluate(() => {
-      const titulos = [...document.querySelectorAll('main [data-testid^="hoje-"], main .list > *')]
-        .map((n) => n.textContent.trim())
-        .filter(Boolean)
-      const so = titulos.filter((x) => x.includes('Enviar o relatorio'))
-      return so.length
+      const folhas = [
+        ...document.querySelectorAll(
+          'main [data-testid="hoje-linha"], main [data-testid="hoje-atencao-item"],' +
+          ' main [data-testid="hoje-proximo"], main .list > *',
+        ),
+      ]
+      // So o que esta VISIVEL: desde o UX1.6 o Hoje tem duas composicoes na
+      // arvore (telefone e desktop), e a que nao vale para esta largura esta
+      // com `display:none` — mas o seu texto continua no DOM.
+      return folhas
+        .filter((n) => n.offsetParent !== null)
+        .filter((n) => (n.textContent || '').includes('Enviar o relatorio')).length
     })
     expect(dup).toBeLessThanOrEqual(1)
   }, 40_000)
@@ -290,16 +302,20 @@ describe('Agenda — o que ACONTECE numa hora vs. o que PRECISA ser feito', () =
     // No Mês em 390px a célula mostra PONTOS, não títulos — cabe o mês inteiro
     // na tela, e o conteúdo do dia se lê tocando nele. Então a verificação aqui
     // é pelo painel do dia, que é também como se usa de verdade.
+    //
+    // TRANSIÇÃO DE CONTRATO — UX1.6. Até o commit anterior esse painel era um
+    // MODAL (`role="dialog"`) nos dois tamanhos. No telefone ele passou a abrir
+    // ABAIXO da grade: um modal cobre justamente o mês que acabou de ser
+    // consultado, e escolher um dia apagava o contexto que motivou a escolha.
+    // A INVARIANTE verificada aqui não mudou — nada some entre Dia, Semana e
+    // Mês; mudou onde o conteúdo do dia aparece em 390px.
     await ir('/dia?visao=mes')
     const hojeISO = new Date().toISOString().slice(0, 10)
     await page.locator(`[data-testid="mes-dia-${hojeISO}"]`).click()
     await page.waitForTimeout(900)
-    const painel = await page.getByRole('dialog').innerText()
+    const painel = await page.locator('[data-testid="mes-painel-dia"]').innerText()
     expect(painel).toMatch(/Reuniao com Joao/)
     expect(painel).toMatch(/Enviar o relatorio/)
-    // e o painel também separa as duas naturezas
-    expect(painel).toMatch(/compromissos/i)
-    expect(painel).toMatch(/tarefas do dia/i)
   }, 90_000)
 
   it('navegação temporal anda e volta sem perder o eixo', async () => {

@@ -59,7 +59,7 @@ function whenLabel(payload) {
   return d + t
 }
 
-export default function CaptureSheet({ open, onClose, onEditDetails }) {
+export default function CaptureSheet({ open, onClose, onEditDetails, textoInicial }) {
   const { user } = useAuth()
   const { workspaceId } = useWorkspace()
   const { categories, reload } = useData()
@@ -90,9 +90,12 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
     if (open) {
       // Estado K: se ficou uma captura sem destino, ela volta para o campo. O
       // usuario nao precisa lembrar que escreveu — o produto lembra.
+      // UX1.6 — a folha do `+` no telefone comeca com um campo. Quando a
+      // pessoa ja escreveu ali, o texto CHEGA aqui e nao e digitado de novo.
+      // Ele ainda nao foi interpretado: entra no campo, e quem manda e ela.
       const pendente = capturaPendente({ workspaceId })
-      setText(pendente?.texto || '')
-      setRecuperada(Boolean(pendente))
+      setText(textoInicial || pendente?.texto || '')
+      setRecuperada(Boolean(pendente) && !textoInicial)
       setPhase('input')
       setProposal(null)
       setTurns([])
@@ -100,7 +103,7 @@ export default function CaptureSheet({ open, onClose, onEditDetails }) {
       convRef.current = null
       setTimeout(() => inputRef.current?.focus(), 140)
     }
-  }, [open, workspaceId])
+  }, [open, workspaceId, textoInicial])
 
   const interpret = async (content) => {
     const t = content.trim()

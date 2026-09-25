@@ -9,6 +9,7 @@ import { useData } from '../context/DataContext'
 import { STATUS, WEEK_DAYS } from '../lib/constants'
 import { percent } from '../lib/utils'
 import { fromISODate } from '../lib/date'
+import RelatoriosMobile from '../components/reports/RelatoriosMobile'
 
 // ---------------------------------------------------------------------------
 // CP5.7 — POLISH, sem KPI novo e sem grafico decorativo.
@@ -200,6 +201,14 @@ export default function Reports() {
     <Page width="form">
       {cabecalho}
 
+      {/* UX1.6 — no telefone, poucos graficos que respondem uma pergunta cada.
+          Acima de `lg` a composicao de sempre continua intacta: o desktop esta
+          congelado neste checkpoint. As duas leem as MESMAS tarefas. */}
+      <div className="lg:hidden">
+        <RelatoriosMobile tasks={tasks} />
+      </div>
+
+      <div className="hidden lg:block">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Numero rotulo="Criadas" valor={m.total} />
         <Numero rotulo="Concluídas" valor={m.done} tom="positive" />
@@ -241,6 +250,7 @@ export default function Reports() {
             emptyLabel="Nenhuma atividade reagendada"
           />
         </div>
+      </div>
       </div>
     </Page>
   )

@@ -19,6 +19,7 @@ import { pluralize } from '../lib/plural'
 import { cx } from '../lib/utils'
 import AcaoCopiloto from '../components/copiloto/AcaoCopiloto'
 import { SUPERFICIE } from '../lib/copilotoContexto'
+import HojeMobile from '../components/today/HojeMobile'
 
 // ---------------------------------------------------------------------------
 // HOJE — foco e execucao. NAO e um painel.
@@ -160,7 +161,7 @@ export default function Today() {
   // atrasada de 40 dias e QUALQUER tarefa em andamento sem data simplesmente
   // não existiam nesta tela. Hoje precisa do universo aberto para responder o
   // que promete; quem recorta é `buildToday`.
-  const { tasks, loading } = useTasks({})
+  const { tasks, loading, reload } = useTasks({})
   const [editing, setEditing] = useState(null)
   const [criando, setCriando] = useState(false)
   const [verTodasAtrasadas, setVerTodasAtrasadas] = useState(false)
@@ -184,9 +185,28 @@ export default function Today() {
 
   return (
     <div className="mx-auto w-full max-w-2xl xl:max-w-5xl">
-      {/* C3 — a faisca do Copiloto entra aqui, na linha do titulo, e NAO como
-          uma caixa de IA no topo da tela. Hoje continua sendo a tela de Hoje:
-          nada da composicao principal mudou. */}
+      {/* ------------------------------------------------------------------
+          UX1.6 — DUAS COMPOSICOES, UMA PERGUNTA.
+          Abaixo de `lg` (onde vive a barra inferior, ou seja: no telefone) a
+          tela passa a ser HojeMobile. Acima de `lg` NADA mudou — o desktop
+          esta congelado neste checkpoint, entao a arvore de baixo continua
+          sendo, linha por linha, a que estava no ar.
+          Nao e duplicacao de logica: `buildToday` e o mesmo, as contagens sao
+          as mesmas, a deduplicacao e a mesma. O que muda e a COMPOSICAO.
+          ------------------------------------------------------------------ */}
+      {loading && tasks.length === 0 ? null : (
+        <div className="lg:hidden">
+          <HojeMobile
+            t={t}
+            agora={agora}
+            onOpen={abrir}
+            onChanged={reload}
+            onCriar={() => setCriando(true)}
+          />
+        </div>
+      )}
+
+      <div className="hidden lg:block">
       <header className="mb-4 flex items-end justify-between gap-3 px-2">
         <div className="min-w-0">
           <h1 className="text-display">
@@ -332,6 +352,7 @@ export default function Today() {
           {pluralize(t.total, 'item', 'itens')} pedindo atenção.
         </p>
       )}
+      </div>
 
       <TaskModal open={Boolean(editing)} task={editing} onClose={() => setEditing(null)} />
       <TaskModal

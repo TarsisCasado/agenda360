@@ -17,6 +17,8 @@ import {
 } from '../lib/date'
 import { addMonths, isSameMonth } from 'date-fns'
 import { cx } from '../lib/utils'
+import { useMediaQuery } from '../hooks/useMediaQuery'
+import TaskRow from '../components/tasks/TaskRow'
 
 const WEEK_HEADERS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 
@@ -27,6 +29,21 @@ export default function MonthCalendar({ embedded = false }) {
   const range = useMemo(() => monthRange(reference), [reference])
   const { tasks, error, reload } = useTasks(range)
 
+  // ------------------------------------------------------------------------
+  // UX1.6 — NO TELEFONE, O DIA ABRE ABAIXO DA GRADE, NAO NUM MODAL.
+  //
+  // O Mes responde ORIENTACAO: onde esta cheio, onde esta livre. Um modal
+  // cobre justamente a grade que acabou de ser consultada, entao escolher um
+  // dia apaga o contexto que motivou a escolha — e voltar exige fechar. Abaixo
+  // da grade, os dois coexistem: a pessoa varre os dias com o polegar e o
+  // painel acompanha.
+  //
+  // No desktop o modal fica: ali a grade tem faixas com titulo, sobra pouco
+  // espaco vertical sob seis semanas, e a sobreposicao nao esconde nada que
+  // ja nao estivesse visivel na propria celula.
+  // ------------------------------------------------------------------------
+  const desktop = useMediaQuery('(min-width: 640px)')
+  const [selecionado, setSelecionado] = useState(null)
   const [dayModal, setDayModal] = useState({ open: false, iso: null })
   const [taskModal, setTaskModal] = useState({ open: false, task: null, defaults: null })
 
@@ -35,6 +52,14 @@ export default function MonthCalendar({ embedded = false }) {
   const go = (delta) => setReference((r) => addMonths(r, delta))
 
   const selectedTasks = dayModal.iso ? tasksByDay(dayModal.iso) : []
+  const tarefasDoSelecionado = selecionado ? tasksByDay(selecionado) : []
+
+  const escolherDia = (iso) => {
+    if (desktop) { setDayModal({ open: true, iso }); return }
+    // Tocar de novo no mesmo dia FECHA: o gesto de abrir e o mesmo de fechar,
+    // sem precisar de um X que so existiria para isso.
+    setSelecionado((atual) => (atual === iso ? null : iso))
+  }
 
   // A grade e desenhada por SEMANA (6 linhas de 7): e o que permite trocar as
   // bordas de cada celula por um unico hairline entre semanas.
@@ -115,9 +140,10 @@ export default function MonthCalendar({ embedded = false }) {
               // clique apenas abre o modal do dia (comportamento inalterado).
               <button
                 key={iso}
-                onClick={() => setDayModal({ open: true, iso })}
+                onClick={() => escolherDia(iso)}
                 aria-label={`${day.getDate()} — ${dayTasks.length} atividade(s)`}
                 data-testid={`mes-dia-${iso}`}
+                aria-pressed={selecionado === iso}
                 className={cx(
                   'group relative flex min-h-[62px] flex-col items-center gap-1 rounded-row px-0.5 py-1.5 transition-colors active:bg-surface-2 sm:min-h-[96px] sm:items-stretch sm:px-1 sm:hover:bg-surface-2/70',
                   // Dia COM alguma coisa recebe superficie propria. Sem isto o
@@ -126,6 +152,7 @@ export default function MonthCalendar({ embedded = false }) {
                   // livre", que precisa aparecer de relance.
                   dayTasks.length > 0 && !today && 'bg-surface-2/60',
                   today && 'ring-1 ring-accent/45',
+                  selecionado === iso && 'ring-2 ring-accent',
                 )}
               >
                 <div className="flex w-full items-start justify-center sm:justify-between">
@@ -192,6 +219,39 @@ export default function MonthCalendar({ embedded = false }) {
           </div>
         ))}
       </div>
+
+      {/* O DIA ESCOLHIDO, logo abaixo da grade (telefone). Mesma distincao de
+          sempre: o que ACONTECE numa hora primeiro, com a hora a mostra; o que
+          PRECISA SER FEITO depois, sem hora inventada. */}
+      {!desktop && selecionado && (
+        <section className="mt-4 px-1" data-testid="mes-painel-dia">
+          <div className="mb-1.5 flex items-baseline justify-between gap-3 px-1">
+            <h2 className="text-section">{formatLong(selecionado)}</h2>
+            <button
+              onClick={() => setTaskModal({ open: true, task: null, defaults: { date: selecionado } })}
+              className="press inline-flex items-center gap-0.5 text-[13px] font-semibold text-accent-text"
+            >
+              <Plus size={13} /> Novo
+            </button>
+          </div>
+          {tarefasDoSelecionado.length === 0 ? (
+            <p className="text-caption px-1 py-2">Dia livre.</p>
+          ) : (
+            <div className="list">
+              {[...tarefasDoSelecionado]
+                .sort((a, b) => String(a.start_time || '99').localeCompare(String(b.start_time || '99')))
+                .map((t) => (
+                  <TaskRow
+                    key={t.id}
+                    task={t}
+                    onOpen={(task) => setTaskModal({ open: true, task, defaults: null })}
+                    onChanged={reload}
+                  />
+                ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Modal do dia */}
       <Modal

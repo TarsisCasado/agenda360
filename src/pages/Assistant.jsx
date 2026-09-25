@@ -450,8 +450,21 @@ export default function Assistant() {
         )}
       </header>
 
+      {/* ------------------------------------------------------------------
+          UX1.6 — NO TELEFONE, A CONVERSA COMECA PERTO DO POLEGAR.
+
+          Antes, com a conversa vazia, a saudacao e as sugestoes ficavam
+          grudadas no topo e sobravam ~400px de nada ate o campo la embaixo.
+          Num mensageiro moderno o vazio fica EM CIMA e o conteudo desce ate a
+          entrada — e por isso a tela nunca parece um formulario esperando
+          alguem. `justify-end` so vale enquanto nao ha conversa: no primeiro
+          turno ela volta a rolar de cima para baixo, como qualquer historico.
+          ------------------------------------------------------------------ */}
       <div
-        className="min-h-0 flex-1 space-y-5 overflow-y-auto px-2 pb-32 pt-3"
+        className={cx(
+          'min-h-0 flex-1 overflow-y-auto px-2 pt-3',
+          empty ? 'flex flex-col justify-end pb-4 lg:justify-start lg:pb-32' : 'space-y-5 pb-32',
+        )}
         role="log"
         aria-live="polite"
       >
@@ -462,10 +475,10 @@ export default function Assistant() {
           <div className="animate-in flex flex-col gap-6 pt-4" data-testid="copiloto-abertura">
             <div>
               <h2 className="text-page">
-                Olá, {user?.full_name?.split(' ')[0] || 'por aqui'}
+                Olá, {user?.full_name?.split(' ')[0] || 'por aqui'} 👋
               </h2>
               <p className="text-body mt-1.5" data-testid="copiloto-saudacao">
-                {saudacaoDaVez || 'Diga o que precisa com suas palavras. Eu preparo — você confirma.'}
+                {saudacaoDaVez || 'Como posso te ajudar com o seu dia?'}
               </p>
             </div>
             <div className="list">

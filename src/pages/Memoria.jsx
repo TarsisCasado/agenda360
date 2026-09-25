@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, PenLine, X, Loader2, Library } from 'lucide-react'
+import { Search, PenLine, X, Loader2, Library, ChevronDown } from 'lucide-react'
 import { Page, PageHeader } from '../components/layout/Page'
 import { EmptyState, ErrorState } from '../components/ui/Common'
 import { useAuth } from '../context/AuthContext'
@@ -60,6 +60,7 @@ export default function Memoria() {
   const [filtro, setFiltro] = useState('tudo')
   const [consulta, setConsulta] = useState('')
   const [abertoId, setAbertoId] = useState(null)
+  const [seletorAberto, setSeletorAberto] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [criando, setCriando] = useState(false)
   const [tarefas, setTarefas] = useState([])
@@ -281,12 +282,55 @@ export default function Memoria() {
           )}
         </div>
 
-        {/* FILTROS — uma fila rolavel, nao cinco abas disputando o topo. O
-            primeiro ("Tudo") e o padrao, e "Por organizar" vem logo depois
-            porque e ESTADO: e a unica pergunta que a pessoa faz sobre o que
-            ainda pende. Os tres seguintes sao recorte de conteudo. */}
+        {/* ------------------------------------------------------------------
+            FILTROS — DUAS FORMAS, UM ESTADO.
+
+            No desktop, cinco pilulas cabem numa linha e mostram de uma vez os
+            recortes que existem: ver o vocabulario inteiro ajuda.
+
+            No telefone, cinco pilulas ocupam a largura toda e ainda transbordam
+            — a quinta fica escondida atras de uma rolagem horizontal que
+            ninguem descobre, e a fileira come 44px da dobra. Entao vira UM
+            controle: o recorte atual, e um toque para trocar. Mesmo estado,
+            mesmos testids, composicao diferente.
+            ------------------------------------------------------------------ */}
+        <div className="mt-2.5 sm:hidden">
+          <button
+            type="button"
+            data-testid="memoria-seletor-filtro"
+            aria-expanded={seletorAberto}
+            onClick={() => setSeletorAberto((v) => !v)}
+            className="press inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3.5 py-1.5 text-[13px] font-semibold text-primary"
+          >
+            {FILTROS.find((f) => f.chave === filtro)?.rotulo || 'Tudo'}
+            <ChevronDown
+              size={14}
+              className={cx('transition-transform', seletorAberto && 'rotate-180')}
+            />
+          </button>
+          {seletorAberto && (
+            <div className="mt-1.5 overflow-hidden rounded-surface bg-surface ring-1 ring-hairline/60">
+              {FILTROS.map((f) => (
+                <button
+                  key={f.chave}
+                  data-testid={`memoria-filtro-${f.chave}`}
+                  aria-selected={filtro === f.chave}
+                  role="option"
+                  onClick={() => { trocarFiltro(f.chave); setSeletorAberto(false) }}
+                  className={cx(
+                    'block w-full border-b hair px-3.5 py-2.5 text-left text-[14px] last:border-b-0',
+                    filtro === f.chave ? 'bg-surface-2 font-semibold text-primary' : 'text-secondary',
+                  )}
+                >
+                  {f.rotulo}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div
-          className="-mx-2 mt-2.5 flex gap-1.5 overflow-x-auto px-2 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="-mx-2 mt-2.5 hidden gap-1.5 overflow-x-auto px-2 pb-1 sm:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           role="tablist"
           aria-label="Filtros da memória"
         >

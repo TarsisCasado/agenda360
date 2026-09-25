@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import BottomNav from './BottomNav'
@@ -12,6 +12,9 @@ import CommandPalette from '../command/CommandPalette'
 import OnboardingFlow from '../onboarding/OnboardingFlow'
 import WorkspaceMissing from '../workspace/WorkspaceMissing'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import { useAuth } from '../../context/AuthContext'
+import { useToast } from '../../context/ToastContext'
+import { inboxService } from '../../services/inboxService'
 import { isOnboarded } from '../../lib/preferences'
 import { workspaceGate } from '../../lib/uiState'
 import { useTimezone } from '../../hooks/useTimezone'
@@ -19,6 +22,9 @@ import { TAREFA, COMPROMISSO, defaultsDeCriacao } from '../../lib/activityKind'
 
 export default function Layout() {
   const { workspaceId, workspaces, loading: wsLoading } = useWorkspace()
+  const { user } = useAuth()
+  const { toast } = useToast()
+  const navigate = useNavigate()
   const { pathname } = useLocation()
   const gate = workspaceGate({ loading: wsLoading, workspaces })
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -27,6 +33,7 @@ export default function Layout() {
   const [quickTaskOpen, setQuickTaskOpen] = useState(false)
   const [quickDefaults, setQuickDefaults] = useState(undefined)
   const [captureOpen, setCaptureOpen] = useState(false)
+  const [capturaTexto, setCapturaTexto] = useState('')
   const [menuNovaOpen, setMenuNovaOpen] = useState(false)
   const [novoTipo, setNovoTipo] = useState(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -42,16 +49,41 @@ export default function Layout() {
     if (workspaceId) setShowOnboarding(!isOnboarded(workspaceId))
   }, [workspaceId])
 
+  // NOTA nao e atividade: nao tem data, categoria, prioridade nem status para
+  // escolher. Entao nao abre formulario nenhum — nasce vazia e vai direto para
+  // a folha de escrever, voltando para onde a pessoa estava.
+  const criarNota = useCallback(async () => {
+    if (!workspaceId || !user?.id) return
+    try {
+      const nota = await inboxService.create(workspaceId, user.id, { title: '', content: '' })
+      navigate(`/ideias/${nota.id}`, {
+        state: { note: nota, voltarPara: pathname, voltarRotulo: 'Voltar' },
+      })
+    } catch (err) {
+      toast('Não foi possível criar a nota: ' + err.message, 'error')
+    }
+  }, [workspaceId, user?.id, navigate, pathname, toast])
+
   // CP5.9.1 — "Nova atividade" deixa de significar "fale com o Copiloto".
   // Quem ja sabe o que quer criar entra direto no editor; quem tem algo solto
   // na cabeca continua tendo a captura.
-  const escolherCriacao = useCallback((chave) => {
-    if (chave === 'capturar') { setCaptureOpen(true); return }
+  //
+  // UX1.6 — a folha do telefone passa a mandar tambem um TEXTO (o que a pessoa
+  // escreveu no campo) e uma quarta porta: "Nota", que nao e atividade e por
+  // isso nao passa por nenhum formulario — cria a nota vazia e abre a folha de
+  // escrever, que e a experiencia que o QA humano aprovou.
+  const escolherCriacao = useCallback((chave, extra = {}) => {
+    if (chave === 'capturar') {
+      setCapturaTexto(extra.texto || '')
+      setCaptureOpen(true)
+      return
+    }
+    if (chave === 'nota') { criarNota(); return }
     const tipo = chave === 'compromisso' ? COMPROMISSO : TAREFA
     setNovoTipo(tipo)
     setFullTaskDefaults(defaultsDeCriacao(tipo))
     setFullTaskOpen(true)
-  }, [])
+  }, [criarNota])
 
   const openQuickTask = useCallback((defaults) => {
     setQuickDefaults(defaults)
@@ -109,7 +141,8 @@ export default function Layout() {
       {/* CAPTURA UNIVERSAL — entrada principal (linguagem natural + IA real). */}
       <CaptureSheet
         open={captureOpen}
-        onClose={() => setCaptureOpen(false)}
+        textoInicial={capturaTexto}
+        onClose={() => { setCaptureOpen(false); setCapturaTexto('') }}
         onEditDetails={(payload) => { setFullTaskDefaults(payload); setFullTaskOpen(true) }}
       />
 

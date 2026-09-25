@@ -306,14 +306,19 @@ describe('[C2] iPhone 390x844 — navegacao principal e acesso ao resto', () => 
     expect(folga).toBeGreaterThan(0) // o ultimo item da lista termina ACIMA da barra
   }, 60000)
 
-  it('[C2] o + central abre a porta de criacao, com os caminhos de sempre', async () => {
+  // TRANSIÇÃO DE CONTRATO — UX1.6. A porta continua sendo uma só e continua
+  // levando aos mesmos lugares; o que mudou é que no telefone ela abre CURTA,
+  // com um campo primeiro e os formatos como atalho. "Nota" entrou como quarta
+  // porta. A garantia verificada aqui é a mesma: o `+` abre a criação e os
+  // caminhos de sempre continuam alcançáveis dali.
+  it('[C2->UX1.6] o + central abre a porta de criacao, com os caminhos de sempre', async () => {
     const nav = page.locator('nav.fixed.inset-x-0.bottom-0')
     await nav.getByRole('button', { name: /Capturar/i }).click()
     await page.waitForTimeout(700)
-    const texto = await page.locator('body').innerText()
-    expect(texto).toMatch(/Tarefa/i)
-    expect(texto).toMatch(/Compromisso/i)
-    expect(texto).toMatch(/Capturar/i)
+    expect(await page.locator('[data-testid="captura-campo"]').isVisible()).toBe(true)
+    for (const porta of ['tarefa', 'compromisso', 'nota', 'capturar']) {
+      expect(await page.locator(`[data-testid="captura-atalho-${porta}"]`).isVisible()).toBe(true)
+    }
     await page.screenshot({ path: `${TIROS}/mobile-criar.png` })
     await page.keyboard.press('Escape')
     await page.waitForTimeout(400)
@@ -370,7 +375,15 @@ describe('[C2] iPhone 390x844 — navegacao principal e acesso ao resto', () => 
 
   it('[C2] o destino ativo da barra inferior acompanha a rota', async () => {
     await irPara(page, '/memoria')
-    const ativo = await page.locator('nav.fixed.inset-x-0.bottom-0 a.text-accent').innerText()
-    expect(ativo.trim()).toBe('Memória')
+    // O destino ativo continua sendo marcado — mudou a MARCA: era cor + uma
+    // barrinha de 3px na borda superior (que se perdia no hairline e no fundo
+    // translúcido do iPhone), passou a ser cor + pílula suave sob o ícone, a
+    // mesma gramática do destino ativo da barra lateral.
+    const ativo = await page.evaluate(() => {
+      const nav = document.querySelector('nav.fixed.inset-x-0.bottom-0')
+      const link = [...nav.querySelectorAll('a')].find((a) => a.querySelector('.bg-accent-soft'))
+      return link ? link.innerText.trim() : null
+    })
+    expect(ativo).toBe('Memória')
   }, 60000)
 })

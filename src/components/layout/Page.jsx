@@ -62,10 +62,16 @@ export function PageHeader({ title, subtitle, actions, className }) {
     // ja recuavam o cabecalho 8px para alinhar com o TEXTO das linhas, que tem
     // esse respiro interno. Sem ele, os titulos das telas migradas ficariam 8px
     // a esquerda dos aprovados — e "quase alinhado" e pior que desalinhado.
-    <header className={cx('mb-5 flex items-end justify-between gap-3 px-2', className)}>
+    // UX1.6 — O CABECALHO ENCOLHE NO TELEFONE.
+    //
+    // 26px de titulo + legenda + 20px de respiro custavam ~90px antes de
+    // qualquer conteudo, somados aos ~56px da barra superior. Em 390x844 isso
+    // e um sexto da tela gasto dizendo onde voce ja sabe que esta. No desktop
+    // nada muda: `sm:` devolve exatamente as medidas aprovadas.
+    <header className={cx('mb-3.5 flex items-end justify-between gap-3 px-2 sm:mb-5', className)}>
       <div className="min-w-0">
-        <h1 className="text-display truncate">{title}</h1>
-        {subtitle && <p className="text-caption mt-1">{subtitle}</p>}
+        <h1 className="text-display truncate max-sm:text-[22px] max-sm:leading-[1.15]">{title}</h1>
+        {subtitle && <p className="text-caption mt-0.5 sm:mt-1">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </header>

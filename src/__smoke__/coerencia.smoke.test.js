@@ -82,10 +82,17 @@ async function ir(url) {
 }
 
 // Geometria e tipografia do titulo da pagina.
+// O titulo VISIVEL nesta largura.
+//
+// Desde o UX1.6 algumas telas tem DUAS composicoes na arvore (a do telefone e
+// a do desktop), e a que nao vale para a largura atual fica com `display:none`
+// — mas continua sendo o primeiro `h1` do `main`. Medir o primeiro media um
+// elemento que ninguem ve: `x` saia 0 e o tamanho era o da outra composicao.
+// A regra de coerencia nao mudou; mudou o que conta como "o titulo da tela".
 async function tituloDe(url) {
   await ir(url)
   return page.evaluate(() => {
-    const h1 = document.querySelector('main h1')
+    const h1 = [...document.querySelectorAll('main h1')].find((n) => n.offsetParent !== null)
     if (!h1) return null
     const r = h1.getBoundingClientRect()
     const s = getComputedStyle(h1)
