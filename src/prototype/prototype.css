@@ -627,3 +627,171 @@
 .px-dia-ponto { width: 5px; height: 5px; border-radius: 999px; background: rgb(var(--c-accent) / 0.75); }
 .px-dia-ponto-tarefa { background: rgb(var(--c-text-4)); }
 .px-dia-sel .px-dia-ponto { background: rgb(var(--c-accent)); }
+
+/* ---------------------------------------------------------------------------
+   UX-M2 — A LINGUAGEM MOVEL APROVADA (Hoje no telefone).
+
+   A direcao aprovada nao e "mais escura" nem "mais limpa": e mais CALMA e mais
+   PESSOAL. Tres decisoes sustentam isso, e cada classe aqui serve a uma delas.
+
+     ATMOSFERA     o fundo nao e branco clinico. E um claro levemente frio,
+                   com uma variacao quase imperceptivel embaixo — o suficiente
+                   para a barra de navegacao pousar sobre alguma coisa em vez
+                   de flutuar num vazio;
+     SUPERFICIE    raio generoso, zero borda, sombra quase nula. Uma superficie
+                   se separa do fundo pelo TOM, nao por contorno: contorno e o
+                   que faz uma tela parecer um formulario;
+     LAVANDA       o violeta identifica o produto sem pintar nada de violeta
+                   solido. Ele aparece em tres lugares: o selo, o marcador do
+                   horario e a antecedencia. Fora dai, e texto.
+
+   Estas classes sao do PILOTO. Nada aqui vale para o desktop, que continua
+   exatamente como estava.
+--------------------------------------------------------------------------- */
+
+/* A tipografia da home e a do telefone. O produto usa Inter; no iPhone, o
+   sistema desenha melhor o proprio texto — e a diferenca aparece justamente
+   nos tamanhos grandes, que e onde esta tela vive. Inter continua como
+   fallback para quem avalia no desktop. */
+.m2 {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+    'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Plano fixo atras do conteudo. Fica em z-index 0 (e nao -1) de proposito: a
+   raiz do Shell tem fundo proprio, e um valor negativo mandaria esta camada
+   para tras dele — ou seja, para lugar nenhum. */
+.m2-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(130% 55% at 50% 104%, rgb(var(--c-accent) / 0.13), transparent 72%),
+    radial-gradient(90% 40% at 100% 0%, rgb(var(--c-accent) / 0.05), transparent 70%),
+    rgb(var(--m2-canvas));
+}
+
+.m2-superficie {
+  border-radius: 22px;
+  padding: 1rem;
+}
+.m2-branca {
+  background: rgb(var(--c-surface));
+  box-shadow: 0 1px 2px rgb(var(--c-accent) / 0.04), 0 10px 26px -18px rgb(23 20 70 / 0.35);
+}
+.m2-lavanda { background: rgb(var(--m2-lavanda)); }
+
+/* O rotulo de uma superficie: pequeno, espacado, nunca um titulo. Ele diz o
+   que aquilo E; quem tem voz alta e o conteudo logo abaixo. */
+.m2-rotulo {
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgb(var(--c-accent-text));
+}
+
+/* O selo do compromisso — o unico violeta solido da tela, e do tamanho de uma
+   unha. Identidade nao precisa de area, precisa de posicao. */
+.m2-selo {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: rgb(var(--c-accent));
+  color: #fff;
+}
+
+/* O marcador que liga a hora ao compromisso. Substitui a borda esquerda de um
+   "card dentro do card". */
+.m2-marcador {
+  flex: none;
+  width: 3px;
+  align-self: stretch;
+  min-height: 38px;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+}
+
+/* Circulo neutro de uma linha que NAO se conclui (a de "sem data"). A forma
+   diz a diferenca antes de o texto explicar. */
+.m2-icone-linha {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-2));
+  color: rgb(var(--c-text-3));
+}
+
+/* Utilidades do topo: alvo de 40px, sem contorno. */
+.m2-redondo {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgb(var(--m2-utilidade));
+  color: rgb(var(--c-text-2));
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.m2-redondo:active { background: rgb(var(--c-surface-3)); }
+@media (hover: hover) {
+  .m2-redondo:hover { background: rgb(var(--c-surface-3)); }
+}
+
+/* Divisor alinhado ao CONTEUDO, nao a superficie: ele separa linhas irmas, e
+   por isso comeca onde o texto comeca. */
+.m2-divisor {
+  height: 1px;
+  margin-left: 38px;
+  background: rgb(var(--c-hairline) / 0.8);
+}
+
+/* --- tokens do piloto, nos dois temas ------------------------------------- */
+.px-claro {
+  --m2-canvas: 246 246 253;
+  --m2-lavanda: 237 238 253;
+  --m2-utilidade: 236 237 248;
+  --m2-barra: 255 255 255;
+}
+
+/* O escuro NAO e o claro invertido: o fundo e profundo sem ser preto, as
+   superficies sobem um nivel em vez de clarear por transparencia, e o violeta
+   troca de valor para continuar legivel — sem brilho neon. */
+.px-escuro {
+  --m2-canvas: 12 13 20;
+  --m2-lavanda: 29 31 48;
+  --m2-utilidade: 31 34 45;
+  --m2-barra: 20 23 30;
+}
+.px-escuro .m2-branca {
+  background: rgb(var(--c-surface));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 12px 28px -20px rgb(0 0 0 / 0.8);
+}
+
+/* A barra inferior do telefone (UX-M2): superficie clara, cantos superiores
+   suaves e uma sombra rasa para cima. A linha de 1px foi embora — ela cortava
+   a tela em duas; a sombra separa sem dividir. */
+.m2-barra {
+  background: rgb(var(--m2-barra) / 0.96);
+  backdrop-filter: blur(12px);
+  border-top-left-radius: 22px;
+  border-top-right-radius: 22px;
+  box-shadow: 0 -1px 0 rgb(var(--c-hairline) / 0.55), 0 -10px 30px -22px rgb(23 20 70 / 0.5);
+}
+
+/* Tamanhos que acompanham a largura do aparelho.
+   Entre 375 e 430px a composicao e a MESMA — o que muda e a medida. Resolver
+   isso com `clamp` em vez de encolher tudo abaixo de 390 mantem a hierarquia:
+   o horario continua sendo o maior elemento da superficie, e o titulo do
+   compromisso continua cabendo em uma linha no iPhone mini. */
+.m2-hora { font-size: clamp(26px, 7.2vw, 30px); }
+.m2-titulo { font-size: clamp(14px, 3.9vw, 16px); }
+.m2-linha { font-size: clamp(15px, 4vw, 16px); }

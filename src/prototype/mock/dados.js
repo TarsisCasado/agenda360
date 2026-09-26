@@ -59,6 +59,14 @@ export const nomeDoDia = (data) => DIAS[new Date(`${data}T12:00:00`).getDay()]
 export const diaCurto = (data) => DIAS_CURTO[new Date(`${data}T12:00:00`).getDay()]
 export const numeroDoDia = (data) => new Date(`${data}T12:00:00`).getDate()
 export const mesCurto = (data) => MESES[new Date(`${data}T12:00:00`).getMonth()]
+// UX-M2 — a data do topo do Hoje movel e a unica linha editorial da tela
+// ("Segunda, 21 de setembro"): ali o mes abreviado economizaria quatro letras
+// e pagaria com o tom. Nas listas densas o abreviado continua valendo.
+const MESES_LONGOS = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+]
+export const mesPorExtenso = (data) => MESES_LONGOS[new Date(`${data}T12:00:00`).getMonth()]
 
 export const distanciaEmDias = (data, hoje) => {
   const a = new Date(`${data}T12:00:00`)

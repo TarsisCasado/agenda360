@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink, useLocation, Link } from 'react-router-dom'
 import {
-  Sun, CalendarDays, ListTodo, Library, Plus, Search, Sparkles, Bell,
+  Sun, House, CalendarDays, ListTodo, Library, Plus, Search, Sparkles, Bell,
   PanelLeftClose, PanelLeftOpen, PieChart, CircleDashed, Settings,
 } from 'lucide-react'
 import { cx } from '../../lib/utils'
@@ -269,47 +269,51 @@ function CabecalhoMovel({ aoBuscar, aoNotificacoes, aoMenuPessoal }) {
 // --- barra inferior do telefone ---------------------------------------------
 function BarraInferior({ aoCentral }) {
   const { pathname } = useLocation()
-  // UX-M1 — acabamento da barra. Os destinos e a ordem NAO mudam.
+  // UX-M2 — a barra da direcao aprovada. Os destinos e a ordem NAO mudam.
   //
-  //   . o alvo passa a ter altura declarada (48px) em vez de ser o que sobrar
-  //     de icone + rotulo + padding;
-  //   . o ativo ganha uma pilula suave sob o icone. So a cor do texto obrigava
-  //     a comparar cinco rotulos para descobrir onde se esta; a pilula diz
-  //     isso de relance, e e a mesma gramatica do destino ativo da lateral.
+  //   . o alvo tem altura declarada (48px) em vez de ser o que sobrar de icone
+  //     + rotulo + padding;
+  //   . o ativo e violeta e ganha um PONTO sob o rotulo. A pilula do piloto
+  //     anterior pintava uma area de fundo que competia com o [+]; o ponto diz
+  //     a mesma coisa com um sexto da tinta, e e o que a referencia aprovada
+  //     mostra;
+  //   . a barra tem cantos superiores suaves e pousa sobre o fundo tonal, em
+  //     vez de ser uma faixa cortada por uma linha.
   const item = (to, label, Icon) => {
     const ativo = pathname.startsWith(to)
     return (
       <Link
         key={to}
         to={to}
+        aria-current={ativo ? 'page' : undefined}
         className={cx(
-          'flex min-h-[48px] flex-1 flex-col items-center justify-center gap-1 py-1 text-[10.5px] font-medium transition',
+          'flex min-h-[48px] flex-1 flex-col items-center justify-center gap-[3px] py-1 text-[11px] font-medium transition',
           ativo ? 'text-accent-text' : 'text-muted',
         )}
       >
-        <span className={cx(
-          'flex h-[26px] w-[46px] items-center justify-center rounded-full transition-colors',
-          ativo && 'bg-accent-soft',
-        )}>
-          <Icon size={20} strokeWidth={ativo ? 2.3 : 1.8} />
-        </span>
+        <Icon size={21} strokeWidth={ativo ? 2.2 : 1.8} />
         <span className="leading-none">{label}</span>
+        <span className={cx('h-[4px] w-[4px] rounded-full', ativo ? 'bg-accent' : 'bg-transparent')} />
       </Link>
     )
   }
   return (
-    <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-hairline bg-surface/95 backdrop-blur lg:hidden">
-      <div className="mx-auto flex max-w-md items-center px-2 pt-1">
-        {item('/prototipo/hoje', 'Hoje', Sun)}
+    <nav className="pb-safe m2-barra fixed inset-x-0 bottom-0 z-30 lg:hidden">
+      <div className="mx-auto flex max-w-md items-center px-2 pt-1.5">
+        {/* No telefone o Hoje e uma CASA, como na direcao aprovada: a home do
+            produto. Na lateral do desktop ele continua sendo o sol — o desktop
+            esta congelado neste checkpoint. */}
+        {item('/prototipo/hoje', 'Hoje', House)}
         {item('/prototipo/agenda', 'Agenda', CalendarDays)}
         {/* O [+] abre a MESMA central de ação do desktop: um só modelo mental
-            nas duas larguras. */}
+            nas duas larguras. Dominante por cor e forma, nunca por tamanho —
+            52px é o que cabe entre dois destinos sem espremê-los. */}
         <button
           onClick={aoCentral}
           aria-label="Criar ou capturar"
-          className="press mx-1 grid h-12 w-12 flex-none place-items-center rounded-full bg-accent text-white shadow-raised"
+          className="press mx-1 grid h-[52px] w-[52px] flex-none place-items-center rounded-full bg-accent text-white shadow-raised"
         >
-          <Plus size={23} />
+          <Plus size={24} />
         </button>
         {item('/prototipo/tarefas', 'Tarefas', ListTodo)}
         {item('/prototipo/memoria', 'Memória', Library)}
