@@ -1,0 +1,797 @@
+/* ---------------------------------------------------------------------------
+   AGENDA 360 2.0 — direcao visual do prototipo (UX1.1).
+
+   O UX1 buscou "editorial premium" e acertou o tom errado: a tela ficou
+   parecendo uma APRESENTACAO sobre o produto, nao o produto. Titulos grandes
+   com serifa, muita respiracao, objeto nenhum com contorno — bonito de olhar,
+   ruim de usar.
+
+   A direcao agora e INTERFACE DE TRABALHO PESSOAL: moderna, precisa, tatil,
+   madura. "Calma" continua valendo, mas calma e AUSENCIA DE RUIDO, nunca
+   ausencia de contraste, de contorno ou de funcao.
+
+   O que mudou, concretamente:
+     . tipografia de interface (sem serifa), titulo funcional e discreto —
+       quem tem protagonismo e o conteudo e as acoes;
+     . objetos manipulaveis TEM superficie e contorno: se e para arrastar,
+       precisa parecer que da para pegar;
+     . estados visiveis de verdade: repouso, hover, foco, selecao, arrasto,
+       alvo de solta, concluido, desabilitado;
+     . o roxo significa acao/selecao/foco. Nao e enfeite.
+--------------------------------------------------------------------------- */
+
+/* ---------- tipografia ---------------------------------------------------- */
+.px-titulo-tela {
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+@media (min-width: 1024px) {
+  .px-titulo-tela { font-size: 26px; }
+}
+
+.px-secao {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(var(--c-text-3));
+}
+
+.px-hora {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.px-motivo {
+  font-size: 12px;
+  color: rgb(var(--c-text-3));
+}
+
+/* ---------- linhas -------------------------------------------------------- */
+.px-linha {
+  display: flex;
+  gap: 0.75rem;
+  /* UX1.1.1 — a linha e a unidade de densidade do produto. 11px de respiro
+     vertical fazia cada tela caber menos do que devia; 8px continua confortavel
+     para o dedo (a area de toque vem da altura do conteudo, nao do padding) e
+     devolve cerca de uma linha a cada seis. */
+  padding: 0.5rem 0;
+  border-top: 1px solid rgb(var(--c-hairline));
+}
+.px-linha:first-child { border-top: 0; }
+
+.px-toque {
+  border-radius: 10px;
+  margin-inline: -0.5rem;
+  padding-inline: 0.5rem;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .px-toque:hover { background: rgb(var(--c-surface-2)); }
+}
+
+/* ---------- objetos: o cartao do quadro ----------------------------------- */
+/* Se e para pegar e mover, tem de PARECER um objeto. Superficie propria,
+   contorno sutil, e uma sombra minima que so aparece quando a coisa sai do
+   lugar. */
+.px-cartao {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgb(var(--c-hairline));
+  border-radius: 12px;
+  background: rgb(var(--c-board-card));
+  padding: 0.5rem 0.625rem;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .px-cartao:hover {
+    border-color: rgb(var(--c-accent) / 0.45);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 6px 16px -10px rgb(0 0 0 / 0.25);
+  }
+}
+.px-cartao:focus-visible {
+  outline: 2px solid rgb(var(--c-accent));
+  outline-offset: 2px;
+}
+.px-cartao[data-arrastando='true'] {
+  opacity: 0.38;
+  border-style: dashed;
+}
+.px-cartao[data-concluido='true'] { opacity: 0.62; }
+
+.px-pega {
+  cursor: grab;
+  touch-action: manipulation;
+}
+.px-pega:active { cursor: grabbing; }
+
+/* ---------------------------------------------------------------------------
+   UX1.2.2.1 — A REGRA QUE FALTAVA, E POR QUE ELA NAO APARECIA EM TESTE.
+
+   No iPhone o cartao nao se movia: segurar 380ms levantava o cartao e, logo em
+   seguida, o iOS abria a SELECAO DE TEXTO sobre o titulo — alcas azuis, menu
+   "Copiar / Buscar Selecao". Dali em diante o gesto e do WebKit: a pagina para
+   de receber o toque, chega um `touchcancel`, o fantasma e desmontado e o dedo
+   passa a arrastar uma selecao em vez do cartao.
+
+   O que enganou o teste: nenhuma folha de estilo deste projeto declarava
+   `user-select`. Quem tornava o cartao nao-selecionavel era a folha do PROPRIO
+   NAVEGADOR, pela regra que o Blink aplica a `[draggable=true]`. No Chromium
+   (onde a automacao roda) o cartao media `user-select: none` e o gesto passava;
+   no Safari do iPhone, que nao tem arrasto HTML5 e portanto nao aplica essa
+   regra, o mesmo cartao media `user-select: auto` — selecionavel. O teste media
+   um navegador e o usuario segurava outro.
+
+   `-webkit-touch-callout: none` (que o produto ja declara em `[data-task-id]`)
+   nao resolve: ele suprime o balao de link/imagem, nao a selecao de texto.
+
+   Por isso a propriedade e declarada AQUI, explicitamente, em vez de herdada de
+   um atributo cujo efeito depende do navegador.
+   --------------------------------------------------------------------------- */
+.px-cartao,
+.px-cartao * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* O CARTAO NA MAO.
+   O clone (`.board-ghost`) e do produto e nasce `position: fixed`, movido por
+   `transform` em coordenadas de viewport. So que `.px-cartao` declara
+   `position: relative`, tem a MESMA especificidade e e carregado DEPOIS (o
+   prototipo e um pedaco tardio) — entao o clone do prototipo virava um elemento
+   no fluxo, grudado no fim do `body`, e o `transform` o levava para uns 1000px
+   abaixo da dobra. O fantasma existia no DOM e NUNCA aparecia na tela: nem no
+   iPhone, nem no teste, que so o contava.
+   A regra abaixo tem especificidade maior e devolve o posicionamento — e da ao
+   cartao peso suficiente para nao haver duvida de que o dedo esta CARREGANDO
+   aquele cartao. */
+.board-ghost.px-cartao {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  pointer-events: none;
+  margin: 0;
+  opacity: 1;
+  border-color: rgb(var(--c-accent));
+  background: rgb(var(--c-board-card));
+  box-shadow: 0 18px 34px -10px rgb(0 0 0 / 0.38), 0 0 0 2px rgb(var(--c-accent) / 0.5);
+  transform-origin: 50% 50%;
+}
+
+/* A FRESTA DA BORDA. Com um cartao na mao, encostar na borda leva o quadro para
+   a coluna vizinha — mas isso so e descobrivel se a borda DISSER que esta ali.
+   A faixa aparece quando ha vizinha e acende quando o dedo entra nela. */
+.px-borda {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  pointer-events: none;
+  opacity: 0.35;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.px-borda[data-ativa='true'] { opacity: 1; }
+.px-borda-esq {
+  left: 0;
+  background: linear-gradient(90deg, rgb(var(--c-accent) / 0.45), transparent);
+}
+.px-borda-dir {
+  right: 0;
+  background: linear-gradient(270deg, rgb(var(--c-accent) / 0.45), transparent);
+}
+
+/* Coluna do quadro: superficie rebaixada, para os cartoes flutuarem sobre ela. */
+.px-coluna {
+  border-radius: 14px;
+  background: rgb(var(--c-board));
+  padding: 0.375rem;
+  transition: box-shadow var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+.px-coluna[data-alvo='true'] {
+  background: rgb(var(--c-accent-soft));
+  box-shadow: inset 0 0 0 2px rgb(var(--c-accent) / 0.55);
+}
+
+/* A linha de insercao: diz EXATAMENTE onde o cartao vai cair. */
+.px-insercao {
+  height: 2px;
+  border-radius: 2px;
+  background: rgb(var(--c-accent));
+  margin: 3px 2px;
+  animation: px-pulsar 1.1s var(--ease-out) infinite;
+}
+@keyframes px-pulsar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ---------- controles ----------------------------------------------------- */
+.px-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--c-hairline));
+  background: rgb(var(--c-surface));
+  padding: 0.3rem 0.7rem;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: rgb(var(--c-text-2));
+  white-space: nowrap;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  button.px-chip:hover { border-color: rgb(var(--c-accent) / 0.5); color: rgb(var(--c-text)); }
+}
+.px-chip:focus-visible { outline: 2px solid rgb(var(--c-accent)); outline-offset: 2px; }
+.px-chip-on {
+  border-color: rgb(var(--c-accent));
+  background: rgb(var(--c-accent-soft));
+  color: rgb(var(--c-accent-text));
+  font-weight: 600;
+}
+
+.px-campo {
+  width: 100%;
+  border: 1px solid rgb(var(--c-hairline));
+  border-radius: 10px;
+  background: rgb(var(--c-surface));
+  padding: 0.5rem 0.6875rem;
+  font-size: 14.5px;
+  color: rgb(var(--c-text));
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.px-campo::placeholder { color: rgb(var(--c-text-4)); }
+.px-campo:focus {
+  outline: none;
+  border-color: rgb(var(--c-accent));
+  box-shadow: 0 0 0 3px rgb(var(--c-accent) / 0.16);
+}
+.px-rotulo {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--c-text-3));
+  margin-bottom: 0.3rem;
+}
+
+/* ---------- superficies especiais ----------------------------------------- */
+/* A unica peca que e mesmo um cartao destacado: a proposta que espera
+   confirmacao. Ela precisa parar o olho — e a unica coisa na tela que pede
+   uma decisao. */
+.px-proposta {
+  border: 1px solid rgb(var(--c-accent) / 0.35);
+  border-radius: 14px;
+  background: rgb(var(--c-surface));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -24px rgb(0 0 0 / 0.4);
+}
+
+.px-painel {
+  border: 1px solid rgb(var(--c-hairline));
+  border-radius: 14px;
+  background: rgb(var(--c-surface));
+}
+
+/* Barra que distingue as tres especies temporais — forma antes de cor, para
+   funcionar sem depender de enxergar matiz. */
+.px-especie { width: 3px; border-radius: 999px; flex: none; }
+.px-compromisso { background: rgb(var(--c-accent)); }
+.px-reserva {
+  background: repeating-linear-gradient(
+    135deg,
+    rgb(var(--c-accent) / 0.6) 0 3px,
+    transparent 3px 6px
+  );
+}
+.px-planejada { background: rgb(var(--c-hairline)); }
+
+/* Grade da semana: a linha do tempo precisa ser LEGIVEL como tempo. */
+.px-grade-hora {
+  border-top: 1px solid rgb(var(--c-hairline));
+  background-image: linear-gradient(
+    to bottom,
+    transparent calc(50% - 0.5px),
+    rgb(var(--c-hairline) / 0.45) calc(50% - 0.5px),
+    rgb(var(--c-hairline) / 0.45) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+/* Slot vazio: precisa PARECER que da para criar ali, sem que noventa slots
+   fiquem gritando isso ao mesmo tempo. O "+" mora escondido e so acende sob o
+   cursor. */
+.px-slot {
+  position: relative;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.px-slot::after {
+  content: '+';
+  position: absolute;
+  inset-inline-start: 4px;
+  top: 1px;
+  font-size: 12px;
+  line-height: 1;
+  color: rgb(var(--c-accent-text));
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .px-slot:hover { background: rgb(var(--c-accent-soft) / 0.6); }
+  .px-slot:hover::after { opacity: 0.75; }
+}
+.px-slot:focus-visible {
+  outline: 2px solid rgb(var(--c-accent));
+  outline-offset: -2px;
+}
+.px-evento {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  border-radius: 7px;
+  border: 1px solid rgb(var(--c-accent) / 0.32);
+  border-left-width: 3px;
+  background: rgb(var(--c-accent-soft));
+  padding: 2px 6px;
+  overflow: hidden;
+  text-align: left;
+  line-height: 1.2;
+  transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .px-evento:hover { border-color: rgb(var(--c-accent)); box-shadow: 0 4px 12px -8px rgb(0 0 0 / 0.4); }
+}
+.px-evento-reserva {
+  background: repeating-linear-gradient(
+    135deg,
+    rgb(var(--c-accent) / 0.14) 0 6px,
+    rgb(var(--c-accent) / 0.05) 6px 12px
+  );
+  border-style: dashed;
+}
+
+/* Tabela densa da visao Lista: alinhamento por coluna ajuda a varrer, e varrer
+   e o que se faz numa lista de trinta itens. */
+.px-tabela-linha {
+  display: grid;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4375rem 0.5rem;
+  border-top: 1px solid rgb(var(--c-hairline));
+  border-radius: 8px;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .px-tabela-linha:hover { background: rgb(var(--c-surface-2)); }
+}
+
+.px-aviso { animation: px-subir var(--dur-base) var(--ease-out); }
+@keyframes px-subir {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.px-entra { animation: px-fade var(--dur-base) var(--ease-out); }
+
+/* UX-M1 — o detalhe SOBE. ~200ms: curto o bastante para nao parecer uma
+   viagem, longo o bastante para o olho acompanhar de onde a superficie veio. */
+.px-sobe { animation: px-subir 200ms var(--ease-out); }
+@keyframes px-fade {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .px-aviso, .px-entra, .px-insercao, .px-sobe { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   TEMA DO PROTOTIPO (UX1.2).
+
+   O protótipo escolhe Claro / Escuro / Sistema SEM tocar na classe do <html>:
+   se mexesse ali, sair do protótipo deixaria o produto com o tema trocado
+   atrás. Em vez disso a raiz do protótipo redeclara a escala inteira para o
+   próprio subárvore — os mesmos valores do produto, escritos aqui de propósito
+   para que o portão continue sendo só uma rota.
+
+   Consequência registrada para a migração real: quando isto virar produto, o
+   tema é uma preferência de conta, não uma classe local.
+--------------------------------------------------------------------------- */
+.px-claro {
+  color-scheme: light;
+  --c-canvas: 247 248 250;
+  --c-surface: 255 255 255;
+  --c-surface-2: 242 244 247;
+  --c-surface-3: 232 235 240;
+  --c-hairline: 226 230 237;
+  --c-board: 234 237 243;
+  --c-board-card: 255 255 255;
+  --c-text: 16 22 34;
+  --c-text-2: 88 98 116;
+  --c-text-3: 137 147 164;
+  --c-text-4: 170 179 193;
+  --c-accent: 79 70 229;
+  --c-accent-soft: 238 240 255;
+  --c-accent-text: 67 56 202;
+  --c-positive: 16 152 106;
+  --c-warning: 197 128 12;
+  --c-danger: 220 62 62;
+}
+
+.px-escuro {
+  color-scheme: dark;
+  --c-canvas: 11 13 18;
+  --c-surface: 20 23 30;
+  --c-surface-2: 27 31 40;
+  --c-surface-3: 36 41 52;
+  --c-hairline: 44 50 62;
+  --c-board: 22 26 33;
+  --c-board-card: 34 39 49;
+  --c-text: 240 243 248;
+  --c-text-2: 160 170 187;
+  --c-text-3: 116 126 143;
+  --c-text-4: 92 101 117;
+  --c-accent: 129 140 248;
+  --c-accent-soft: 33 36 62;
+  --c-accent-text: 165 180 252;
+  --c-positive: 52 199 145;
+  --c-warning: 234 179 8;
+  --c-danger: 248 113 113;
+}
+
+/* ---------------------------------------------------------------------------
+   PECAS NOVAS DO UX1.2
+--------------------------------------------------------------------------- */
+
+/* Grupo da lateral: o rótulo existe para AGRUPAR, não para ser lido toda hora.
+   Some quando a lateral está recolhida, onde vira uma linha de separação. */
+.px-grupo {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(var(--c-text-4));
+  padding: 0 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Iniciais de uma pessoa: delegação precisa de um rosto, e um rosto que cabe
+   numa linha de 20px é um par de letras. */
+.px-pessoa {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-3));
+  color: rgb(var(--c-text-2));
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  width: 20px;
+  height: 20px;
+}
+.px-pessoa-eu { background: rgb(var(--c-accent-soft)); color: rgb(var(--c-accent-text)); }
+
+/* Etiqueta de estado de responsabilidade — não é a mesma coisa que a coluna. */
+.px-selo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.px-selo-aguardando { background: rgb(var(--c-warning) / 0.14); color: rgb(var(--c-warning)); }
+.px-selo-devolvida { background: rgb(var(--c-danger) / 0.12); color: rgb(var(--c-danger)); }
+.px-selo-aceita { background: rgb(var(--c-positive) / 0.12); color: rgb(var(--c-positive)); }
+.px-selo-bloqueada { background: rgb(var(--c-danger) / 0.12); color: rgb(var(--c-danger)); }
+
+/* Célula do mês: precisa caber conteúdo de verdade, não só um ponto. */
+.px-mes-celula {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 92px;
+  border: 1px solid rgb(var(--c-hairline));
+  border-radius: 10px;
+  background: rgb(var(--c-surface));
+  padding: 0.25rem 0.3rem;
+  text-align: left;
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .px-mes-celula:hover { border-color: rgb(var(--c-accent) / 0.55); }
+}
+.px-mes-celula:focus-visible { outline: 2px solid rgb(var(--c-accent)); outline-offset: 1px; }
+/* No telefone a célula é um ALVO e um indicador, não um contêiner de texto:
+   92px de altura empurrariam o resumo do dia para fora da tela, e o resumo é
+   justamente a resposta que o mês tem de dar. */
+.px-mes-compacto { min-height: 42px; }
+.px-mes-fora { background: transparent; border-color: transparent; }
+.px-mes-hoje { border-color: rgb(var(--c-accent)); background: rgb(var(--c-accent-soft) / 0.5); }
+.px-mes-item {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 4px;
+  padding: 0 3px;
+  background: rgb(var(--c-accent-soft));
+  color: rgb(var(--c-accent-text));
+}
+.px-mes-tarefa {
+  background: transparent;
+  color: rgb(var(--c-text-2));
+  border-left: 2px solid rgb(var(--c-hairline));
+  border-radius: 0;
+  padding-left: 4px;
+}
+/* A barra de ocupação conhecida: quanto do dia o Agenda sabe que está tomado.
+   Não afirma disponibilidade — só mostra o que ele conhece. */
+.px-ocupacao {
+  height: 2px;
+  border-radius: 2px;
+  background: rgb(var(--c-accent) / 0.55);
+}
+
+/* Conversa do Copiloto */
+.px-balao {
+  max-width: 88%;
+  border-radius: 14px;
+  padding: 0.6rem 0.9rem;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+.px-balao-pessoa { margin-left: auto; background: rgb(var(--c-accent-soft)); color: rgb(var(--c-accent-text)); }
+.px-balao-ia { background: rgb(var(--c-surface-2)); color: rgb(var(--c-text)); }
+
+/* Editor de nota: uma folha de papel, não um formulário. */
+.px-editor {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+  font-size: 15px;
+  line-height: 1.65;
+  color: rgb(var(--c-text));
+}
+.px-editor::placeholder { color: rgb(var(--c-text-4)); }
+
+/* ---------------------------------------------------------------------------
+   MÊS NO TELEFONE (UX1.2.2).
+
+   A grade com borda e fundo em cada célula lia como PLANILHA. Num calendário
+   pessoal o objeto é o NÚMERO DO DIA, não a caixa: o que existe de verdade são
+   os dias, e a grade é só o arranjo deles.
+
+   Então some a caixa. O número manda; os indicadores de atividade ficam
+   abaixo, menores; hoje é um número marcado; o dia escolhido ganha uma forma
+   cheia; dia sem nada não diz nada; dia de fora do mês quase desaparece.
+--------------------------------------------------------------------------- */
+.px-dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 0 6px;
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.px-dia:focus-visible { outline: 2px solid rgb(var(--c-accent)); outline-offset: -2px; }
+
+.px-dia-numero {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--c-text));
+  line-height: 1;
+}
+.px-dia-fora .px-dia-numero { color: rgb(var(--c-text-4)); }
+
+/* Hoje: um número marcado, não uma célula pintada. */
+.px-dia-hoje .px-dia-numero {
+  font-weight: 700;
+  color: rgb(var(--c-accent-text));
+}
+/* O dia escolhido é o único com forma cheia — é a seleção, e ela tem de ser
+   inconfundível. */
+.px-dia-sel .px-dia-numero {
+  background: rgb(var(--c-accent));
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Indicadores: três pontos bastam para "tem coisa aqui"; a quantidade exata é
+   o resumo abaixo que responde. */
+.px-dia-pontos { display: flex; gap: 3px; height: 5px; align-items: center; }
+.px-dia-ponto { width: 5px; height: 5px; border-radius: 999px; background: rgb(var(--c-accent) / 0.75); }
+.px-dia-ponto-tarefa { background: rgb(var(--c-text-4)); }
+.px-dia-sel .px-dia-ponto { background: rgb(var(--c-accent)); }
+
+/* ---------------------------------------------------------------------------
+   UX-M2 — A LINGUAGEM MOVEL APROVADA (Hoje no telefone).
+
+   A direcao aprovada nao e "mais escura" nem "mais limpa": e mais CALMA e mais
+   PESSOAL. Tres decisoes sustentam isso, e cada classe aqui serve a uma delas.
+
+     ATMOSFERA     o fundo nao e branco clinico. E um claro levemente frio,
+                   com uma variacao quase imperceptivel embaixo — o suficiente
+                   para a barra de navegacao pousar sobre alguma coisa em vez
+                   de flutuar num vazio;
+     SUPERFICIE    raio generoso, zero borda, sombra quase nula. Uma superficie
+                   se separa do fundo pelo TOM, nao por contorno: contorno e o
+                   que faz uma tela parecer um formulario;
+     LAVANDA       o violeta identifica o produto sem pintar nada de violeta
+                   solido. Ele aparece em tres lugares: o selo, o marcador do
+                   horario e a antecedencia. Fora dai, e texto.
+
+   Estas classes sao do PILOTO. Nada aqui vale para o desktop, que continua
+   exatamente como estava.
+--------------------------------------------------------------------------- */
+
+/* A tipografia da home e a do telefone. O produto usa Inter; no iPhone, o
+   sistema desenha melhor o proprio texto — e a diferenca aparece justamente
+   nos tamanhos grandes, que e onde esta tela vive. Inter continua como
+   fallback para quem avalia no desktop. */
+.m2 {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+    'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Plano fixo atras do conteudo. Fica em z-index 0 (e nao -1) de proposito: a
+   raiz do Shell tem fundo proprio, e um valor negativo mandaria esta camada
+   para tras dele — ou seja, para lugar nenhum. */
+.m2-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(130% 55% at 50% 104%, rgb(var(--c-accent) / 0.13), transparent 72%),
+    radial-gradient(90% 40% at 100% 0%, rgb(var(--c-accent) / 0.05), transparent 70%),
+    rgb(var(--m2-canvas));
+}
+
+.m2-superficie {
+  border-radius: 22px;
+  padding: 1rem;
+}
+.m2-branca {
+  background: rgb(var(--c-surface));
+  box-shadow: 0 1px 2px rgb(var(--c-accent) / 0.04), 0 10px 26px -18px rgb(23 20 70 / 0.35);
+}
+.m2-lavanda { background: rgb(var(--m2-lavanda)); }
+
+/* O rotulo de uma superficie: pequeno, espacado, nunca um titulo. Ele diz o
+   que aquilo E; quem tem voz alta e o conteudo logo abaixo. */
+.m2-rotulo {
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgb(var(--c-accent-text));
+}
+
+/* O selo do compromisso — o unico violeta solido da tela, e do tamanho de uma
+   unha. Identidade nao precisa de area, precisa de posicao. */
+.m2-selo {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: rgb(var(--c-accent));
+  color: #fff;
+}
+
+/* O marcador que liga a hora ao compromisso. Substitui a borda esquerda de um
+   "card dentro do card". */
+.m2-marcador {
+  flex: none;
+  width: 3px;
+  align-self: stretch;
+  min-height: 38px;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+}
+
+/* Circulo neutro de uma linha que NAO se conclui (a de "sem data"). A forma
+   diz a diferenca antes de o texto explicar. */
+.m2-icone-linha {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-2));
+  color: rgb(var(--c-text-3));
+}
+
+/* Utilidades do topo: alvo de 40px, sem contorno. */
+.m2-redondo {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgb(var(--m2-utilidade));
+  color: rgb(var(--c-text-2));
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.m2-redondo:active { background: rgb(var(--c-surface-3)); }
+@media (hover: hover) {
+  .m2-redondo:hover { background: rgb(var(--c-surface-3)); }
+}
+
+/* Divisor alinhado ao CONTEUDO, nao a superficie: ele separa linhas irmas, e
+   por isso comeca onde o texto comeca. */
+.m2-divisor {
+  height: 1px;
+  margin-left: 38px;
+  background: rgb(var(--c-hairline) / 0.8);
+}
+
+/* --- tokens do piloto, nos dois temas ------------------------------------- */
+.px-claro {
+  --m2-canvas: 246 246 253;
+  --m2-lavanda: 237 238 253;
+  --m2-utilidade: 236 237 248;
+  --m2-barra: 255 255 255;
+}
+
+/* O escuro NAO e o claro invertido: o fundo e profundo sem ser preto, as
+   superficies sobem um nivel em vez de clarear por transparencia, e o violeta
+   troca de valor para continuar legivel — sem brilho neon. */
+.px-escuro {
+  --m2-canvas: 12 13 20;
+  --m2-lavanda: 29 31 48;
+  --m2-utilidade: 31 34 45;
+  --m2-barra: 20 23 30;
+}
+.px-escuro .m2-branca {
+  background: rgb(var(--c-surface));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 12px 28px -20px rgb(0 0 0 / 0.8);
+}
+
+/* A barra inferior do telefone (UX-M2): superficie clara, cantos superiores
+   suaves e uma sombra rasa para cima. A linha de 1px foi embora — ela cortava
+   a tela em duas; a sombra separa sem dividir. */
+.m2-barra {
+  background: rgb(var(--m2-barra) / 0.96);
+  backdrop-filter: blur(12px);
+  border-top-left-radius: 22px;
+  border-top-right-radius: 22px;
+  box-shadow: 0 -1px 0 rgb(var(--c-hairline) / 0.55), 0 -10px 30px -22px rgb(23 20 70 / 0.5);
+}
+
+/* Tamanhos que acompanham a largura do aparelho.
+   Entre 375 e 430px a composicao e a MESMA — o que muda e a medida. Resolver
+   isso com `clamp` em vez de encolher tudo abaixo de 390 mantem a hierarquia:
+   o horario continua sendo o maior elemento da superficie, e o titulo do
+   compromisso continua cabendo em uma linha no iPhone mini. */
+.m2-hora { font-size: clamp(26px, 7.2vw, 30px); }
+.m2-titulo { font-size: clamp(14px, 3.9vw, 16px); }
+.m2-linha { font-size: clamp(15px, 4vw, 16px); }
