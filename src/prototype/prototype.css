@@ -379,13 +379,17 @@
   to { opacity: 1; transform: none; }
 }
 .px-entra { animation: px-fade var(--dur-base) var(--ease-out); }
+
+/* UX-M1 — o detalhe SOBE. ~200ms: curto o bastante para nao parecer uma
+   viagem, longo o bastante para o olho acompanhar de onde a superficie veio. */
+.px-sobe { animation: px-subir 200ms var(--ease-out); }
 @keyframes px-fade {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .px-aviso, .px-entra, .px-insercao { animation: none; }
+  .px-aviso, .px-entra, .px-insercao, .px-sobe { animation: none; }
 }
 
 /* ---------------------------------------------------------------------------

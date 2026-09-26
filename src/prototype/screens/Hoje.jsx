@@ -8,6 +8,7 @@ import { Vazio, Botao } from '../parts/base'
 import { Sanfona } from '../parts/movel'
 import { alertaCurto } from '../mock/alerta'
 import TarefaForm from '../forms/TarefaForm'
+import HojeMovel from './HojeMovel'
 import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -29,7 +30,16 @@ import { cx } from '../../lib/utils'
 // Densidade veio de linhas mais informativas e de menos ar entre elas — não de
 // widgets. Cada linha diz o suficiente para decidir sem abrir nada.
 // ---------------------------------------------------------------------------
-export default function Hoje() {
+// UX-M1 — no TELEFONE esta tela passa a ser o piloto da nova linguagem
+// (HojeMovel), recomposto do zero. No desktop nada mudou: a arvore abaixo
+// continua sendo, linha por linha, a que estava aprovada.
+export default function Hoje({ aoBuscar, aoMenu }) {
+  const desktopPiloto = useDesktop()
+  if (!desktopPiloto) return <HojeMovel aoBuscar={aoBuscar} aoMenu={aoMenu} />
+  return <HojeDesktop />
+}
+
+function HojeDesktop() {
   const { estado } = useProto()
   const acoes = useAcoes()
   const desktop = useDesktop()

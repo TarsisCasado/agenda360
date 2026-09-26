@@ -42,8 +42,13 @@ const DESTINOS = [
 const LARGA = 216
 const ESTREITA = 62
 
+// `semCabecalhoMovel` (UX-M1): a barra de marca do telefone e util em telas
+// que precisam de um titulo de aplicativo, e e peso morto numa HOME — ali ela
+// gasta 44px para dizer o nome do produto dentro do proprio produto. O piloto
+// do Hoje desenha o proprio topo; as demais telas do prototipo continuam com o
+// cabecalho de sempre.
 export default function Shell({
-  children, largo, aoCentral, aoBuscar, aoNotificacoes, aoMenuPessoal,
+  children, largo, semCabecalhoMovel, aoCentral, aoBuscar, aoNotificacoes, aoMenuPessoal,
 }) {
   const [recolhida, setRecolhida] = useState(false)
   const { classe } = useTema()
@@ -58,11 +63,13 @@ export default function Shell({
         aoBuscar={aoBuscar}
         aoNotificacoes={aoNotificacoes}
       />
-      <CabecalhoMovel
-        aoBuscar={aoBuscar}
-        aoNotificacoes={aoNotificacoes}
-        aoMenuPessoal={aoMenuPessoal}
-      />
+      {!semCabecalhoMovel && (
+        <CabecalhoMovel
+          aoBuscar={aoBuscar}
+          aoNotificacoes={aoNotificacoes}
+          aoMenuPessoal={aoMenuPessoal}
+        />
+      )}
       <main style={{ '--px-lateral': `${largura}px` }} className="lg:pl-[var(--px-lateral)]">
         {/* Cada superficie usa o espaco conforme a funcao: a agenda e o quadro
             precisam de largura para representar tempo e fluxo; leitura, nao. */}
@@ -262,6 +269,13 @@ function CabecalhoMovel({ aoBuscar, aoNotificacoes, aoMenuPessoal }) {
 // --- barra inferior do telefone ---------------------------------------------
 function BarraInferior({ aoCentral }) {
   const { pathname } = useLocation()
+  // UX-M1 — acabamento da barra. Os destinos e a ordem NAO mudam.
+  //
+  //   . o alvo passa a ter altura declarada (48px) em vez de ser o que sobrar
+  //     de icone + rotulo + padding;
+  //   . o ativo ganha uma pilula suave sob o icone. So a cor do texto obrigava
+  //     a comparar cinco rotulos para descobrir onde se esta; a pilula diz
+  //     isso de relance, e e a mesma gramatica do destino ativo da lateral.
   const item = (to, label, Icon) => {
     const ativo = pathname.startsWith(to)
     return (
@@ -269,18 +283,23 @@ function BarraInferior({ aoCentral }) {
         key={to}
         to={to}
         className={cx(
-          'flex flex-1 flex-col items-center gap-1 py-2 text-[10.5px] font-medium transition',
+          'flex min-h-[48px] flex-1 flex-col items-center justify-center gap-1 py-1 text-[10.5px] font-medium transition',
           ativo ? 'text-accent-text' : 'text-muted',
         )}
       >
-        <Icon size={20} strokeWidth={ativo ? 2.3 : 1.8} />
-        {label}
+        <span className={cx(
+          'flex h-[26px] w-[46px] items-center justify-center rounded-full transition-colors',
+          ativo && 'bg-accent-soft',
+        )}>
+          <Icon size={20} strokeWidth={ativo ? 2.3 : 1.8} />
+        </span>
+        <span className="leading-none">{label}</span>
       </Link>
     )
   }
   return (
     <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-hairline bg-surface/95 backdrop-blur lg:hidden">
-      <div className="mx-auto flex max-w-md items-center px-2">
+      <div className="mx-auto flex max-w-md items-center px-2 pt-1">
         {item('/prototipo/hoje', 'Hoje', Sun)}
         {item('/prototipo/agenda', 'Agenda', CalendarDays)}
         {/* O [+] abre a MESMA central de ação do desktop: um só modelo mental

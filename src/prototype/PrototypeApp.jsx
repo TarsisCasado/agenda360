@@ -127,9 +127,12 @@ function Superficies({
 function Rotas(props) {
   const { pathname } = useLocation()
   const largo = /\/(agenda|tarefas|memoria|relatorios)$/.test(pathname)
+  // UX-M1: so o piloto do Hoje desenha o proprio topo.
+  const hoje = /\/hoje$/.test(pathname) || /\/prototipo\/?$/.test(pathname)
   return (
     <Shell
       largo={largo}
+      semCabecalhoMovel={hoje}
       aoCentral={props.onCentral}
       aoBuscar={props.onBuscar}
       aoNotificacoes={props.onNotificacoes}
@@ -137,7 +140,10 @@ function Rotas(props) {
     >
       <Routes>
         <Route index element={<Navigate to="hoje" replace />} />
-        <Route path="hoje" element={<Hoje />} />
+        <Route
+          path="hoje"
+          element={<Hoje aoBuscar={props.onBuscar} aoMenu={props.onMenuPessoal} />}
+        />
         <Route path="agenda" element={<Agenda />} />
         <Route path="tarefas" element={<Tarefas />} />
         <Route path="tarefas/:id" element={<TarefaDetalhe />} />
