@@ -972,3 +972,46 @@
   background: rgb(var(--sup));
   border-left: 2px solid rgb(var(--mar));
 }
+
+/* ===========================================================================
+   UX-M3.1 — A SEMANA EM TRES DIAS.
+
+   A grade de sete colunas obrigava o bloco a caber em ~43px de largura, e o
+   texto pagou a conta: 9,5px. Com tres colunas a largura triplica e o bloco
+   volta a ser lido — 14.5px no titulo, 13px no apoio. O que encolhe num bloco
+   curto e a QUANTIDADE de informacao, decidida em `detalheDoBloco`; a fonte
+   nao encolhe mais.
+   ======================================================================== */
+.m3-bloco-3 {
+  border-radius: 8px;
+  padding: 4px 4px 4px 6px;
+  font-size: 14.5px;
+  font-weight: 650;
+  line-height: 1.16;
+  letter-spacing: -0.01em;
+  border-left-width: 3px;
+}
+.m3-bloco-3 .m3-apoio {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  /* Aperta o espacamento em vez do corpo: 13px continuam 13px, e o intervalo
+     inteiro ("09:00–10:00") cabe na coluna sem reticencias. */
+  letter-spacing: -0.022em;
+  opacity: 0.82;
+}
+
+/* O cabecalho das tres colunas visiveis. O veu da coluna escolhida sobe ate
+   aqui para que cabeca e grade sejam a mesma coluna, e nao duas pecas. */
+.m3-cabeca-3 {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgb(var(--c-text-3));
+}
+.m3-cabeca-3-sel { color: rgb(var(--c-accent-text)); }
+
+/* O bloco escalonado por cima de outro ganha uma sombra curta: sem ela os dois
+   viram uma mancha so, e a sobreposicao — que e o que a grade existe para
+   revelar — deixa de ser legivel como duas coisas. */
+.m3-bloco-sobre { box-shadow: -2px 0 6px rgb(2 6 23 / 0.16); }

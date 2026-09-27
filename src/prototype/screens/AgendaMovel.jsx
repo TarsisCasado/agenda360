@@ -8,6 +8,8 @@ import { useProto, useAcoes } from '../store/contexto'
 import {
   VISOES, semanaDe, eventosDoDia, semHorario, corDoEvento, situacaoDoEvento,
   faixaDeHoras, posicaoNaGrade, gradeDoMes, temConflito, disposicaoDoDia,
+  recorteDaSemana, andarNoRecorte, detalheDoBloco, faixaDoBloco,
+  PX_HORA_SEMANA, ALTURA_MINIMA_BLOCO,
 } from '../store/agendaM3'
 import {
   ESTADO, AGORA_DEMO, somarDias, iso, diaCurto, nomeDoDia, numeroDoDia,
@@ -33,10 +35,12 @@ import { cx } from '../../lib/utils'
 //           direita. Os blocos nao sao cartoes soltos — eles pendem do mesmo
 //           fio, que e o que faz a sequencia virar um dia.
 //
-//   SEMANA  "como meu tempo esta distribuido?"
-//           Uma grade: dias em colunas, horas no eixo vertical, altura =
-//           duracao. Aqui nao se le titulo: enxerga-se ocupacao e janela. Quem
-//           quiser ler, toca — e o detalhe abre com o texto inteiro.
+//   SEMANA  "como e minha semana, e o que acontece nestes dias?"
+//           Duas pecas (UX-M3.1): a faixa com os SETE dias em cima, para a
+//           percepcao do todo, e uma grade temporal de TRES dias embaixo, onde
+//           altura = duracao e o titulo volta a ser legivel. A grade de sete
+//           colunas simultaneas foi abandonada porque so cabia com texto de
+//           9,5px — a representacao passa a se adaptar ao conteudo.
 //
 //   MES     "onde ha atividade, e o que tem nesse dia?"
 //           Um calendario limpo com pontos, e a agenda do dia escolhido
@@ -331,19 +335,78 @@ function LinhaSemHora({ t, aoAbrir, aoConcluir }) {
 }
 
 // ===========================================================================
-// SEMANA
+// SEMANA (UX-M3.1)
+//
+// Duas perguntas, duas pecas, uma tela:
+//
+//   A FAIXA de sete dias responde "como e minha semana?" — ela nunca some,
+//   e e nela que a percepcao do todo mora.
+//
+//   A GRADE de TRES dias responde "o que acontece nestes dias?" — e continua
+//   sendo uma grade temporal: eixo de horas, posicao real, altura = duracao,
+//   linha de agora, sobreposicao lado a lado. Nao virou tres listas.
+//
+// A versao de sete colunas simultaneas foi abandonada por um motivo so: para
+// caber, o texto do bloco tinha ido a 9,5px. A regra agora e explicita —
+// nunca reduzir a fonte para preservar geometria.
 // ===========================================================================
-const PX_HORA = 44
+const PX_HORA = PX_HORA_SEMANA
+const ALTURA_CABECA = 26
+
+// O gesto horizontal. Ele so assume o dedo quando o movimento e claramente
+// horizontal; em qualquer duvida a rolagem vertical da agenda continua dona.
+// `arrastou` fica de pe ate o proximo toque para que o clique que o navegador
+// dispara no fim de um arrasto nao abra o compromisso que passou embaixo.
+function useDeslize(aoIr) {
+  const partida = useRef(null)
+  const arrastou = useRef(false)
+
+  const comecar = (ev) => {
+    if (ev.touches.length !== 1) { partida.current = null; return }
+    partida.current = { x: ev.touches[0].clientX, y: ev.touches[0].clientY }
+    arrastou.current = false
+  }
+  const mover = (ev) => {
+    if (!partida.current || ev.touches.length !== 1) return
+    const dx = ev.touches[0].clientX - partida.current.x
+    const dy = ev.touches[0].clientY - partida.current.y
+    if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy) * 1.6) arrastou.current = true
+  }
+  const terminar = (ev) => {
+    const origem = partida.current
+    partida.current = null
+    const toque = ev.changedTouches && ev.changedTouches[0]
+    if (!origem || !arrastou.current || !toque) return
+    aoIr(toque.clientX < origem.x ? 1 : -1)
+  }
+
+  return {
+    arrastou,
+    props: {
+      onTouchStart: comecar,
+      onTouchMove: mover,
+      onTouchEnd: terminar,
+      onTouchCancel: () => { partida.current = null },
+    },
+  }
+}
 
 function VisaoSemana({ estado, dias, dia, agora, aoDia, aoSemana, aoAbrir, aoConcluir, aoVerDia }) {
+  const recorte = recorteDaSemana(dias, dia)
+  // A faixa de horas continua olhando a SEMANA inteira, nao so o recorte: a
+  // altura da grade nao pode pular a cada deslize.
   const { inicio, fim } = faixaDeHoras(estado, dias)
   const horas = Array.from({ length: fim - inicio }, (_, i) => inicio + i)
   const soltas = semHorario(estado, dia)
 
+  const andar = (delta) => aoDia(andarNoRecorte(dias, dia, delta))
+  const deslize = useDeslize(andar)
+
   return (
     <>
-      {/* A FAIXA DOS DIAS. Escolher um dia aqui muda o destaque da grade e o
-          que aparece embaixo; tocar de novo abre o Dia. */}
+      {/* A FAIXA DOS SETE DIAS — a visao geral. Escolher um dia aqui
+          reposiciona o recorte da grade; tocar de novo no dia ja escolhido
+          abre o Dia. */}
       <div className="mt-4 flex items-center gap-1">
         <button type="button" onClick={() => aoSemana(-1)} aria-label="Semana anterior" className="m2-redondo h-9 w-9 flex-none">
           <ChevronLeft size={18} />
@@ -351,19 +414,21 @@ function VisaoSemana({ estado, dias, dia, agora, aoDia, aoSemana, aoAbrir, aoCon
         <div className="flex min-w-0 flex-1 justify-between gap-0.5">
           {dias.map((d) => {
             const sel = d === dia
+            const naGrade = recorte.includes(d)
             const cores = [...new Set(eventosDoDia(estado, d).map(corDoEvento))].slice(0, 1)
             return (
               <button
                 key={d}
                 type="button"
                 data-testid="m3-dia-semana"
+                data-visivel={naGrade ? 'sim' : 'nao'}
                 onClick={() => (sel ? aoVerDia(d) : aoDia(d))}
                 aria-pressed={sel}
                 className="press flex min-w-0 flex-1 flex-col items-center gap-0.5 py-1"
               >
                 <span className={cx(
                   'text-[10.5px] font-semibold uppercase tracking-wider',
-                  sel ? 'text-accent-text' : 'text-faint',
+                  sel ? 'text-accent-text' : naGrade ? 'text-secondary' : 'text-faint',
                 )}>
                   {diaCurto(d)}
                 </span>
@@ -380,38 +445,24 @@ function VisaoSemana({ estado, dias, dia, agora, aoDia, aoSemana, aoAbrir, aoCon
         </button>
       </div>
 
-      {/* A GRADE. Os sete dias cabem juntos de proposito: a pergunta da semana
-          e espacial, e uma coluna que sai da tela deixa de responder. O texto
-          dentro do bloco e pequeno porque ali ele e PISTA — quem precisa ler
-          toca e abre o detalhe. */}
-      <div className="m2-superficie m2-branca mt-3 overflow-hidden px-0 py-0" data-testid="m3-grade">
-        <div className="flex px-2 pb-1 pt-2">
-          <span className="w-[34px] flex-none" />
-          {dias.map((d) => (
-            <span
-              key={d}
-              className={cx(
-                'min-w-0 flex-1 text-center text-[10px] font-semibold uppercase leading-tight tracking-wide',
-                d === dia ? 'text-accent-text' : 'text-faint',
-              )}
-            >
-              {diaCurto(d)}<br />
-              <span className="px-hora text-[11px]">{numeroDoDia(d)}</span>
-            </span>
-          ))}
-        </div>
-
-        <div className="flex px-2 pb-3">
-          <div className="w-[34px] flex-none">
+      {/* A GRADE DE TRES DIAS — o detalhe operacional. */}
+      <div
+        className="m2-superficie m2-branca mt-3 overflow-hidden px-0 py-0"
+        data-testid="m3-grade"
+        {...deslize.props}
+      >
+        <div className="flex px-2 pb-3 pt-2">
+          <div className="w-[36px] flex-none">
+            <div style={{ height: ALTURA_CABECA }} />
             {horas.map((h) => (
               <div key={h} style={{ height: PX_HORA }} className="relative">
-                <span className="px-hora absolute -top-[6px] right-1 text-[10px] text-faint">
+                <span className="px-hora absolute -top-[6px] right-1 text-[10.5px] text-faint">
                   {String(h).padStart(2, '0')}:00
                 </span>
               </div>
             ))}
           </div>
-          {dias.map((d) => (
+          {recorte.map((d) => (
             <ColunaDaSemana
               key={d}
               estado={estado}
@@ -421,10 +472,30 @@ function VisaoSemana({ estado, dias, dia, agora, aoDia, aoSemana, aoAbrir, aoCon
               agora={agora}
               inicio={inicio}
               horas={horas}
+              arrastou={deslize.arrastou}
               aoAbrir={aoAbrir}
             />
           ))}
         </div>
+      </div>
+
+      {/* Os controles explicitos do recorte. O deslize e um atalho; isto e a
+          garantia — e o unico caminho quando o dedo nao esta disponivel. */}
+      <div className="mt-3 flex items-center justify-center gap-2">
+        <button type="button" onClick={() => andar(-1)} aria-label="Dias anteriores" data-testid="m3-recorte-antes" className="m2-redondo h-9 w-9">
+          <ChevronLeft size={18} />
+        </button>
+        <button
+          type="button"
+          onClick={() => aoDia(estado.hoje)}
+          data-testid="m3-recorte-hoje"
+          className="press rounded-full border border-hairline bg-surface px-5 py-2 text-[14px] font-semibold text-accent-text"
+        >
+          Hoje
+        </button>
+        <button type="button" onClick={() => andar(1)} aria-label="Próximos dias" data-testid="m3-recorte-depois" className="m2-redondo h-9 w-9">
+          <ChevronRight size={18} />
+        </button>
       </div>
 
       {soltas.length > 0 && (
@@ -434,49 +505,78 @@ function VisaoSemana({ estado, dias, dia, agora, aoDia, aoSemana, aoAbrir, aoCon
   )
 }
 
-function ColunaDaSemana({ estado, data, selecionado, hoje, agora, inicio, horas, aoAbrir }) {
+function ColunaDaSemana({ estado, data, selecionado, hoje, agora, inicio, horas, arrastou, aoAbrir }) {
   const eventos = disposicaoDoDia(estado, data)
   return (
     <div className={cx('relative min-w-0 flex-1 border-l border-hairline/60', selecionado && 'm3-coluna-sel')}>
-      {horas.map((h) => (
-        <div key={h} style={{ height: PX_HORA }} className="border-t border-hairline/40 first:border-t-0" />
-      ))}
+      {/* A cabeca repete o minimo para identificar a coluna — o veu do dia
+          escolhido sobe ate aqui para que cabeca e grade sejam a mesma peca. */}
+      <div style={{ height: ALTURA_CABECA }} className="flex items-center justify-center">
+        <span className={cx('m3-cabeca-3', selecionado && 'm3-cabeca-3-sel')}>
+          {diaCurto(data).toUpperCase()} {numeroDoDia(data)}
+        </span>
+      </div>
 
-      {hoje && emMinutos(agora) >= inicio * 60 && (
-        <span
-          className="pointer-events-none absolute inset-x-0 z-10 border-t border-danger/70"
-          style={{ top: ((emMinutos(agora) - inicio * 60) / 60) * PX_HORA }}
-          aria-hidden="true"
-        />
-      )}
+      <div className="relative">
+        {horas.map((h) => (
+          <div key={h} style={{ height: PX_HORA }} className="border-t border-hairline/40 first:border-t-0" />
+        ))}
 
-      {eventos.map(({ evento: e, coluna, colunas }) => {
-        const { topo, altura } = posicaoNaGrade(e, { inicio, px: PX_HORA })
-        const largura = 100 / colunas
-        return (
-          <button
-            key={e.id}
-            type="button"
-            data-testid="m3-bloco"
-            onClick={() => aoAbrir({ tipo: 'evento', dado: e })}
-            style={{
-              top: topo,
-              height: altura,
-              left: `calc(${coluna * largura}% + 1px)`,
-              width: `calc(${largura}% - 2px)`,
-            }}
-            title={`${e.titulo} · ${e.inicio}–${e.fim}`}
-            className={cx('m3-bloco press', `m3-${corDoEvento(e)}`)}
-          >
-            <span className="block overflow-hidden leading-[1.15]" style={{ display: '-webkit-box', WebkitLineClamp: altura >= 50 ? 2 : 1, WebkitBoxOrient: 'vertical' }}>
-              {e.titulo}
-            </span>
-            {altura >= 62 && (
-              <span className="px-hora mt-0.5 block text-[8.5px] opacity-70">{e.inicio}</span>
-            )}
-          </button>
-        )
-      })}
+        {hoje && emMinutos(agora) >= inicio * 60 && (
+          <span
+            className="pointer-events-none absolute inset-x-0 z-10 border-t border-danger/70"
+            style={{ top: ((emMinutos(agora) - inicio * 60) / 60) * PX_HORA }}
+            aria-hidden="true"
+          />
+        )}
+
+        {eventos.map(({ evento: e, coluna, colunas }) => {
+          const { topo, altura } = posicaoNaGrade(e, {
+            inicio, px: PX_HORA, alturaMinima: ALTURA_MINIMA_BLOCO,
+          })
+          // Sobreposicao: os blocos se escalonam em vez de se espremerem —
+          // a regra e o porque estao em `faixaDoBloco`. Quem cede e o
+          // conteudo (`detalheDoBloco`), nunca a fonte.
+          const { esquerda, largura } = faixaDoBloco(coluna, colunas)
+          const mostra = detalheDoBloco(altura, colunas)
+          // "Horario reservado" nao cabe em 98px e reticenciava em "Horário
+          // re…", que nao informa nada. Na coluna estreita a palavra sozinha
+          // diz a mesma coisa; o texto inteiro esta no Dia e no detalhe.
+          const apoio = e.especie === 'reserva' ? 'Reservado' : e.local || null
+          return (
+            <button
+              key={e.id}
+              type="button"
+              data-testid="m3-bloco"
+              onClick={() => { if (!arrastou.current) aoAbrir({ tipo: 'evento', dado: e }) }}
+              style={{
+                top: topo,
+                height: altura,
+                left: `calc(${esquerda}% + 1px)`,
+                width: `calc(${largura}% - 2px)`,
+                zIndex: 1 + coluna,
+              }}
+              title={`${e.titulo} · ${e.inicio}–${e.fim}`}
+              className={cx('m3-bloco m3-bloco-3 press', coluna > 0 && 'm3-bloco-sobre', `m3-${corDoEvento(e)}`)}
+            >
+              <span
+                className="block overflow-hidden"
+                style={{ display: '-webkit-box', WebkitLineClamp: mostra.linhas, WebkitBoxOrient: 'vertical' }}
+              >
+                {e.titulo}
+              </span>
+              {mostra.horario && (
+                <span className="px-hora m3-apoio mt-px block truncate">
+                  {mostra.intervalo ? `${e.inicio}–${e.fim}` : e.inicio}
+                </span>
+              )}
+              {mostra.apoio && apoio && (
+                <span className="m3-apoio block truncate">{apoio}</span>
+              )}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
