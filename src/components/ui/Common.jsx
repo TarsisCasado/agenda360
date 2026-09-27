@@ -1,5 +1,4 @@
 import { AlertTriangle, RotateCcw } from 'lucide-react'
-import { cx } from '../../lib/utils'
 
 // Anel de progresso circular (SVG). Usado no resumo do dia da tela "Hoje".
 export function ProgressRing({ value = 0, size = 72, stroke = 7, children }) {
@@ -36,48 +35,10 @@ export function ProgressRing({ value = 0, size = 72, stroke = 7, children }) {
   )
 }
 
-export function PageHeader({ title, subtitle, actions }) {
-  return (
-    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">
-          {title}
-        </h1>
-        {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
-      </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
-    </div>
-  )
-}
-
-export function StatCard({ label, value, icon: Icon, tone = 'brand', hint }) {
-  const tones = {
-    brand: 'bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300',
-    emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300',
-    red: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300',
-    amber: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300',
-    violet: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300',
-    slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-  }
-  return (
-    <div className="card p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          {label}
-        </span>
-        {Icon && (
-          <span className={cx('flex h-8 w-8 items-center justify-center rounded-lg', tones[tone])}>
-            <Icon size={16} />
-          </span>
-        )}
-      </div>
-      <p className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-slate-100">
-        {value}
-      </p>
-      {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
-    </div>
-  )
-}
+// PageHeader e StatCard viviam aqui, escritos em `slate-*`/`brand-*` de antes
+// do DS V3. Sairam no CP5.7: o cabecalho de pagina agora e unico
+// (components/layout/Page.jsx) e o numero de relatorio virou a mesma peca das
+// entradas de foco da tela Hoje. Nenhuma tela os usava fora daquelas tres.
 
 // Estado de ERRO padronizado (falha ao carregar): mensagem amigavel + retry.
 // Mantem o layout intacto e nunca "some" silenciosamente.
@@ -89,14 +50,14 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className="card flex flex-col items-center justify-center gap-3 px-6 py-14 text-center"
+      className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center"
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500 dark:bg-red-950/40">
-        <AlertTriangle size={22} />
+      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-danger">
+        <AlertTriangle size={20} />
       </div>
       <div>
-        <p className="font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+        <p className="text-[15px] font-semibold text-primary">{title}</p>
+        {description && <p className="mx-auto mt-1 max-w-[19rem] text-[13px] leading-relaxed text-muted">{description}</p>}
       </div>
       {onRetry && (
         <button onClick={onRetry} className="btn-secondary press">
@@ -107,21 +68,24 @@ export function ErrorState({
   )
 }
 
+// Estado vazio: SEM caixa. Ar + um icone discreto + uma frase util.
 export function EmptyState({ icon: Icon, title, description, action }) {
   return (
-    <div className="card flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+    // py menor de proposito: um vazio nao merece meia tela de altura. Ele diz
+    // o que precisa dizer e devolve o espaco.
+    <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
       {Icon && (
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800">
-          <Icon size={22} />
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-muted">
+          <Icon size={20} strokeWidth={1.8} />
         </div>
       )}
       <div>
-        <p className="font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+        <p className="text-[15px] font-semibold text-primary">{title}</p>
         {description && (
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
+          <p className="mx-auto mt-1 max-w-[19rem] text-[13px] leading-relaxed text-muted">{description}</p>
         )}
       </div>
-      {action}
+      {action && <div className="mt-1">{action}</div>}
     </div>
   )
 }

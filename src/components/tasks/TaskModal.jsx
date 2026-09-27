@@ -1,22 +1,28 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Inbox as InboxIcon } from 'lucide-react'
+import { Check, Inbox as InboxIcon, Trash2 } from 'lucide-react'
 import Modal from '../ui/Modal'
+import { CANAL_PADRAO, validarAlerta } from '../../lib/alertRules'
+import {
+  TitleInput,
+  BareTextArea,
+  PropGroup,
+  PropSelect,
+  PropInput,
+  SlotField,
+  SectionLabel,
+} from '../ui/Form'
+import AlertaRows from './AlertaRows'
+import ConfirmarExclusao from './ConfirmarExclusao'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useData } from '../../context/DataContext'
 import { useToast } from '../../context/ToastContext'
 import { taskService } from '../../services/taskService'
 import { inboxTaskLinkService } from '../../services/inboxTaskLinkService'
-import {
-  STATUS_ORDER,
-  STATUS_META,
-  PRIORITY,
-  PRIORITY_META,
-  ALERT_TYPES,
-  ALERT_TYPE_LABELS,
-} from '../../lib/constants'
+import { STATUS_ORDER, STATUS_META, PRIORITY, PRIORITY_META } from '../../lib/constants'
 import { toISODate } from '../../lib/date'
+import { tipoDeAtividade, COMPROMISSO } from '../../lib/activityKind'
 
 const empty = (defaults = {}) => ({
   title: '',
@@ -30,7 +36,7 @@ const empty = (defaults = {}) => ({
   link: '',
   notes: '',
   alert_enabled: false,
-  alert_type: ALERT_TYPES.IN_APP,
+  alert_type: CANAL_PADRAO,
   alert_minutes_before: 15,
   ...defaults,
 })
@@ -38,7 +44,11 @@ const empty = (defaults = {}) => ({
 // `onCreate` (opcional) injeta a persistencia na CRIACAO — usado pela conversao
 // Inbox -> Task para criar a Task (origin 'inbox') e o vinculo. Se ausente, usa
 // taskService.create. TaskModal permanece generico (sem redesign).
-export default function TaskModal({ open, onClose, task, defaults, onSaved, onCreate }) {
+// `kind` (CP5.9.1): quando a pessoa escolheu DIRETO o que criar, o editor abre
+// dizendo o nome do que ela escolheu e — no caso do compromisso — ja com o dia
+// preenchido e o horario esperando. Nao existe tipo novo no banco: `kind` so
+// decide o rotulo e o foco. Ver lib/activityKind.js.
+export default function TaskModal({ open, onClose, task, defaults, kind, onSaved, onCreate }) {
   const { user } = useAuth()
   const { workspaceId } = useWorkspace()
   const { categories, reload } = useData()
@@ -48,7 +58,11 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
   const [saving, setSaving] = useState(false)
   // Vinculo com a Caixa de Entrada (quando a Task veio de uma captura).
   const [inboxLink, setInboxLink] = useState(null)
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false)
   const isEdit = Boolean(task)
+  // Ao EDITAR, a especie vem da propria atividade (start_time). Ao CRIAR, vem
+  // da escolha da pessoa. Mesma regra derivada, dois momentos.
+  const especie = isEdit ? tipoDeAtividade(task) : kind
 
   useEffect(() => {
     if (!open) return
@@ -107,14 +121,19 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
       toast('Informe um titulo para a atividade', 'error')
       return
     }
-    // Alerta exige data + horario para calcular o lembrete (nao inventamos
-    // horario padrao). Tarefa sem horario segue permitida quando alerta = off.
-    if (form.alert_enabled && !form.date) {
-      toast('Defina uma data e um horario para ativar o lembrete.', 'error')
+    // COMPROMISSO exige dia (CP5.9.1): hora sem dia nao existe na agenda — a
+    // mesma regra que agent/slots ja aplica na captura. Nao vale so esconder a
+    // caixa "sem data": se a pessoa apagar o dia a mao, o compromisso viraria
+    // uma tarefa em silencio, e ela escolheu criar um compromisso.
+    if (especie?.id === COMPROMISSO.id && !form.date) {
+      toast('Um compromisso precisa de um dia.', 'error')
       return
     }
-    if (form.alert_enabled && !form.start_time) {
-      toast('Defina um horario para ativar o lembrete.', 'error')
+    // A REGRA DO ALERTA vem de lib/alertRules.js — a MESMA de todas as portas
+    // de entrada, com a mesma frase. Antes cada formulario tinha o seu texto.
+    const alerta = validarAlerta({ ...form, start_time: form.start_time || null, date: form.date || null })
+    if (!alerta.ok) {
+      toast(alerta.mensagem, 'error')
       return
     }
     setSaving(true)
@@ -156,10 +175,26 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
     <Modal
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Editar atividade' : 'Nova atividade'}
+      title={
+        isEdit
+          ? `Editar ${especie ? especie.rotulo.toLowerCase() : 'atividade'}`
+          : especie?.titulo || 'Nova atividade'
+      }
       size="lg"
       footer={
         <>
+          {/* Excluir e destrutivo, entao NAO disputa espaco com Salvar: fica do
+              outro lado do rodape, sem preenchimento, discreto. So existe ao
+              editar — nao se exclui o que ainda nao foi criado. */}
+          {isEdit && (
+            <button
+              className="btn-ghost press mr-auto text-danger"
+              onClick={() => setConfirmarExclusao(true)}
+              disabled={saving}
+            >
+              <Trash2 size={15} /> Excluir
+            </button>
+          )}
           <button className="btn-secondary" onClick={onClose} disabled={saving}>
             Cancelar
           </button>
@@ -169,174 +204,160 @@ export default function TaskModal({ open, onClose, task, defaults, onSaved, onCr
         </>
       }
     >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* Origem discreta: Task criada a partir de uma captura da Caixa. */}
+      {/* ---------------------------------------------------------------
+          CP5.9 — o editor deixa de ser um cadastro.
+
+          Antes: doze propriedades, doze retangulos cinza empilhados, cada um
+          com rotulo em cima. O Titulo tinha exatamente o mesmo peso visual da
+          Observacao, e a Data ficava enorme ao lado de dois campos pequenos
+          porque calhava de ocupar uma coluna inteira do grid.
+
+          Agora tres formas, e so tres:
+            . o que se ESCREVE nao tem moldura (titulo dominante, resto abaixo);
+            . o que PERTENCE AO MESMO CONCEITO divide uma caixa (Data/Inicio/Fim);
+            . o que se ESCOLHE e linha dentro de um bloco agrupado.
+
+          Nenhuma regra de dominio muda aqui: mesmos campos, mesmo `form`,
+          mesmo `submit`, mesma validacao de alerta do CP5.8.1.
+          --------------------------------------------------------------- */}
+      <div className="space-y-5">
+        {/* Origem: metadata discreta ACIMA do titulo — informa de onde a
+            atividade veio sem competir com ele. */}
         {inboxLink && (
-          <div className="sm:col-span-2">
-            <button
-              type="button"
-              onClick={openOrigin}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-600 transition-colors hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300"
-              title="Abrir a captura na Caixa de Entrada"
-            >
-              <InboxIcon size={13} /> Origem: Caixa de Entrada
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={openOrigin}
+            className="press -mt-1 inline-flex items-center gap-1.5 text-[12px] font-semibold text-muted transition-colors hover:text-accent"
+            title="Abrir a captura na Caixa de Entrada"
+          >
+            <InboxIcon size={13} /> Origem: Caixa de Entrada
+          </button>
         )}
-        <div className="sm:col-span-2">
-          <label className="label">Titulo *</label>
-          <input
-            className="input"
+
+        {/* O QUE SE ESCREVE — sem moldura. */}
+        <div className="space-y-1">
+          <TitleInput
+            aria-label="Título da atividade"
             value={form.title}
             onChange={set('title')}
-            placeholder="Ex: Reuniao de alinhamento"
+            placeholder="Título da atividade"
           />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="label">Descricao</label>
-          <textarea
-            className="input min-h-[70px]"
+          <BareTextArea
+            aria-label="Descrição"
             value={form.description}
             onChange={set('description')}
-            placeholder="Detalhes da atividade"
+            placeholder="Adicionar descrição…"
           />
         </div>
 
-        <div>
-          <label className="label">Data</label>
-          <input
-            type="date"
-            className="input"
-            value={form.date}
-            onChange={set('date')}
-            disabled={noDate}
-          />
-          <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <input
-              type="checkbox"
-              checked={noDate}
-              onChange={toggleNoDate}
-              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+        {/* QUANDO — Data, Inicio e Fim pertencem ao mesmo conceito, entao
+            dividem UMA caixa. A largura passa a dizer algo: a data pede mais
+            espaco que uma hora, e nao o triplo por acidente de grid. */}
+        <section>
+          <SectionLabel>Quando</SectionLabel>
+          <div className="group-box focus-ring grid grid-cols-[1.35fr_1fr_1fr] divide-x divide-hairline/60">
+            <SlotField
+              type="date"
+              label="Data"
+              value={form.date}
+              onChange={set('date')}
+              disabled={noDate}
             />
-            Sem data
-          </label>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="label">Inicio</label>
-            <input
+            <SlotField
               type="time"
-              className="input"
+              label="Início"
               value={form.start_time}
               onChange={set('start_time')}
               disabled={noDate}
             />
-          </div>
-          <div>
-            <label className="label">Fim</label>
-            <input
+            <SlotField
               type="time"
-              className="input"
+              label="Fim"
               value={form.end_time}
               onChange={set('end_time')}
               disabled={noDate}
             />
           </div>
-        </div>
-
-        <div>
-          <label className="label">Categoria</label>
-          <select className="input" value={form.category_id} onChange={set('category_id')}>
-            <option value="">Sem categoria</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">Prioridade</label>
-          <select className="input" value={form.priority} onChange={set('priority')}>
-            {Object.entries(PRIORITY_META).map(([key, meta]) => (
-              <option key={key} value={key}>
-                {meta.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="label">Status</label>
-          <select className="input" value={form.status} onChange={set('status')}>
-            {STATUS_ORDER.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_META[s].label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">Link relacionado</label>
-          <input
-            className="input"
-            value={form.link}
-            onChange={set('link')}
-            placeholder="https://..."
-          />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="label">Observacoes</label>
-          <textarea
-            className="input min-h-[60px]"
-            value={form.notes}
-            onChange={set('notes')}
-          />
-        </div>
-
-        {/* Alertas */}
-        <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          {/* "Sem data" e um modo do grupo acima, nao um campo irmao: fica
+              colado nele, discreto, e continua com alvo de 44px. Nao aparece
+              para um compromisso — oferecer "sem data" para algo que acontece
+              numa hora e oferecer um estado invalido. */}
+          <label
+            hidden={especie?.id === COMPROMISSO.id}
+            className="mt-1 flex min-h-[44px] cursor-pointer select-none items-center gap-2 px-1"
+          >
             <input
               type="checkbox"
-              checked={form.alert_enabled}
-              onChange={set('alert_enabled')}
-              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+              className="peer sr-only"
+              checked={noDate}
+              onChange={toggleNoDate}
             />
-            Ativar alerta / lembrete
+            <span className="check-box h-[18px] w-[18px]" aria-hidden>
+              <Check size={12} strokeWidth={3} />
+            </span>
+            <span className="text-[13px] text-secondary">Atividade sem data</span>
           </label>
-          {form.alert_enabled && (
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Tipo</label>
-                <select className="input" value={form.alert_type} onChange={set('alert_type')}>
-                  {Object.entries(ALERT_TYPE_LABELS).map(([key, label]) => (
-                    <option
-                      key={key}
-                      value={key}
-                      disabled={key === ALERT_TYPES.WHATSAPP}
-                    >
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Minutos antes</label>
-                <input
-                  type="number"
-                  min="0"
-                  className="input"
-                  value={form.alert_minutes_before}
-                  onChange={set('alert_minutes_before')}
-                />
-              </div>
-            </div>
-          )}
-        </div>
+        </section>
+
+        {/* PROPRIEDADES — uma caixa no lugar de quatro. Rotulo a esquerda,
+            valor a direita: propriedade de um objeto, nao campo de cadastro. */}
+        <section>
+          <SectionLabel>Propriedades</SectionLabel>
+          <PropGroup>
+            <PropSelect label="Categoria" value={form.category_id} onChange={set('category_id')}>
+              <option value="">Sem categoria</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </PropSelect>
+            <PropSelect label="Prioridade" value={form.priority} onChange={set('priority')}>
+              {Object.entries(PRIORITY_META).map(([key, meta]) => (
+                <option key={key} value={key}>{meta.label}</option>
+              ))}
+            </PropSelect>
+            <PropSelect label="Status" value={form.status} onChange={set('status')}>
+              {STATUS_ORDER.map((st) => (
+                <option key={st} value={st}>{STATUS_META[st].label}</option>
+              ))}
+            </PropSelect>
+            <PropInput
+              label="Link"
+              value={form.link}
+              onChange={set('link')}
+              placeholder="https://…"
+              inputMode="url"
+            />
+          </PropGroup>
+        </section>
+
+        {/* ALERTA — mesma peca usada na criacao rapida (components/tasks/
+            AlertaRows). Desligado e uma linha; ligado revela mais duas no
+            MESMO bloco. */}
+        <section>
+          <SectionLabel>Alerta</SectionLabel>
+          <AlertaRows form={form} set={set} />
+        </section>
+
+        {/* Observacoes: o texto mais secundario do editor, por ultimo e sem
+            moldura — separado do resto por um hairline em vez de uma caixa. */}
+        <section className="border-t hair pt-3">
+          <BareTextArea
+            aria-label="Observações"
+            value={form.notes}
+            onChange={set('notes')}
+            placeholder="Observações…"
+          />
+        </section>
       </div>
+
+      {/* A MESMA confirmacao de todas as telas, sobre a MESMA operacao de
+          dominio (taskService.remove), que ja cuida dos lembretes. */}
+      <ConfirmarExclusao
+        open={confirmarExclusao}
+        task={task}
+        onClose={() => setConfirmarExclusao(false)}
+        onDeleted={() => { onSaved?.(null); onClose() }}
+      />
     </Modal>
   )
 }

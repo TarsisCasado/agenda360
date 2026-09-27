@@ -1,6 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Trash2, Palette, History, Database, Users, Building2, Smartphone, Sparkles, Bell } from 'lucide-react'
-import { PageHeader } from '../components/ui/Common'
+import { Plus, Trash2, Smartphone, Sparkles, ChevronRight } from 'lucide-react'
+import { Page, PageHeader } from '../components/layout/Page'
+import { TextInput } from '../components/ui/Form'
+import { cx } from '../lib/utils'
+import { rotuloFuso } from '../lib/timezone'
+import { useTimezone } from '../hooks/useTimezone'
 import InstallGuide from '../components/pwa/InstallGuide'
 import DeviceNotifications from '../components/notifications/DeviceNotifications'
 import { resetPreferences } from '../lib/preferences'
@@ -26,6 +30,7 @@ export default function Settings() {
   const [newCat, setNewCat] = useState({ name: '', color: PRESET_COLORS[0] })
   const [logs, setLogs] = useState([])
   const [installOpen, setInstallOpen] = useState(false)
+  const { timezone } = useTimezone()
 
   const redoOnboarding = () => {
     resetPreferences(workspaceId)
@@ -64,208 +69,184 @@ export default function Settings() {
     window.location.reload()
   }
 
+  // ---------------------------------------------------------------------------
+  // COMPOSICAO (CP5.7). Eram sete cartoes com borda, cada um aberto por um
+  // titulo azul com icone — a gramatica de um painel administrativo. Uma tela
+  // de ajustes de aplicativo se le em LINHAS: um rotulo discreto agrupa, e
+  // cada ajuste e uma linha com o nome a esquerda e o valor (ou a acao) a
+  // direita. Nada aqui mudou de funcao; mudou o peso.
+  // ---------------------------------------------------------------------------
   return (
-    <div>
-      <PageHeader title="Configuracoes" subtitle="Categorias, conta e historico" />
+    <Page width="form">
+      <PageHeader title="Configurações" subtitle="Sua conta, suas categorias e este aparelho" />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Workspace atual */}
-        <div className="card p-5 lg:col-span-2">
-          <div className="mb-4 flex items-center gap-2 text-brand-600">
-            <Building2 size={18} />
-            <h2 className="font-bold">Workspace</h2>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="chip bg-brand-50 text-brand-700 dark:bg-brand-900/30">
-              {workspace?.name || 'Pessoal'}
-            </span>
-            <span className="chip bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              {WORKSPACE_ROLE_LABELS[role] || role}
-            </span>
-            {workspace?.is_personal && (
-              <span className="chip bg-slate-100 text-slate-500 dark:bg-slate-800">
-                pessoal
-              </span>
-            )}
-          </div>
-          <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-800/60">
-            Todos os seus dados (atividades, categorias, links, historico) pertencem
-            a este workspace. Voce participa de <strong>{workspaces.length}</strong>{' '}
-            workspace(s). A arquitetura ja permite criar novos espacos (Familia,
-            Igreja, Projetos...) e convidar membros com papeis distintos.
-          </p>
-        </div>
+      <div className="space-y-6">
+        <Grupo titulo="Workspace">
+          <Linha rotulo="Espaço" valor={workspace?.name || 'Pessoal'} />
+          <Linha rotulo="Seu papel" valor={WORKSPACE_ROLE_LABELS[role] || role} />
+          <Linha rotulo="Espaços" valor={String(workspaces.length)} />
+          <Nota>
+            Atividades, categorias, links e histórico pertencem a este espaço. A arquitetura já
+            permite criar outros (Família, Igreja, Projetos) e convidar pessoas com papéis distintos.
+          </Nota>
+        </Grupo>
 
-        {/* App & rotina */}
-        <div className="card p-5 lg:col-span-2">
-          <div className="mb-4 flex items-center gap-2 text-brand-600">
-            <Smartphone size={18} />
-            <h2 className="font-bold">App & rotina</h2>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button onClick={() => setInstallOpen(true)} className="btn-secondary press flex-1 justify-start">
-              <Smartphone size={16} /> Instalar na tela inicial
-            </button>
-            <button onClick={redoOnboarding} className="btn-secondary press flex-1 justify-start">
-              <Sparkles size={16} /> Refazer configuração da rotina
-            </button>
-          </div>
-          <p className="mt-3 text-xs text-slate-400">
-            A configuração da rotina personaliza as sugestões do assistente. Você pode refazê-la quando quiser.
-          </p>
-        </div>
+        <Grupo titulo="Aplicativo">
+          <Acao icone={Smartphone} rotulo="Instalar na tela inicial" onClick={() => setInstallOpen(true)} />
+          <Acao
+            icone={Sparkles}
+            rotulo="Refazer a configuração da rotina"
+            descricao="É ela que personaliza as sugestões do assistente."
+            onClick={redoOnboarding}
+          />
+        </Grupo>
 
-        {/* Notificacoes deste dispositivo */}
-        <div className="card p-5 lg:col-span-2">
-          <div className="mb-4 flex items-center gap-2 text-brand-600">
-            <Bell size={18} />
-            <h2 className="font-bold">Notificacoes deste dispositivo</h2>
+        <Grupo titulo="Notificações deste aparelho">
+          <div className="px-3 py-3">
+            <DeviceNotifications variant="card" onOpenInstall={() => setInstallOpen(true)} />
           </div>
-          <DeviceNotifications variant="card" onOpenInstall={() => setInstallOpen(true)} />
-          <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-800/60">
-            Vale para <strong>este aparelho</strong>. No iPhone, as notificacoes
-            exigem o app adicionado a Tela de Inicio e aberto pelo icone.
-          </p>
-        </div>
+          <Nota>
+            Vale para <strong className="font-semibold text-secondary">este aparelho</strong>. No
+            iPhone, as notificações exigem o app na Tela de Início, aberto pelo ícone.
+          </Nota>
+        </Grupo>
 
-        {/* Conta */}
-        <div className="card p-5">
-          <div className="mb-4 flex items-center gap-2 text-brand-600">
-            <Users size={18} />
-            <h2 className="font-bold">Conta</h2>
-          </div>
-          <dl className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Nome</dt>
-              <dd className="font-medium">{user?.full_name}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">E-mail</dt>
-              <dd className="font-medium">{user?.email}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Perfil</dt>
-              <dd>
-                <span className="chip bg-brand-50 text-brand-600 dark:bg-brand-900/30">
-                  {ROLE_LABELS[user?.role] || user?.role}
+        <Grupo titulo="Conta">
+          <Linha rotulo="Nome" valor={user?.full_name} />
+          <Linha rotulo="E-mail" valor={user?.email} />
+          <Linha rotulo="Perfil" valor={ROLE_LABELS[user?.role] || user?.role} />
+          {/* O fuso vem do aparelho e e mostrado pela CIDADE — ninguem precisa
+              saber escrever "America/Fortaleza" para o lembrete chegar na hora
+              certa. O dado guardado continua sendo IANA. */}
+          <Linha rotulo="Fuso horário" valor={rotuloFuso(timezone)} />
+        </Grupo>
+
+        <Grupo titulo="Categorias">
+          <div className="px-3 py-3">
+            <div className="flex flex-wrap gap-1.5">
+              {categories.map((c) => (
+                <span key={c.id} className="chip group bg-surface-2 text-secondary">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
+                  {c.name}
+                  <button
+                    onClick={() => removeCategory(c.id)}
+                    aria-label={`Remover ${c.name}`}
+                    className="ml-0.5 text-muted transition-colors hover:text-danger"
+                  >
+                    <Trash2 size={11} />
+                  </button>
                 </span>
-              </dd>
+              ))}
             </div>
-          </dl>
-          <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-800/60">
-            A estrutura ja suporta os perfis <strong>Administrador</strong>,{' '}
-            <strong>Gestor</strong> e <strong>Colaborador</strong>, alem de
-            delegacao de atividades entre usuarios da equipe.
-          </p>
-        </div>
-
-        {/* Categorias */}
-        <div className="card p-5">
-          <div className="mb-4 flex items-center gap-2 text-brand-600">
-            <Palette size={18} />
-            <h2 className="font-bold">Categorias</h2>
-          </div>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {categories.map((c) => (
-              <span
-                key={c.id}
-                className="chip group border border-slate-200 dark:border-slate-700"
-                style={{ color: c.color }}
-              >
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: c.color }}
-                />
-                {c.name}
-                <button
-                  onClick={() => removeCategory(c.id)}
-                  className="ml-1 text-slate-300 hover:text-red-500"
-                >
-                  <Trash2 size={11} />
-                </button>
-              </span>
-            ))}
-          </div>
-          <form onSubmit={addCategory} className="flex items-end gap-2">
-            <div className="flex-1">
-              <label className="label">Nova categoria</label>
-              <input
-                className="input"
+            <form onSubmit={addCategory} className="mt-3 flex items-end gap-2">
+              <TextInput
+                label="Nova categoria"
+                className="flex-1"
                 value={newCat.name}
                 onChange={(e) => setNewCat((c) => ({ ...c, name: e.target.value }))}
                 placeholder="Nome"
               />
-            </div>
-            <div className="flex gap-1">
-              {PRESET_COLORS.slice(0, 5).map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => setNewCat((c) => ({ ...c, color }))}
-                  className="h-6 w-6 rounded-full ring-2 ring-offset-1 dark:ring-offset-slate-900"
-                  style={{
-                    backgroundColor: color,
-                    '--tw-ring-color':
-                      newCat.color === color ? color : 'transparent',
-                  }}
-                />
-              ))}
-            </div>
-            <button type="submit" className="btn-primary">
-              <Plus size={16} />
-            </button>
-          </form>
-        </div>
-
-        {/* Historico */}
-        <div className="card p-5 lg:col-span-2">
-          <div className="mb-4 flex items-center gap-2 text-brand-600">
-            <History size={18} />
-            <h2 className="font-bold">Historico de atividades</h2>
+              <div className="flex shrink-0 items-center gap-1 pb-1">
+                {PRESET_COLORS.slice(0, 5).map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    aria-label={`Cor ${color}`}
+                    onClick={() => setNewCat((c) => ({ ...c, color }))}
+                    className={cx(
+                      'h-7 w-7 rounded-full transition-transform',
+                      newCat.color === color ? 'scale-110 ring-2 ring-accent ring-offset-2 ring-offset-surface' : 'opacity-70',
+                    )}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
+              <button type="submit" aria-label="Criar categoria" className="btn-primary press mb-0.5 !px-3">
+                <Plus size={16} />
+              </button>
+            </form>
           </div>
+        </Grupo>
+
+        <Grupo titulo="Histórico">
           {logs.length === 0 ? (
-            <p className="text-sm text-slate-400">Sem registros ainda.</p>
+            <p className="text-caption px-3 py-3">Sem registros ainda.</p>
           ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {logs.map((l) => (
-                <li key={l.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="chip bg-slate-100 text-slate-500 dark:bg-slate-800">
-                      {LOG_ACTION_LABELS[l.action] || l.action}
-                    </span>
-                    <span className="text-slate-600 dark:text-slate-300">
-                      {l.description}
-                    </span>
-                  </div>
-                  <span className="shrink-0 text-xs text-slate-400">
-                    {new Date(l.created_at).toLocaleString('pt-BR')}
+            logs.map((l) => (
+              <div key={l.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="chip shrink-0 bg-surface-2 text-muted">
+                    {LOG_ACTION_LABELS[l.action] || l.action}
                   </span>
-                </li>
-              ))}
-            </ul>
+                  <span className="truncate text-[14px] text-secondary">{l.description}</span>
+                </div>
+                <span className="text-caption shrink-0 tabular-nums">
+                  {new Date(l.created_at).toLocaleDateString('pt-BR')}
+                </span>
+              </div>
+            ))
           )}
-        </div>
+        </Grupo>
 
-        {/* Modo demo */}
         {isDemo && (
-          <div className="card border-amber-200 p-5 dark:border-amber-800 lg:col-span-2">
-            <div className="mb-2 flex items-center gap-2 text-amber-600">
-              <Database size={18} />
-              <h2 className="font-bold">Dados locais (modo demo)</h2>
+          <Grupo titulo="Dados locais (modo demo)">
+            <Nota>
+              Sem Supabase configurado, tudo fica apenas neste navegador. Defina{' '}
+              <code className="text-[12px]">VITE_SUPABASE_URL</code> e{' '}
+              <code className="text-[12px]">VITE_SUPABASE_ANON_KEY</code> para guardar na nuvem.
+            </Nota>
+            <div className="px-3 pb-3">
+              <button onClick={resetDemo} className="btn-danger press">
+                <Trash2 size={16} /> Apagar os dados deste navegador
+              </button>
             </div>
-            <p className="mb-3 text-sm text-slate-500">
-              Voce esta rodando sem Supabase. Os dados ficam apenas neste navegador.
-              Configure as variaveis <code>VITE_SUPABASE_URL</code> e{' '}
-              <code>VITE_SUPABASE_ANON_KEY</code> para persistir na nuvem.
-            </p>
-            <button onClick={resetDemo} className="btn-danger">
-              <Trash2 size={16} /> Resetar dados locais
-            </button>
-          </div>
+          </Grupo>
         )}
       </div>
 
       <InstallGuide open={installOpen} onClose={() => setInstallOpen(false)} />
+    </Page>
+  )
+}
+
+// --- As pecas desta tela ------------------------------------------------------
+// Um grupo e um rotulo discreto + um painel de linhas. E a mesma gramatica da
+// lista do resto do produto — nao um cartao com titulo colorido.
+function Grupo({ titulo, children }) {
+  return (
+    <section>
+      <h2 className="text-section mb-1.5 px-1">{titulo}</h2>
+      <div className="list-panel">{children}</div>
+    </section>
+  )
+}
+
+function Linha({ rotulo, valor }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+      <span className="text-[15px] text-secondary">{rotulo}</span>
+      <span className="truncate text-[15px] font-medium text-primary">{valor}</span>
     </div>
   )
+}
+
+function Acao({ icone: Icone, rotulo, descricao, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors active:bg-surface-2 lg:hover:bg-surface-2"
+    >
+      {Icone && <Icone size={17} className="shrink-0 text-muted" />}
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-medium text-primary">{rotulo}</span>
+        {descricao && <span className="text-caption block">{descricao}</span>}
+      </span>
+      <ChevronRight size={16} className="shrink-0 text-muted" />
+    </button>
+  )
+}
+
+// Explicacao de rodape do grupo: texto, sem caixa dentro de caixa.
+function Nota({ children }) {
+  return <p className="text-caption px-3 py-2.5 leading-relaxed">{children}</p>
 }

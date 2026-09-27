@@ -16,22 +16,36 @@ import {
   CheckSquare,
   ExternalLink,
   CornerDownLeft,
+  StickyNote,
+  ListChecks,
+  Library,
 } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { taskService } from '../../services/taskService'
 import { linkService } from '../../services/linkService'
+import { inboxService } from '../../services/inboxService'
 import { STATUS_META } from '../../lib/constants'
 import { formatShort } from '../../lib/date'
+import { ideaTitle } from '../../lib/ideas'
 import { cx, sanitizeUrl } from '../../lib/utils'
 
+// Os recortes continuam buscaveis pelo nome que o usuario conhece — so que
+// levam a visao dentro da tela, nao a um destino separado (CP5.2).
 const NAV = [
   { id: 'nav-hoje', label: 'Hoje', icon: Sun, to: '/' },
-  { id: 'nav-caixa', label: 'Caixa de Entrada', icon: Inbox, to: '/caixa' },
   { id: 'nav-dia', label: 'Agenda do dia', icon: CalendarDays, to: '/dia' },
-  { id: 'nav-semana', label: 'Kanban semanal', icon: KanbanSquare, to: '/semana' },
-  { id: 'nav-mes', label: 'Calendario', icon: Calendar, to: '/mes' },
+  { id: 'nav-semana-agenda', label: 'Agenda da semana', icon: CalendarDays, to: '/dia?visao=semana' },
+  { id: 'nav-mes', label: 'Calendario do mes', icon: Calendar, to: '/dia?visao=mes' },
+  { id: 'nav-tarefas', label: 'Tarefas', icon: KanbanSquare, to: '/tarefas' },
+  { id: 'nav-semana', label: 'Tarefas da semana (kanban)', icon: KanbanSquare, to: '/tarefas?visao=semana' },
+  // C2 — o destino novo entra na navegacao da paleta. Os antigos CONTINUAM:
+  // quem procura "ideias" ou "caixa" pelo nome que sempre usou segue chegando
+  // la, porque as rotas nao foram removidas.
+  { id: 'nav-memoria', label: 'Memória', icon: Library, to: '/memoria' },
+  { id: 'nav-ideias', label: 'Ideias', icon: Sparkles, to: '/ideias' },
+  { id: 'nav-ia', label: 'Copiloto', icon: Sparkles, to: '/assistente' },
+  { id: 'nav-caixa', label: 'Caixa de Entrada', icon: Inbox, to: '/caixa' },
   { id: 'nav-links', label: 'Central de links', icon: Link2, to: '/links' },
-  { id: 'nav-ia', label: 'Assistente IA', icon: Sparkles, to: '/assistente' },
   { id: 'nav-rel', label: 'Relatorios', icon: BarChart3, to: '/relatorios' },
   { id: 'nav-cfg', label: 'Configuracoes', icon: SettingsIcon, to: '/config' },
 ]
@@ -49,6 +63,10 @@ export default function CommandPalette({ open, onClose, onNewTask }) {
   const [active, setActive] = useState(0)
   const [tasks, setTasks] = useState([])
   const [links, setLinks] = useState([])
+  // C1: o que foi guardado tambem precisa ser recuperavel. Mesma origem, mesmo
+  // workspace, mesma sessao — `inboxService.list` e LEITURA PURA nos dois modos
+  // (demo e Supabase): nao grava evento, nao marca visto, nao arquiva nada.
+  const [notas, setNotas] = useState([])
   const inputRef = useRef(null)
   const listRef = useRef(null)
 
@@ -61,11 +79,13 @@ export default function CommandPalette({ open, onClose, onNewTask }) {
     Promise.all([
       taskService.list(workspaceId, {}),
       linkService.list(workspaceId),
+      inboxService.list(workspaceId),
     ])
-      .then(([t, l]) => {
+      .then(([t, l, n]) => {
         if (!alive) return
         setTasks(t)
         setLinks(l)
+        setNotas(n)
       })
       .catch((err) => {
         if (!alive) return
@@ -147,10 +167,37 @@ export default function CommandPalette({ open, onClose, onNewTask }) {
           },
         }))
       if (linkItems.length) g.push({ title: 'Links', items: linkItems })
+
+      // GUARDADO (C1) — notas e capturas de `inbox_items`.
+      //
+      // Entra POR ULTIMO de proposito: a ordem de quem ja estava (Criar,
+      // Navegar, Tarefas, Links) nao muda de lugar nenhum. Quem buscava uma
+      // tarefa continua encontrando no mesmo ponto da lista; o que e novo vem
+      // depois, sem competir.
+      //
+      // Campos pesquisados: `title` e `content` — os dois que a pessoa
+      // escreveu. Nada de status, origem, tipo ou id: metadado interno nao
+      // ajuda ninguem a lembrar do que anotou.
+      const notaItems = notas
+        .filter((n) => norm(n.title).includes(q) || norm(n.content).includes(q))
+        .slice(0, 5)
+        .map((n) => ({
+          id: 'nota-' + n.id,
+          icon: n.type === 'checklist' ? ListChecks : StickyNote,
+          // O titulo pode nao existir: o produto ja deriva da primeira linha.
+          label: ideaTitle(n, 'Sem titulo'),
+          // A NATUREZA em palavra humana. O usuario nunca ve `inbox_items`,
+          // `to_think` nem `processed`.
+          hint: n.status === 'archived' ? 'Guardado · arquivado' : 'Guardado',
+          // Abre o item que ja existe, na tela que ja existe. Nao converte,
+          // nao copia, nao muda status.
+          run: () => navigate(`/ideias/${n.id}`),
+        }))
+      if (notaItems.length) g.push({ title: 'Guardado', items: notaItems })
     }
 
     return g
-  }, [query, tasks, links, navigate, onNewTask])
+  }, [query, tasks, links, notas, navigate, onNewTask])
 
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups])
 

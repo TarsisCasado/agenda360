@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { authService } from '../services/authService'
+import { authService, decideAuthChange } from '../services/authService'
 
 const AuthContext = createContext(null)
 
@@ -9,14 +9,27 @@ export function AuthProvider({ children }) {
 
   const refresh = useCallback(async () => {
     const current = await authService.getCurrentUser()
+    // `transient` = erro de transporte ao restaurar. NAO derruba um usuario ja
+    // valido por causa de rede: preserva o atual e apenas encerra o loading.
+    if (current && current.transient) {
+      setLoading(false)
+      return
+    }
     setUser(current)
     setLoading(false)
   }, [])
 
   useEffect(() => {
     refresh()
-    const sub = authService.onAuthChange(async () => {
-      await refresh()
+    // Reage ao EVENTO, sem revalidar por rede a cada disparo. SIGNED_OUT limpa
+    // imediatamente; um evento com sessao seta a partir da propria sessao; um
+    // evento transitorio (refresh que falhou offline) e ignorado — o usuario
+    // permanece autenticado.
+    const sub = authService.onAuthChange(async (event, session) => {
+      const decision = decideAuthChange(event, session)
+      if (decision.action === 'clear') setUser(null)
+      else if (decision.action === 'set') setUser(await authService.buildUser(decision.authUser))
+      // 'ignore': nao mexe no usuario atual
     })
     return () => sub?.unsubscribe?.()
   }, [refresh])

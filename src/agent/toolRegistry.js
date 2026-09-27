@@ -90,8 +90,14 @@ export function createToolRegistry({ tools = [], flags, eventBus } = {}) {
         throw err
       }
       // Erro inesperado de service -> padronizado (sem vazar stack cru).
+      // A CAUSA vai junto, porem: sem ela a tela nao teria como distinguir
+      // "o banco esta fora do ar" de "esse dado e invalido" — e a pessoa leria
+      // um TypeError cru onde cabia "voce esta sem conexao". `cause` nao entra
+      // em nenhuma mensagem; serve so para classificar.
       eventBus?.emit(EVENTS.ACTION_FAILED, { intent, code: ErrorCodes.EXECUTION_FAILED })
-      throw new AgentError(ErrorCodes.EXECUTION_FAILED, err?.message || 'Falha na execucao')
+      const falha = new AgentError(ErrorCodes.EXECUTION_FAILED, err?.message || 'Falha na execucao')
+      falha.cause = err
+      throw falha
     }
   }
 
