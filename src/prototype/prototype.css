@@ -795,3 +795,180 @@
 .m2-hora { font-size: clamp(26px, 7.2vw, 30px); }
 .m2-titulo { font-size: clamp(14px, 3.9vw, 16px); }
 .m2-linha { font-size: clamp(15px, 4vw, 16px); }
+
+/* ---------------------------------------------------------------------------
+   UX-M3 — A AGENDA NO TELEFONE.
+
+   Mesma linguagem do Hoje (UX-M2): mesmo fundo, mesmas superficies, mesmo
+   raio, mesmo violeta. O que esta tela acrescenta e um VOCABULARIO DE COR para
+   separar objetos — e cor aqui classifica, nunca ordena.
+
+   Cada cor existe em dois valores: uma SUPERFICIE (fundo do bloco) e um
+   MARCADOR (a barra, o ponto, o icone). Os dois saem do mesmo tom, e e essa
+   relacao que faz o bloco pertencer a familia em vez de parecer um adesivo
+   colado na tela.
+--------------------------------------------------------------------------- */
+
+.px-claro {
+  --m3-violeta-sup: 234 234 254;  --m3-violeta-mar: 99 91 232;
+  --m3-azul-sup:    226 240 254;  --m3-azul-mar:     45 130 220;
+  --m3-ciano-sup:   219 243 246;  --m3-ciano-mar:    14 150 165;
+  --m3-verde-sup:   223 246 233;  --m3-verde-mar:    21 155 105;
+  --m3-ambar-sup:   254 238 220;  --m3-ambar-mar:    214 130 30;
+  --m3-rosa-sup:    253 228 238;  --m3-rosa-mar:     206 60 120;
+  --m3-cinza-sup:   236 238 244;  --m3-cinza-mar:    124 136 156;
+}
+
+/* No escuro a superficie nao clareia: ela se aproxima do fundo e o MARCADOR
+   sobe de luminosidade. Inverter os valores do claro deixaria seis retangulos
+   brilhantes numa tela escura — que e exatamente o "neon" que nao queremos. */
+.px-escuro {
+  --m3-violeta-sup: 36 37 66;  --m3-violeta-mar: 146 152 250;
+  --m3-azul-sup:    24 43 66;  --m3-azul-mar:    110 170 240;
+  --m3-ciano-sup:   19 45 50;  --m3-ciano-mar:    80 195 205;
+  --m3-verde-sup:   20 46 36;  --m3-verde-mar:    80 200 150;
+  --m3-ambar-sup:   50 38 22;  --m3-ambar-mar:   225 170 90;
+  --m3-rosa-sup:    52 26 40;  --m3-rosa-mar:    235 130 175;
+  --m3-cinza-sup:   32 36 46;  --m3-cinza-mar:   150 160 180;
+}
+
+.m3-violeta { --sup: var(--m3-violeta-sup); --mar: var(--m3-violeta-mar); }
+.m3-azul    { --sup: var(--m3-azul-sup);    --mar: var(--m3-azul-mar); }
+.m3-ciano   { --sup: var(--m3-ciano-sup);   --mar: var(--m3-ciano-mar); }
+.m3-verde   { --sup: var(--m3-verde-sup);   --mar: var(--m3-verde-mar); }
+.m3-ambar   { --sup: var(--m3-ambar-sup);   --mar: var(--m3-ambar-mar); }
+.m3-rosa    { --sup: var(--m3-rosa-sup);    --mar: var(--m3-rosa-mar); }
+.m3-cinza   { --sup: var(--m3-cinza-sup);   --mar: var(--m3-cinza-mar); }
+
+/* --- o seletor de visao ---------------------------------------------------
+   Uma peca so, sempre visivel: e o eixo da tela, nao um filtro escondido num
+   menu. O escolhido e o unico com forma cheia. */
+.m3-segmentos {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgb(var(--m2-lavanda));
+}
+.m3-segmento {
+  flex: 1;
+  border-radius: 11px;
+  padding: 9px 4px;
+  font-size: 15px;
+  font-weight: 550;
+  color: rgb(var(--c-text-2));
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.m3-segmento-ativo {
+  background: rgb(var(--c-accent));
+  color: #fff;
+  font-weight: 650;
+}
+
+/* --- a linha do tempo do Dia ---------------------------------------------- */
+.m3-fio {
+  position: absolute;
+  left: 48px;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+  background: rgb(var(--c-hairline));
+}
+.m3-ponto {
+  position: absolute;
+  left: 45px;
+  top: 17px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgb(var(--mar));
+  box-shadow: 0 0 0 3px rgb(var(--m2-canvas));
+}
+.m3-ponto-chapado { background: rgb(var(--mar)); }
+
+.m3-evento {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 10px 12px 10px 13px;
+  background: rgb(var(--sup));
+  border-left: 3px solid rgb(var(--mar));
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.m3-evento:active { transform: scale(0.99); }
+
+.m3-marcador {
+  flex: none;
+  width: 3px;
+  align-self: stretch;
+  min-height: 26px;
+  border-radius: 999px;
+  background: rgb(var(--mar));
+}
+
+.m3-icone {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgb(var(--mar) / 0.16);
+  color: rgb(var(--mar));
+}
+
+/* A etiqueta do canto: "em 20 min" antes, "Agora" durante. Nunca as duas. */
+.m3-etiqueta {
+  flex: none;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--c-accent-text));
+  background: rgb(var(--c-accent) / 0.12);
+}
+.m3-etiqueta-agora {
+  color: #fff;
+  background: rgb(var(--c-accent));
+}
+
+/* --- numeros de dia (faixa da semana e grade do mes) ---------------------- */
+.m3-numero {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 15px;
+  color: rgb(var(--c-text));
+  line-height: 1;
+}
+.m3-numero-fora { color: rgb(var(--c-text-4)); }
+.m3-numero-hoje { font-weight: 700; color: rgb(var(--c-accent-text)); }
+.m3-numero-sel {
+  background: rgb(var(--c-accent));
+  color: #fff;
+  font-weight: 650;
+}
+
+/* --- a grade da semana ----------------------------------------------------
+   O dia escolhido ganha um veu, nao uma borda: a coluna precisa se destacar
+   sem virar uma caixa dentro da grade. */
+.m3-coluna-sel { background: rgb(var(--c-accent) / 0.07); }
+
+.m3-bloco {
+  /* `left` e `width` vem do componente: dois compromissos que se encavalam
+     dividem a largura da coluna em vez de um cobrir o outro. */
+  position: absolute;
+  overflow: hidden;
+  border-radius: 5px;
+  padding: 3px 3px 3px 4px;
+  text-align: left;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: rgb(var(--mar));
+  background: rgb(var(--sup));
+  border-left: 2px solid rgb(var(--mar));
+}

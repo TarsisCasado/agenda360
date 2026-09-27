@@ -28,7 +28,7 @@ import { cx } from '../../lib/utils'
 // Movimento: entra em ~200ms, subindo. `prefers-reduced-motion` anula (a regra
 // esta em prototype.css, junto com as outras animacoes do prototipo).
 // ---------------------------------------------------------------------------
-export default function DetalheMovel({ aberto, aoVoltar, titulo, acima, children, rodape }) {
+export default function DetalheMovel({ aberto, aoVoltar, titulo, acima, children, rodape, voltarRotulo = 'Hoje' }) {
   // Efeito de LAYOUT, nao passivo: a limpeza (destravar a raiz) corre antes da
   // pintura em que a folha desaparece, entao nao ha um quadro em que o fundo ja
   // esta a mostra e ainda travado. Quem restaura a rolagem, do outro lado,
@@ -71,7 +71,9 @@ export default function DetalheMovel({ aberto, aoVoltar, titulo, acima, children
           className="press -ml-1 flex items-center gap-0.5 rounded-[10px] py-2 pl-1 pr-2.5 text-[15px] font-medium text-accent-text"
         >
           <ChevronLeft size={20} />
-          Hoje
+          {/* O rotulo diz PARA ONDE se volta, e nao o nome de uma tela fixa:
+              o mesmo detalhe abre do Hoje e da Agenda. */}
+          {voltarRotulo}
         </button>
         {acima && <span className="px-motivo ml-auto pr-2">{acima}</span>}
       </header>

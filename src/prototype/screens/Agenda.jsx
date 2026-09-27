@@ -7,6 +7,7 @@ import { inicioDaSemana, somarDias, iso, diaCurto, numeroDoDia, rotuloDeData, no
 import { Botao } from '../parts/base'
 import { Segmentos, TituloDeTela } from '../parts/movel'
 import CompromissoForm from '../forms/CompromissoForm'
+import AgendaMovel from './AgendaMovel'
 import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -30,7 +31,16 @@ const H_INICIO = 7
 const H_FIM = 21
 const PX_HORA = 46
 
-export default function Agenda() {
+// UX-M3 — no TELEFONE a Agenda passa a ser a implementacao da direcao visual
+// aprovada (AgendaMovel), recomposta do zero. No desktop nada mudou: a arvore
+// abaixo continua sendo, linha por linha, a que estava aprovada.
+export default function Agenda({ aoBuscar, aoMenu }) {
+  const desktop = useDesktop()
+  if (!desktop) return <AgendaMovel aoBuscar={aoBuscar} aoMenu={aoMenu} />
+  return <AgendaDesktop />
+}
+
+function AgendaDesktop() {
   const { estado } = useProto()
   const desktop = useDesktop()
   const [params] = useSearchParams()
