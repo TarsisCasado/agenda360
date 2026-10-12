@@ -206,10 +206,17 @@ describe('Agenda — o que ACONTECE numa hora vs. o que PRECISA ser feito', () =
   it('Dia separa compromisso de tarefa, e não inventa horário', async () => {
     await ir('/dia', '[data-testid="dia-timeline"]')
     const t = await texto()
-    // `.text-section` aplica text-transform: uppercase, e innerText devolve o
-    // texto RENDERIZADO — por isso a comparação é indiferente a maiúsculas.
-    expect(t).toMatch(/compromissos/i)
-    expect(t).toMatch(/tarefas do dia/i)
+    // TRANSIÇÃO DE CONTRATO — C2. Até o commit anterior o Dia no telefone
+    // rotulava duas seções: "Compromissos" (com a contagem e "com horário") e
+    // "Tarefas do dia" ("sem horário"). As asserções eram:
+    //     expect(t).toMatch(/compromissos/i)
+    //     expect(t).toMatch(/tarefas do dia/i)
+    // Na direção aprovada (UX-M3) a régua não leva rótulo — os blocos pendem
+    // de um fio e a sequência JÁ se lê como um dia —, e o que não tem hora vai
+    // para uma superfície chamada "Sem horário". A DISTINÇÃO verificada neste
+    // teste não mudou nem um pouco: ela é o que as três asserções de posição
+    // abaixo provam. Mudou só o nome escrito na tela.
+    expect(t).toMatch(/sem horário/i)
     // o compromisso vive na régua; a tarefa, na lista de baixo
     const onde = await page.evaluate(() => ({
       compromissoNaRegua: Boolean(
@@ -242,24 +249,53 @@ describe('Agenda — o que ACONTECE numa hora vs. o que PRECISA ser feito', () =
     expect(visivel, 'você precisa saber que dia está vendo').toBe(true)
   }, 60_000)
 
-  it('Semana lista os sete dias e diz "Dia livre" nos vazios', async () => {
+  it('Semana mostra os sete dias, e três deles na grade temporal', async () => {
     await ir('/dia?visao=semana')
     const m = await page.evaluate(() => ({
       dias: document.querySelectorAll('[data-testid^="semana-dia-"]').length,
+      naGrade: document.querySelectorAll('[data-testid^="semana-dia-"][data-visivel="sim"]').length,
+      colunas: document.querySelectorAll('[data-testid^="am-coluna-"]').length,
       livres: (document.querySelector('main').innerText.match(/Dia livre/g) || []).length,
     }))
+    // Os SETE continuam lá: a faixa do topo é a visão do todo, e é ela que
+    // responde "como é minha semana?".
     expect(m.dias).toBe(7)
-    expect(m.livres).toBeGreaterThan(0)
+    // TRANSIÇÃO DE CONTRATO — UX-M3.1 / C2. A Semana no telefone era uma LISTA
+    // de sete dias, e cada dia vazio escrevia "Dia livre". A asserção era:
+    //     expect(m.livres).toBeGreaterThan(0)
+    // Ela não sobrevive porque a Semana deixou de ser lista e voltou a ser
+    // GRADE TEMPORAL — e numa grade um dia livre se diz com espaço vazio, que
+    // é a leitura que a grade existe para dar ("esta tarde está livre"). A
+    // frase escrita seria a mesma informação dita duas vezes, e ocupando a
+    // altura que a grade precisa.
+    // Em troca, o que passa a ser verificado é a regra que substituiu a lista:
+    // a grade mostra TRÊS dias operacionais, e nunca sete colunas de 43px com
+    // texto de 9,5px.
+    expect(m.colunas).toBe(3)
+    expect(m.naGrade).toBe(3)
+    expect(m.livres).toBe(0)
   }, 60_000)
 
   it('Mês marca os dias com atividade e o dia de hoje', async () => {
     await ir('/dia?visao=mes')
+    // TRANSIÇÃO DE CONTRATO — C2. O mês no telefone distinguia os dias por
+    // FUNDO e marcava hoje por ANEL, e este teste lia as classes:
+    //     comAtividade: c.className.includes('bg-surface-2/60')
+    //     hoje:         c.className.includes('ring-accent/45')
+    // Na direção aprovada (UX-M3) a célula não tem fundo nem anel: ela leva o
+    // número e, abaixo, até três PONTOS nas cores das categorias do dia — é
+    // isso que o olho usa para varrer o mês. Hoje é o número em destaque
+    // (`am-numero-hoje`), ou `am-numero-sel` quando hoje também é o dia
+    // escolhido, que é o estado em que a tela abre.
+    // A AFIRMAÇÃO não mudou: dias com atividade precisam se distinguir, e hoje
+    // é exatamente um dia. Mudou o mecanismo visual que a cumpre.
     const m = await page.evaluate(() => {
       const celulas = [...document.querySelectorAll('[data-testid^="mes-dia-"]')]
       return {
         total: celulas.length,
-        comAtividade: celulas.filter((c) => c.className.includes('bg-surface-2/60')).length,
-        hoje: celulas.filter((c) => c.className.includes('ring-accent/45')).length,
+        comAtividade: celulas.filter((c) => c.querySelectorAll('.am-ponto-chapado').length > 0).length,
+        hoje: celulas.filter((c) =>
+          c.querySelector('.am-numero-hoje, .am-numero-sel')).length,
       }
     })
     expect(m.total).toBeGreaterThanOrEqual(28)
@@ -319,15 +355,23 @@ describe('Agenda — o que ACONTECE numa hora vs. o que PRECISA ser feito', () =
   }, 90_000)
 
   it('navegação temporal anda e volta sem perder o eixo', async () => {
+    // TRANSIÇÃO DE CONTRATO — C2. O eixo era lido no `<h1>`, que titulava o
+    // DIA ("Hoje", ou "Segunda-feira"). As asserções eram:
+    //     expect(await page.locator('main h1').first().innerText()).toMatch(/Hoje/i)
+    //     ... .not.toMatch(/^Hoje$/i)  depois de andar um dia
+    // No telefone o `<h1>` passou a titular a TELA ("Agenda") e quem diz o dia
+    // é o rótulo central da navegação, junto das setas — que é onde a pessoa
+    // está olhando quando anda no tempo. A pergunta deste teste é a mesma:
+    // você sabe que dia está vendo, e "Hoje" devolve você.
     await ir('/dia', '[data-testid="dia-timeline"]')
-    const hoje = await page.locator('main h1').first().innerText()
-    expect(hoje).toMatch(/Hoje/i)
+    const rotulo = page.locator('[data-testid="am-dia-rotulo"]')
+    expect(await rotulo.innerText()).toMatch(/Hoje/i)
     await page.getByRole('button', { name: /Próximo dia/i }).click()
     await page.waitForTimeout(900)
-    expect(await page.locator('main h1').first().innerText()).not.toMatch(/^Hoje$/i)
-    await page.getByRole('button', { name: /^Hoje$/ }).click()
+    expect(await rotulo.innerText()).not.toMatch(/^Hoje$/i)
+    await page.locator('[data-testid="am-dia-hoje"]').click()
     await page.waitForTimeout(900)
-    expect(await page.locator('main h1').first().innerText()).toMatch(/Hoje/i)
+    expect(await rotulo.innerText()).toMatch(/Hoje/i)
   }, 60_000)
 
   it('nenhuma das três visões causa scroll horizontal no body', async () => {

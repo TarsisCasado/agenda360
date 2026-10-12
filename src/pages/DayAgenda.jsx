@@ -20,6 +20,9 @@ import { blockGeometry } from '../lib/agendaTime'
 import { cx } from '../lib/utils'
 import AcaoCopiloto from '../components/copiloto/AcaoCopiloto'
 import { SUPERFICIE } from '../lib/copilotoContexto'
+import AgendaMobile from '../components/agenda/AgendaMobile'
+import { useIsDesktop } from '../hooks/useMediaQuery'
+import { intervaloDoRecorte } from '../lib/agendaReal'
 
 const HOUR_PX = 60
 const GUTTER = 46
@@ -91,6 +94,7 @@ const VISOES = [
 export default function DayAgenda() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { categoryById } = useData()
+  const desktop = useIsDesktop()
   const visao = VISOES.some((v) => v.value === searchParams.get('visao'))
     ? searchParams.get('visao')
     : 'dia'
@@ -100,16 +104,29 @@ export default function DayAgenda() {
     else next.set('visao', v)
     setSearchParams(next, { replace: true })
   }
-  const [date, setDate] = useState(() =>
-    resolveDayDate(searchParams.get('date'), toISODate(new Date())),
-  )
+  // ?date= e o parametro do produto. ?dia= e aceito como APELIDO dele: e o
+  // nome que o prototipo usou e que os atalhos de outras telas carregam, e um
+  // link salvo que deixa de abrir no dia certo e um link quebrado silencioso.
+  // A precedencia e explicita (?date= manda) para nao haver dois donos.
+  const dateParam = searchParams.get('date') || searchParams.get('dia')
+  const [date, setDate] = useState(() => resolveDayDate(dateParam, toISODate(new Date())))
 
-  const dateParam = searchParams.get('date')
   useEffect(() => {
     if (dateParam) setDate(dateParam)
   }, [dateParam])
 
-  const range = useMemo(() => ({ start: date, end: date }), [date])
+  // O INTERVALO ACOMPANHA A COMPOSICAO, e e um so.
+  //   desktop  -> o dia, porque `partitionDayTasks` recebe a lista inteira e
+  //               assume que ela ja e daquele dia;
+  //   telefone -> a semana (ou a grade do mes), porque a faixa de sete dias
+  //               precisa dos pontos e deslizar o recorte nao pode custar uma
+  //               nova consulta.
+  // Uma consulta so: montar as duas arvores fazia o telefone pedir o dia e a
+  // semana em requisicoes separadas.
+  const range = useMemo(
+    () => (desktop ? { start: date, end: date } : intervaloDoRecorte(visao, date)),
+    [desktop, visao, date],
+  )
   const { tasks, error, reload } = useTasks(range)
   const [modal, setModal] = useState({ open: false, task: null, defaults: null })
 
@@ -174,6 +191,45 @@ export default function DayAgenda() {
   // eixo em que o titulo se alinha. A coluna do Dia continua estreita por
   // dentro; so deixou de arrastar o cabecalho 176px para a direita quando se
   // vinha de Hoje.
+  // ------------------------------------------------------------------------
+  // DUAS COMPOSICOES, UM EIXO (C2).
+  //
+  // Abaixo de `lg` — ou seja, no telefone — a Agenda e a direcao aprovada em
+  // UX-M3/UX-M3.1. Acima de `lg` NADA mudou: a arvore do desktop continua,
+  // linha por linha, a que estava no ar. Mesma disciplina que o UX1.6 usou
+  // para o Hoje.
+  //
+  // `useIsDesktop` e nao uma classe `lg:hidden` porque sao duas ARVORES
+  // diferentes, cada uma com a sua consulta: montar as duas faria o telefone
+  // carregar a semana e o dia em requisicoes separadas e pintar DOM que
+  // ninguem ve. Em navegador o hook resolve de forma sincrona na primeira
+  // renderizacao, entao nao ha troca visivel.
+  // ------------------------------------------------------------------------
+  if (!desktop) {
+    return (
+      <div className="mx-auto w-full max-w-2xl">
+        <AgendaMobile
+          date={date}
+          visao={visao}
+          tasks={tasks}
+          error={error}
+          reload={reload}
+          onDate={setDate}
+          onVisao={trocarVisao}
+          onOpenTask={openTask}
+          onNew={() => openNew(null)}
+        />
+        <TaskModal
+          open={modal.open}
+          task={modal.task}
+          defaults={modal.defaults}
+          kind={modal.task ? undefined : COMPROMISSO}
+          onClose={() => setModal({ open: false, task: null, defaults: null })}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto w-full max-w-5xl">
     <div className={cx(visao === 'dia' ? 'max-w-2xl' : '')}>

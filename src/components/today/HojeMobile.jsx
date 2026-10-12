@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, Sparkles, AlertTriangle, RefreshCw, UserCheck, Plus } from 'lucide-react'
+import {
+  ChevronRight, Sparkles, AlertTriangle, RefreshCw, UserCheck, Plus,
+  CalendarCheck2, CalendarPlus,
+} from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useData } from '../../context/DataContext'
 import { useToast } from '../../context/ToastContext'
@@ -14,33 +17,43 @@ import { SUPERFICIE, contextoDaSuperficie } from '../../lib/copilotoContexto'
 import { cx } from '../../lib/utils'
 
 // ---------------------------------------------------------------------------
-// HOJE NO TELEFONE — a home pessoal (UX1.6 / Mobile 2.0).
+// HOJE NO TELEFONE — a home pessoal.
 //
 // A composicao do desktop continua EXATAMENTE como estava (ver Today.jsx): ela
 // vive acima de `lg` e nao foi tocada. Esta e outra composicao para a mesma
 // pergunta, porque 390px nao e "o desktop menor" — e uma tela onde cabe uma
 // coisa de cada vez.
 //
-// -------------------- O QUE SAIU DA PRIMEIRA DOBRA -------------------------
+// -------------------- O QUE O C2 MUDOU AQUI --------------------------------
+//
+// A DERIVACAO nao mudou: `linhaDoDia`, `precisaDeVoce` e `sugestaoDoMomento`
+// continuam sendo a fonte, com os mesmos baldes de `buildToday` e a mesma
+// deduplicacao. Nenhum campo novo, nenhuma escrita nova.
+//
+// O que mudou e a SUPERFICIE: a tela passa a falar a linguagem aprovada em
+// UX-M2 — o plano de fundo com a tonalidade fria, a saudacao como maior texto
+// da tela, e o conteudo em TRES superficies de funcoes diferentes:
+//
+//   1. PROXIMO COMPROMISSO  lavanda. O horario e o objeto; o marcador vertical
+//      liga a hora ao que vai acontecer;
+//   2. PRECISA DE VOCE      branca. O que esta parado esperando por mim:
+//      circulo para resolver, linha para abrir. A ultima linha nao e tarefa —
+//      e o convite a organizar o que nunca ganhou data;
+//   3. SUGESTAO CONTEXTUAL  lavanda, e a unica que pode ser dispensada. Ela
+//      ocupa o FIM da composicao de proposito: e a ultima coisa que se le.
+//
+// -------------------- O QUE FOI MANTIDO CONTRA A REFERENCIA ----------------
+//
+// A referencia UX-M2 nao tem a LINHA DO DIA — ela mostra tres superficies e
+// manda o dia inteiro para a Agenda. Aqui ela fica, numa superficie branca
+// entre as decisoes e a sugestao, por uma razao que nao e estetica: tirar o
+// dia de Hoje seria remover conteudo que o produto ja entrega, e a aprovacao
+// foi da DIRECAO VISUAL, nao de uma reducao de escopo. O que a referencia
+// pede e que a sugestao venha por ultimo — e ela vem.
 //
 // As QUATRO ENTRADAS DE FOCO (os numeros Atrasadas/Hoje/Em andamento/Sem data)
-// sairam do telefone. Elas respondem "quanto existe no sistema", que e uma
-// pergunta de painel; num iPhone custavam a dobra inteira antes de qualquer
-// conteudo, e foi assim que a tela passou a ser lida como versao reduzida do
-// desktop. O que elas diziam nao se perdeu: o atraso virou PRECISA DE VOCE
-// (com evidencia, nao so contagem), o "hoje" virou a propria linha do dia, e
-// "sem data" desceu para o rodape, onde responde sem disputar a abertura.
-//
-// -------------------- TRES TEMPOS ------------------------------------------
-//
-//   AGORA            uma coisa. Forte por HIERARQUIA, nao por tamanho de caixa:
-//                    nenhuma superficie, nenhuma borda — so a hora grande;
-//   HOJE             o dia como agenda pessoal, em linha unica;
-//   PRECISA DE VOCE  no maximo duas excecoes; o resto atras de um toque.
-//
-// Nenhum dos tres e um card. Cards viriam com borda, raio e sombra, e quatro
-// deles empilhados sao exatamente o empilhamento que o QA humano descreveu.
-// Aqui o agrupamento e feito por RITMO e por rotulo pequeno.
+// continuam fora do telefone, como desde o UX1.6: elas respondem "quanto
+// existe no sistema", que e pergunta de painel, e custavam a dobra inteira.
 // ---------------------------------------------------------------------------
 
 const ICONE_ATENCAO = {
@@ -49,19 +62,20 @@ const ICONE_ATENCAO = {
   delegada: UserCheck,
 }
 
-// Rotulo de secao. Pequeno, calmo, sem contagem ao lado — a contagem ja esta
-// no conteudo, e dize-la duas vezes foi o vicio que este checkpoint veio tirar.
-function Rotulo({ children, acao, onAcao }) {
+// Titulo de uma superficie branca. Peso de titulo, tamanho de secao — e o que
+// separa "Precisa de voce" de uma lista com borda.
+function TituloSuperficie({ children, acao, onAcao, testid }) {
   return (
-    <div className="mb-1.5 flex items-baseline justify-between gap-3 px-2">
-      <h2 className="text-section">{children}</h2>
+    <div className="flex items-baseline justify-between gap-3 px-4 pt-4">
+      <h2 className="text-[19px] font-bold leading-none tracking-[-0.02em]">{children}</h2>
       {acao && (
         <button
           onClick={onAcao}
-          className="press inline-flex items-center gap-0.5 text-[13px] font-semibold text-accent-text"
+          data-testid={testid}
+          className="press -mr-1 flex items-center gap-0.5 pl-2 text-[14px] font-semibold text-accent-text"
         >
           {acao}
-          <ChevronRight size={13} />
+          <ChevronRight size={15} />
         </button>
       )}
     </div>
@@ -69,9 +83,9 @@ function Rotulo({ children, acao, onAcao }) {
 }
 
 // ---------------------------------------------------------------------------
-// AGORA. Sem caixa. A hora e o maior elemento da tela e e ela que faz o bloco
-// existir; o titulo vem logo abaixo, no peso de um titulo de pagina. Um card
-// com fundo e sombra diria a mesma coisa ocupando o dobro da dobra.
+// 1 · AGORA / A SEGUIR. So existe quando ha um COMPROMISSO (tem hora). Tarefa
+// sem hora nunca vira "agora": inventar urgencia e o oposto do que esta tela
+// faz.
 // ---------------------------------------------------------------------------
 function Agora({ task, now, onOpen }) {
   const prox = proximidade(task.start_time, now)
@@ -79,44 +93,56 @@ function Agora({ task, now, onOpen }) {
   const fim = task.end_time ? String(task.end_time).slice(0, 5) : null
   const agora = prox?.tom === 'agora'
 
+  // A SUPERFICIE e a secao; o BLOCO TOCAVEL e o botao dentro dela. Nao e
+  // detalhe de marcacao: o rotulo ("PROXIMO COMPROMISSO") diz o que aquilo e e
+  // nao e parte do objeto — tocar no rotulo nao deveria abrir a reuniao. E e
+  // tambem o que mantem a hierarquia medivel: o primeiro elemento do bloco e a
+  // HORA, que e o maior texto da superficie.
   return (
-    <section data-testid="hoje-agora" className="px-2">
-      <Rotulo>{agora ? 'Agora' : 'A seguir'}</Rotulo>
+    <section className="am-superficie am-lavanda" data-testid="hoje-agora">
+      <div className="flex items-center gap-2">
+        <span className="am-selo"><CalendarCheck2 size={13} /></span>
+        <span className="am-rotulo">{agora ? 'Acontecendo agora' : 'Próximo compromisso'}</span>
+      </div>
       <button
         onClick={() => onOpen(task)}
         data-testid="hoje-proximo"
-        className="press block w-full text-left"
+        className="press mt-3 flex w-full items-center gap-2 text-left"
       >
-        <div className="flex items-baseline gap-2">
-          <span className="text-[34px] font-bold leading-none tracking-[-0.03em] tabular-nums text-primary">
-            {inicio}
+        <span className="am-hora am-num flex-none font-semibold leading-none tracking-[-0.03em]">
+          {inicio}
+        </span>
+        <span className="am-marcador" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          {/* `balance` para a quebra ser decidida, nao sobrada: em 430 o titulo
+              cabe em uma linha; abaixo disso ele se reparte em duas metades
+              parecidas em vez de deixar uma palavra orfa. Encolher a fonte ate
+              caber custaria legibilidade — e a prioridade e ler. */}
+          <span className="am-titulo block text-balance font-semibold leading-snug tracking-[-0.01em]">
+            {task.title}
           </span>
-          {fim && <span className="text-caption tabular-nums">até {fim}</span>}
-          {prox && (
-            <span
-              className={cx(
-                'ml-auto shrink-0 text-[13px] font-semibold',
-                agora ? 'text-accent-text' : 'text-secondary',
-              )}
-            >
-              {prox.texto}
-            </span>
-          )}
-        </div>
-        <p className="mt-1.5 text-[19px] font-semibold leading-snug tracking-[-0.015em] text-primary">
-          {task.title}
-        </p>
+          <span className="mt-0.5 block text-[13.5px] leading-snug text-muted">
+            {fim && <span className="am-num">até {fim} · </span>}
+            {prox && <span className="font-medium text-accent-text">{prox.texto}</span>}
+          </span>
+        </span>
+        <ChevronRight size={16} className="flex-none text-faint" />
       </button>
     </section>
   )
 }
 
 // ---------------------------------------------------------------------------
-// A SUGESTAO. Uma frase, uma pergunta, duas acoes de texto — e nada mais.
+// 3 · A SUGESTAO. Uma frase, uma pergunta, duas acoes — e nada mais.
 //
 // "Reservar" NAO grava: leva ao Copiloto com o contexto, onde a proposta e
 // confirmada como qualquer outra. Uma home que cria atividade sozinha seria
-// escrita sem pedido.
+// escrita sem pedido, que e a unica coisa que este produto nunca faz.
+//
+// DIFERENCA EM RELACAO A REFERENCIA: no prototipo este botao abria uma folha
+// de candidatos e "Reservar" marcava o horario na hora. Aqui ele continua
+// levando a conversa, porque o contrato PERGUNTAR -> PROPOSTA -> CONFIRMAR e
+// do produto e nao foi aberto neste checkpoint.
 // ---------------------------------------------------------------------------
 function Sugestao({ sugestao, onDispensar }) {
   const navigate = useNavigate()
@@ -129,22 +155,55 @@ function Sugestao({ sugestao, onDispensar }) {
     })
 
   return (
-    <section data-testid="hoje-sugestao" className="px-2">
-      <p className="flex items-start gap-1.5 text-[14px] leading-snug text-secondary">
-        <Sparkles size={14} className="mt-[3px] shrink-0 text-accent" />
-        <span>
-          {sugestao.frase} <span className="text-primary">{sugestao.pergunta}</span>
-        </span>
+    <section className="am-superficie am-lavanda relative overflow-hidden" data-testid="hoje-sugestao">
+      <div className="flex items-center gap-2">
+        <Sparkles size={15} className="flex-none text-accent" />
+        <span className="am-rotulo">Tempo livre antes do compromisso</span>
+      </div>
+      <p className="relative mt-2 max-w-[78%] text-[15px] leading-snug text-primary">
+        {sugestao.frase} <span className="text-secondary">{sugestao.pergunta}</span>
       </p>
-      <div className="mt-1.5 flex items-center gap-4 pl-[22px]">
-        <button onClick={pedir} className="press text-[13px] font-semibold text-accent-text">
+      <div className="relative mt-3.5 flex flex-wrap items-center gap-2">
+        <button
+          onClick={pedir}
+          className="press rounded-control bg-accent px-4 py-2.5 text-[14px] font-semibold text-white"
+        >
           Reservar
         </button>
-        <button onClick={onDispensar} className="press text-[13px] font-medium text-muted">
+        <button
+          onClick={onDispensar}
+          className="press rounded-control bg-accent-soft px-4 py-2.5 text-[14px] font-medium text-accent-text ring-1 ring-inset ring-accent/15"
+        >
           Agora não
         </button>
       </div>
+      <GlifoJanela />
     </section>
+  )
+}
+
+// O GLIFO. Um desenho pequeno, do mesmo violeta, meio transparente e atras do
+// texto: da corpo a superficie sem virar banner. Se ele competir com a frase,
+// ele esta errado — por isso nao tem cor propria nem sombra, e o texto tem
+// largura maxima para nunca passar por cima dele.
+function GlifoJanela() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 64 64"
+      className="pointer-events-none absolute right-2 top-[46%] h-[68px] w-[68px] text-accent opacity-[0.15]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="6" y="12" width="42" height="40" rx="8" />
+      <path d="M6 24h42M18 6v10M36 6v10" />
+      <path d="M17 36h12" />
+      <circle cx="47" cy="45" r="13" fill="currentColor" stroke="none" opacity="0.5" />
+      <path d="M47 39v6l4 3" stroke="currentColor" opacity="0.9" />
+    </svg>
   )
 }
 
@@ -180,17 +239,14 @@ function Linha({ item, onOpen, onChanged }) {
   }
 
   return (
-    <div
-      data-testid="hoje-linha"
-      className="tapavel flex items-center gap-3 px-2 py-2.5"
-    >
+    <div data-testid="hoje-linha" className="flex items-center gap-3 py-2.5">
       <button
         onClick={() => onOpen(task)}
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
       >
         <span
           className={cx(
-            'w-[42px] shrink-0 text-[13px] font-semibold tabular-nums',
+            'am-num w-[42px] shrink-0 text-[13px] font-semibold',
             hora ? 'text-primary' : 'text-faint',
           )}
         >
@@ -201,7 +257,7 @@ function Linha({ item, onOpen, onChanged }) {
         )}
         <span
           className={cx(
-            'min-w-0 flex-1 truncate text-[15px]',
+            'am-linha min-w-0 flex-1 truncate',
             feito ? 'text-muted line-through' : 'text-primary',
           )}
         >
@@ -212,7 +268,7 @@ function Linha({ item, onOpen, onChanged }) {
         {sinal && (
           <span
             title={`Mudou de dia ${sinal.replace('×', '')} vezes`}
-            className="text-caption shrink-0 tabular-nums"
+            className="am-num text-caption shrink-0"
           >
             {sinal}
           </span>
@@ -235,23 +291,33 @@ function Linha({ item, onOpen, onChanged }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// 2 · UMA LINHA DE "PRECISA DE VOCE".
+//
+// A cor do alerta e vermelho CONTIDO e fica so na evidencia — pintar a linha
+// inteira transformaria "precisa de voce" em "voce esta falhando".
+// ---------------------------------------------------------------------------
 function ItemAtencao({ item, onOpen }) {
   const Icone = ICONE_ATENCAO[item.tipo] || AlertTriangle
   return (
     <button
       onClick={() => onOpen(item.task)}
       data-testid="hoje-atencao-item"
-      className="press tapavel flex w-full items-start gap-2.5 px-2 py-2.5 text-left"
+      className="press flex w-full items-start gap-3 py-3 text-left"
     >
       <Icone
-        size={15}
-        className={cx('mt-[2px] shrink-0', item.tipo === 'atraso' ? 'text-danger' : 'text-muted')}
+        size={16}
+        className={cx('mt-[3px] flex-none', item.tipo === 'atraso' ? 'text-danger' : 'text-muted')}
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-medium text-primary">{item.task.title}</span>
-        <span className="text-caption mt-0.5 block">{item.evidencia}</span>
+        <span className="am-linha block text-balance font-medium leading-snug text-primary">
+          {item.task.title}
+        </span>
+        <span className="mt-0.5 block text-[13.5px] leading-snug text-muted">
+          <span className={item.tipo === 'atraso' ? 'text-danger' : undefined}>{item.evidencia}</span>
+        </span>
       </span>
-      <ChevronRight size={15} className="mt-1 shrink-0 text-faint" />
+      <ChevronRight size={18} className="mt-1 flex-none text-faint" />
     </button>
   )
 }
@@ -268,83 +334,113 @@ export default function HojeMobile({ t, agora, onOpen, onChanged, onCriar }) {
   const resto = atencao.length - visiveis.length
   const sugestao = sugestaoOculta ? null : sugestaoDoMomento(t, agora)
   const primeiroNome = user?.full_name?.split(' ')[0] || 'você'
+  const semData = t.contagens.sem_data
 
   return (
-    <div className="space-y-6" data-testid="hoje-mobile">
-      {/* CABECALHO CURTO. Saudacao em corpo de titulo pequeno, data logo
-          abaixo: 60px ate o primeiro conteudo util, contra os ~190px que o
-          cabecalho grande + as quatro entradas custavam. */}
-      <header className="flex items-start justify-between gap-3 px-2">
-        <div className="min-w-0">
-          <h1 className="text-[19px] font-bold tracking-[-0.015em] text-primary">
+    <div className="am relative" data-testid="hoje-mobile">
+      {/* A ATMOSFERA. Um plano fixo atras de tudo: o fundo claro com a
+          tonalidade fria e uma variacao muito discreta embaixo, para o rodape
+          nao parecer recortado. Nao e ilustracao — se voce reparar nela, ela
+          esta forte demais. */}
+      <div className="am-fundo" aria-hidden="true" />
+
+      <div className="relative space-y-4">
+        {/* O TOPO — data pequena, saudacao grande. A saudacao e o maior texto
+            da tela e o unico elemento editorial. Nenhuma barra de marca acima:
+            a home nao precisa dizer em que aplicativo voce esta. */}
+        <header className="px-2">
+          <p className="text-[15px] leading-snug text-secondary">{formatLong(agora)}</p>
+          <h1 className="mt-1 text-[30px] font-bold leading-[1.12] tracking-[-0.03em] text-primary">
             {greetingFor(agora)}, {primeiroNome}
           </h1>
-          <p className="text-caption mt-0.5">{formatLong(agora)}</p>
-        </div>
-      </header>
+        </header>
 
-      {t.proximo && <Agora task={t.proximo} now={agora} onOpen={onOpen} />}
+        {t.proximo && <Agora task={t.proximo} now={agora} onOpen={onOpen} />}
 
-      {sugestao && <Sugestao sugestao={sugestao} onDispensar={() => setSugestaoOculta(true)} />}
+        {(visiveis.length > 0 || semData > 0) && (
+          <section className="am-superficie am-branca px-0 py-0" data-testid="hoje-atencao">
+            <TituloSuperficie
+              acao={resto > 0 ? `Ver mais ${resto}` : null}
+              onAcao={() => setVerTudo(true)}
+              testid="hoje-ver-mais"
+            >
+              Precisa de você
+            </TituloSuperficie>
 
-      {linhas.length > 0 && (
-        <section data-testid="hoje-linha-do-dia">
-          {/* "Depois, hoje" quando ha destaque: o que esta em AGORA saiu desta
-              lista, entao chama-la de "Hoje" prometeria o dia inteiro e
-              entregaria o dia menos uma coisa. */}
-          <Rotulo acao="Agenda" onAcao={() => navigate('/dia')}>
-            {t.proximo ? 'Depois, hoje' : 'Hoje'}
-          </Rotulo>
-          <div className="divide-hair divide-y">
-            {linhas.map((item) => (
-              <Linha key={item.task.id} item={item} onOpen={onOpen} onChanged={onChanged} />
-            ))}
+            <div className="mt-1 px-4 pb-1">
+              {visiveis.map((item, i) => (
+                <div key={item.id}>
+                  {i > 0 && <div className="am-divisor" />}
+                  <ItemAtencao item={item} onOpen={onOpen} />
+                </div>
+              ))}
+
+              {/* A ULTIMA LINHA NAO E TAREFA. Ela nao tem circulo de concluir
+                  porque o que falta nela e uma DATA, nao um empurrao — e a
+                  forma diz a diferenca antes de o texto explicar. */}
+              {semData > 0 && (
+                <>
+                  {visiveis.length > 0 && <div className="am-divisor" />}
+                  <button
+                    onClick={() => navigate('/tarefas')}
+                    data-testid="hoje-sem-data"
+                    className="press flex w-full items-center gap-3 py-3 text-left"
+                  >
+                    <span className="am-icone-linha"><CalendarPlus size={17} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="am-linha block font-medium leading-snug text-primary">
+                        {semData} {semData === 1 ? 'tarefa sem data' : 'tarefas sem data'}
+                      </span>
+                      <span className="mt-0.5 block text-[13.5px] leading-snug text-muted">
+                        Escolher data para organizar
+                      </span>
+                    </span>
+                    <ChevronRight size={18} className="flex-none text-faint" />
+                  </button>
+                </>
+              )}
+            </div>
+          </section>
+        )}
+
+        {linhas.length > 0 && (
+          <section className="am-superficie am-branca px-0 py-0" data-testid="hoje-linha-do-dia">
+            {/* "Depois, hoje" quando ha destaque: o que esta em AGORA saiu
+                desta lista, entao chama-la de "Hoje" prometeria o dia inteiro e
+                entregaria o dia menos uma coisa. */}
+            <TituloSuperficie acao="Agenda" onAcao={() => navigate('/dia')}>
+              {t.proximo ? 'Depois, hoje' : 'Hoje'}
+            </TituloSuperficie>
+            <div className="mt-1 px-4 pb-2">
+              {linhas.map((item, i) => (
+                <div key={item.task.id}>
+                  {i > 0 && <div className="am-divisor" />}
+                  <Linha item={item} onOpen={onOpen} onChanged={onChanged} />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* A sugestao fecha a composicao: e a ultima coisa que se le, nunca a
+            primeira. */}
+        {sugestao && <Sugestao sugestao={sugestao} onDispensar={() => setSugestaoOculta(true)} />}
+
+        {/* DIA LIVRE. Nao e erro do sistema, e uma boa noticia — entao nao leva
+            icone de alerta nem caixa de estado vazio. Leva uma frase e uma
+            porta. */}
+        {t.vazio && (
+          <div className="px-2 pt-2" data-testid="hoje-vazio">
+            <p className="text-[17px] font-semibold text-primary">Seu dia está livre.</p>
+            <p className="text-body mt-1">
+              Sem nada atrasado, agendado para hoje ou esperando organização.
+            </p>
+            <button onClick={onCriar} className="btn-secondary press mt-4">
+              <Plus size={16} /> Capturar algo
+            </button>
           </div>
-        </section>
-      )}
-
-      {atencao.length > 0 && (
-        <section data-testid="hoje-atencao">
-          <Rotulo
-            acao={resto > 0 ? `Ver mais ${resto}` : null}
-            onAcao={() => setVerTudo(true)}
-          >
-            Precisa de você
-          </Rotulo>
-          <div className="divide-hair divide-y">
-            {visiveis.map((item) => (
-              <ItemAtencao key={item.id} item={item} onOpen={onOpen} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* O RODAPE responde "quanto existe" — a pergunta de painel, no lugar
-          onde ela nao disputa a abertura da tela. */}
-      {t.contagens.sem_data > 0 && (
-        <button
-          onClick={() => navigate('/tarefas')}
-          data-testid="hoje-sem-data"
-          className="press flex w-full items-center gap-2 px-2 py-1 text-left"
-        >
-          <span className="text-[14px] text-secondary">
-            {t.contagens.sem_data} {t.contagens.sem_data === 1 ? 'item ainda sem data' : 'itens ainda sem data'}
-          </span>
-          <ChevronRight size={14} className="text-faint" />
-        </button>
-      )}
-
-      {t.vazio && (
-        <div className="px-2" data-testid="hoje-vazio">
-          <p className="text-[17px] font-semibold text-primary">Seu dia está livre.</p>
-          <p className="text-body mt-1">
-            Sem nada atrasado, agendado para hoje ou esperando organização.
-          </p>
-          <button onClick={onCriar} className="btn-secondary press mt-4">
-            <Plus size={16} /> Capturar algo
-          </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

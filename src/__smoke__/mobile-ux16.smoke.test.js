@@ -190,21 +190,34 @@ describe('Hoje no telefone', () => {
     expect(await page.locator('[data-testid="hoje-atencao"]').isVisible()).toBe(true)
   }, 60000)
 
-  it('AGORA mostra a hora como maior elemento, sem virar um card enorme', async () => {
+  it('AGORA mostra a hora como maior elemento, numa superficie que nao domina a tela', async () => {
     await irPara(page, '/')
     const m = await page.evaluate(() => {
+      const superficie = document.querySelector('[data-testid="hoje-agora"]')
       const bloco = document.querySelector('[data-testid="hoje-proximo"]')
       const hora = bloco.querySelector('span')
       return {
-        altura: Math.round(bloco.getBoundingClientRect().height),
+        altura: Math.round(superficie.getBoundingClientRect().height),
         hora: parseInt(getComputedStyle(hora).fontSize, 10),
-        fundo: getComputedStyle(bloco).backgroundColor,
+        titulo: parseInt(getComputedStyle(bloco.querySelectorAll('span')[2].querySelector('span')).fontSize, 10),
+        fundo: getComputedStyle(superficie).backgroundColor,
       }
     })
-    expect(m.hora).toBeGreaterThanOrEqual(30)
-    // Forte por hierarquia, nao por caixa: o bloco nao tem superficie propria.
-    expect(m.fundo).toBe('rgba(0, 0, 0, 0)')
-    expect(m.altura).toBeLessThan(140)
+    // A HIERARQUIA e a afirmacao que nao muda: a hora e o maior texto do
+    // bloco, e o titulo vem abaixo dela.
+    expect(m.hora).toBeGreaterThanOrEqual(26)
+    expect(m.hora).toBeGreaterThan(m.titulo)
+    // TRANSIÇÃO DE CONTRATO — C2. O UX1.6 tinha tirado toda superficie deste
+    // bloco ("forte por hierarquia, nao por caixa"), e a assercao era:
+    //     expect(m.fundo).toBe('rgba(0, 0, 0, 0)')
+    // A direcao aprovada em UX-M2 devolve a superficie — lavanda, a primeira
+    // das tres — porque o problema que o UX1.6 resolveu era o EMPILHAMENTO DE
+    // CARDS IGUAIS, e nao a existencia de superficie. Aqui as superficies tem
+    // funcoes diferentes e cores diferentes, e e isso que as faz tres pecas em
+    // vez de uma lista com bordas. O que continua proibido e ela custar a
+    // dobra: por isso a altura segue medida, e segue com teto.
+    expect(m.fundo).not.toBe('rgba(0, 0, 0, 0)')
+    expect(m.altura).toBeLessThan(170)
   }, 60000)
 
   it('a linha do dia mistura compromisso e tarefa na ordem do relogio', async () => {
@@ -368,10 +381,21 @@ describe('as outras superficies no telefone', () => {
     // A grade continua na tela: escolher nao apaga o contexto da escolha.
     expect(await page.locator(`[data-testid="mes-dia-${hoje}"]`).isVisible()).toBe(true)
     expect(await page.getByRole('dialog').count()).toBe(0)
-    // Tocar de novo fecha.
+    // TRANSIÇÃO DE CONTRATO — C2. O painel era um ALTERNADOR: tocar de novo no
+    // dia escolhido fechava. A assercao era:
+    //     await page.locator(`[data-testid="mes-dia-${hoje}"]`).click()
+    //     expect(await painel.count()).toBe(0)
+    // Na direcao aprovada (UX-M3) o painel e PARTE da visao de Mes e esta
+    // sempre presente: o mes orienta, o painel responde "o que tem nesse dia",
+    // e sempre ha um dia escolhido. Um painel que aparece e desaparece ao toque
+    // faz a altura da tela pular embaixo do dedo. Entao tocar de novo no mesmo
+    // dia agora e um gesto SEM EFEITO — e e isto que se verifica, porque uma
+    // tela que nao muda tambem e uma afirmacao.
+    const antes = await painel.innerText()
     await page.locator(`[data-testid="mes-dia-${hoje}"]`).click()
     await page.waitForTimeout(400)
-    expect(await painel.count()).toBe(0)
+    expect(await painel.isVisible()).toBe(true)
+    expect(await painel.innerText()).toBe(antes)
   }, 60000)
 
   it('Copiloto: a conversa vazia comeca perto do campo, nao colada no topo', async () => {
