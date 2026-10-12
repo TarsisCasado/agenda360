@@ -1,6 +1,7 @@
 # QA C2 — Integração visual com o produto real
 
-Commit: **0758e88** · Branch `claude/sweet-hypatia-tzkcre` · **Preview**, nunca Production.
+C2 é o commit **945a860** da branch `claude/sweet-hypatia-tzkcre`. Teste o Preview
+desse commit ou de qualquer um posterior **da mesma branch** — **nunca Production**.
 
 Este roteiro é para o **iPhone, no Safari**. Chromium já passou — ele não
 reproduz gesto, teclado, `position: fixed`, safe-area nem overscroll do iOS, e
