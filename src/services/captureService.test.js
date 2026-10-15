@@ -107,3 +107,49 @@ describe('captureService — compensacao (sem orfaos)', () => {
       .rejects.toThrow('erro original')
   })
 })
+
+// ---------------------------------------------------------------------------
+// UX-M1 — A LEITURA. Mesma garantia de sempre do dominio Capture: quem exibe
+// nao fala com bucket nem com tabela, fala com este servico. E, sobretudo:
+// LER NAO ESCREVE.
+// ---------------------------------------------------------------------------
+describe('captureService — leitura de anexos (UX-M1)', () => {
+  it('traz os descritores de varios itens numa consulta so', async () => {
+    const a = await captureService.capture(WS, USER, { file: photo(), channel: 'photo' })
+    const b = await captureService.capture(WS, USER, { file: photo(), channel: 'photo' })
+    const mapa = await captureService.anexosDeItens(WS, [a.id, b.id])
+    expect(Object.keys(mapa).sort()).toEqual([a.id, b.id].sort())
+    expect(mapa[a.id]).toHaveLength(1)
+    expect(mapa[a.id][0].storage_bucket).toBe('captures')
+  })
+
+  it('ler nao cria, nao altera e nao remove nada', async () => {
+    const a = await captureService.capture(WS, USER, { file: photo(), channel: 'photo' })
+    const antes = counts()
+    await captureService.anexosDeItens(WS, [a.id])
+    await captureService.urlDeAnexo((await captureService.anexosDeItens(WS, [a.id]))[a.id][0])
+    expect(counts()).toEqual(antes)
+  })
+
+  it('devolve a URL de exibicao do binario guardado', async () => {
+    const a = await captureService.capture(WS, USER, { file: photo(), channel: 'photo' })
+    const [descritor] = (await captureService.anexosDeItens(WS, [a.id]))[a.id]
+    expect(await captureService.urlDeAnexo(descritor)).toMatch(/^data:image\/png;base64,/)
+  })
+
+  // A razao de existir do `try/catch`: a migration 0009 e de execucao MANUAL,
+  // entao o ambiente pode legitimamente nao ter a tabela nem o bucket. Um
+  // anexo que nao abre nao pode derrubar a leitura do que estava escrito ao
+  // lado dele.
+  it('URL indisponivel vira null, nao excecao', async () => {
+    vi.spyOn(captureAssetService, 'getViewUrl').mockRejectedValueOnce(new Error('bucket ausente'))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(await captureService.urlDeAnexo({ storage_path: 'x/y.png' })).toBe(null)
+  })
+
+  it('sem workspace, devolve mapa vazio sem consultar nada', async () => {
+    const consulta = vi.spyOn(inboxAttachmentService, 'mapByInboxItems')
+    expect(await captureService.anexosDeItens(null, ['qualquer'])).toEqual({})
+    expect(consulta).not.toHaveBeenCalled()
+  })
+})

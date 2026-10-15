@@ -39,3 +39,6 @@ dev-dist
 vite.config.js.timestamp-*.mjs
 .vercel
 .env*
+
+# Relatorio do vitest (gerado por "npm run test:ci")
+.vitest-report.json

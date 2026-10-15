@@ -142,6 +142,49 @@ dados ficam no navegador).
 
 ---
 
+## ✅ Validação (a mesma do CI)
+
+Um comando roda exatamente o que o GitHub Actions roda:
+
+```bash
+npm ci                                   # instala o lockfile, sem surpresas
+npx playwright install chromium          # só na primeira vez (o navegador não vem no pacote)
+npm run verificar                        # lint → build → testes → conferência
+```
+
+`npm run verificar` encadeia quatro passos, **nesta ordem**:
+
+| Passo | Comando | O que prova |
+| --- | --- | --- |
+| 1 | `npm run lint` | ESLint com `--max-warnings 0`: zero erros **e** zero avisos |
+| 2 | `npm run build` | compila — e precisa vir **antes** dos testes, porque as suítes de smoke leem `dist/index.html` |
+| 3 | `npm run test:ci` | a suíte inteira: unidade + as 17 suítes de `src/__smoke__/` |
+| 4 | `node scripts/verifica-suites.mjs` | que **toda** suíte do disco realmente rodou |
+
+### Por que existe o passo 4
+
+Até o C2.4 o Playwright estava instalado no container de desenvolvimento por
+acaso, sem constar do `package.json`. Onde ele existia, rodavam 1761 testes;
+onde não existia, rodavam 1455 — e `vitest run` saía **zero** nos dois casos.
+Uma rede de segurança que encolhe em silêncio é pior que nenhuma, porque dá
+confiança.
+
+O passo 4 não confere um número cravado (que envelhece a cada checkpoint): ele
+confere **presença**. Todo arquivo de teste que existe no disco tem de aparecer
+no relatório. Se algum sumir, ele falha e diz qual — e, quando os ausentes são
+smokes, lembra que falta `npx playwright install chromium`.
+
+Para rodar só a parte rápida, sem navegador:
+
+```bash
+npx vitest run --exclude "**/__smoke__/**"
+```
+
+Isso é útil durante o desenvolvimento, mas **não substitui** `npm run verificar`
+antes de abrir ou atualizar um PR.
+
+---
+
 ## 🗄️ Configuração do Supabase
 
 1. Crie um projeto em [supabase.com](https://supabase.com).

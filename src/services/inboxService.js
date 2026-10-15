@@ -199,6 +199,16 @@ export const inboxService = {
     await recordEvent(note.workspace_id, note.id, 'restored', actorId)
     return saved
   },
+  // C3 — "manter como nota": a pessoa OLHOU o que estava por organizar e
+  // decidiu que aquilo e so uma nota. Sai da caixa sem virar ideia, sem virar
+  // tarefa e sem ser arquivada. O status 'processed' ja existia no modelo
+  // desde a A2.2, preparado e sem transicao de UI; esta e a transicao.
+  async markProcessed(note, actorId = null) {
+    const saved = await this.update(note, { status: 'processed' })
+    await recordEvent(note.workspace_id, note.id, 'organized', actorId)
+    return saved
+  },
+
   async setSeen(note, value, actorId = null) {
     const saved = await this.update(note, { seen: Boolean(value) })
     await recordEvent(note.workspace_id, note.id, value ? 'seen' : 'unseen', actorId)

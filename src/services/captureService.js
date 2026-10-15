@@ -107,4 +107,38 @@ export const captureService = {
     // 6) Objeto unico da captura criada.
     return { id: inboxItemId, workspaceId, channel, item, attachment }
   },
+
+  // -------------------------------------------------------------------------
+  // LEITURA (UX-M1). Nada abaixo grava, envia ou remove nada.
+  //
+  // Por que mora AQUI e nao na tela: exibir um asset exige DUAS pecas — o
+  // descritor (inboxAttachmentService) e a URL de visualizacao
+  // (captureAssetService, assinada no Supabase e data-URL no demo). Compor as
+  // duas e exatamente o papel deste servico (ADR-04/10/11). Uma tela que
+  // falasse direto com os dois passaria a conhecer bucket e path, que sao
+  // detalhe de armazenamento.
+  // -------------------------------------------------------------------------
+
+  // Descritores de varios InboxItems de uma vez: { inbox_item_id: [...] }.
+  // Uma leitura, nao N.
+  async anexosDeItens(workspaceId, inboxItemIds = []) {
+    if (!workspaceId) return {}
+    return inboxAttachmentService.mapByInboxItems(workspaceId, inboxItemIds)
+  },
+
+  // URL de visualizacao de UM asset. Deliberadamente sob demanda: no Supabase
+  // cada URL assinada e uma ida a rede, entao gerar as de uma lista inteira ao
+  // abrir a tela custaria dezenas de chamadas para imagens que ninguem olhou.
+  // Quem abre o item paga por ele.
+  //
+  // Devolve null em vez de lancar: um anexo que nao abre nao pode derrubar a
+  // leitura do que estava escrito ao lado dele.
+  async urlDeAnexo(descriptor) {
+    try {
+      return await captureAssetService.getViewUrl(descriptor)
+    } catch (err) {
+      console.warn('[captureService] falha ao obter URL do anexo:', err?.message || err)
+      return null
+    }
+  },
 }
