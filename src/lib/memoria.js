@@ -87,7 +87,7 @@ export function dominio(url) {
 
 // --- Conversao das fontes -> item unico de Memoria -------------------------
 
-export function itemDeNota(nota, { tarefas = [] } = {}) {
+export function itemDeNota(nota, { tarefas = [], anexos = [] } = {}) {
   const arquivado = nota.status === 'archived'
   const titulo = ideaTitle(nota, 'Sem título')
   // A previa e a primeira linha do corpo que NAO seja o titulo exibido.
@@ -118,6 +118,12 @@ export function itemDeNota(nota, { tarefas = [] } = {}) {
     criadoEm: nota.created_at || null,
     atualizadoEm: nota.updated_at || nota.created_at || null,
     tarefasRelacionadas: tarefas,
+    // Os DESCRITORES de anexo, se a leitura trouxe algum. Lista vazia e a
+    // resposta honesta para dois casos diferentes — o item nao tem anexo, ou a
+    // leitura nao estava disponivel — e nos dois a tela mostra a mesma coisa:
+    // o que foi escrito, sem secao de anexos. Nunca um espaco reservado para
+    // uma imagem que talvez exista.
+    anexos,
     // A linha original, para quem precisa gravar (o detalhe chama os services
     // com o registro de verdade, nunca com esta projecao).
     origem: nota,
@@ -142,6 +148,10 @@ export function itemDeLink(link, { tarefas = [] } = {}) {
     criadoEm: link.created_at || null,
     atualizadoEm: link.created_at || null,
     tarefasRelacionadas: tarefas,
+    // Sempre vazio, e por modelo: `inbox_attachments` referencia
+    // `inbox_item_id`. Um link nao tem onde pendurar um anexo — o campo existe
+    // aqui para a projecao ter a mesma forma nas duas fontes.
+    anexos: [],
     origem: link,
   }
 }
@@ -151,15 +161,22 @@ export function itemDeLink(link, { tarefas = [] } = {}) {
 // inboxTaskLinkService ja produzia para a Caixa (`convertedMap`); `links` ja
 // carrega `task_id` na propria linha. Nenhuma consulta nova, nenhum campo novo.
 // ---------------------------------------------------------------------------
-export function agregarMemoria({ notas = [], links = [], vinculos = {} } = {}) {
+export function agregarMemoria({ notas = [], links = [], vinculos = {}, anexos = {} } = {}) {
   const itens = [
     ...notas.map((n) => {
       const v = vinculos[n.id]
-      return itemDeNota(n, { tarefas: v ? [v.task_id] : [] })
+      return itemDeNota(n, { tarefas: v ? [v.task_id] : [], anexos: anexos[n.id] || [] })
     }),
     ...links.map((l) => itemDeLink(l, { tarefas: l.task_id ? [l.task_id] : [] })),
   ]
   return ordenarPorRecencia(itens)
+}
+
+// A imagem que REPRESENTA o item na lista: a primeira de tipo `image`. Um PDF
+// ou um audio anexado conta como anexo e aparece no detalhe, mas nao vira
+// miniatura — miniatura de PDF seria um icone generico ocupando 46px.
+export function imagemDoItem(item) {
+  return (item?.anexos || []).find((a) => a.kind === 'image') || null
 }
 
 export function ordenarPorRecencia(itens = []) {

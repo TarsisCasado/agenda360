@@ -357,16 +357,31 @@ describe('as outras superficies no telefone', () => {
   beforeAll(async () => { ({ ctx, page } = await abrir(VIEWPORTS[1])) }, 120000)
   afterAll(async () => { await ctx?.close() })
 
-  it('Memoria: os cinco recortes viram UM seletor, nao uma fileira', async () => {
+  // TRANSIÇÃO DE CONTRATO — UX-M1. Este teste guardava a decisão de UX1.6: os
+  // cinco recortes viravam UM seletor suspenso, porque a fileira de pílulas
+  // transbordava sem aviso. As asserções eram:
+  //
+  //   expect(await page.locator('[data-testid="memoria-seletor-filtro"]').isVisible()).toBe(true)
+  //   expect(await page.locator('[data-testid="memoria-filtro-tudo"]:visible').count()).toBe(0)
+  //   ...
+  //   expect(await page.locator('[data-testid="memoria-seletor-filtro"]').innerText()).toMatch(/Ideias/)
+  //
+  // O que UX-M1 muda não é o problema, é a solução: trilho de chips rolável —
+  // a mesma peça de Tarefas — em vez de menu. O vocabulário inteiro fica à
+  // vista, o último chip aparece cortado na borda (que é como se mostra que há
+  // mais ao lado) e a dobra não perde linha nenhuma. O que o teste protege
+  // continua sendo o mesmo: trocar de recorte com UM toque, e a lista
+  // obedecer.
+  it('Memoria: os cinco recortes ficam a vista, num trilho de um toque', async () => {
     await irPara(page, '/memoria')
-    expect(await page.locator('[data-testid="memoria-seletor-filtro"]').isVisible()).toBe(true)
-    expect(await page.locator('[data-testid="memoria-filtro-tudo"]:visible').count()).toBe(0)
-    await page.locator('[data-testid="memoria-seletor-filtro"]').click()
-    await page.waitForTimeout(250)
-    expect(await page.locator('[data-testid="memoria-filtro-ideias"]:visible').isVisible()).toBe(true)
+    expect(await page.locator('[data-testid="memoria-seletor-filtro"]').count()).toBe(0)
+    for (const chave of ['tudo', 'por_organizar', 'notas', 'ideias', 'links']) {
+      expect(await page.locator(`[data-testid="memoria-filtro-${chave}"]:visible`).count()).toBe(1)
+    }
     await page.locator('[data-testid="memoria-filtro-ideias"]:visible').click()
     await page.waitForTimeout(300)
-    expect(await page.locator('[data-testid="memoria-seletor-filtro"]').innerText()).toMatch(/Ideias/)
+    expect(await page.locator('[data-testid="memoria-filtro-ideias"]:visible')
+      .getAttribute('aria-selected')).toBe('true')
     expect((await page.locator('[data-testid="memoria-item"]').allInnerTexts()).join(' '))
       .toMatch(/Vitrine digital/)
   }, 60000)

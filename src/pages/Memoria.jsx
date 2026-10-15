@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, PenLine, X, Loader2, Library, ChevronDown } from 'lucide-react'
+import { Search, PenLine, X, Loader2, Library } from 'lucide-react'
 import { Page, PageHeader } from '../components/layout/Page'
 import { EmptyState, ErrorState } from '../components/ui/Common'
 import { useAuth } from '../context/AuthContext'
@@ -8,6 +8,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { useData } from '../context/DataContext'
 import { useToast } from '../context/ToastContext'
 import { useMemoria } from '../hooks/useMemoria'
+import { useIsDesktop } from '../hooks/useMediaQuery'
 import { inboxService } from '../services/inboxService'
 import { linkService } from '../services/linkService'
 import { taskService } from '../services/taskService'
@@ -56,11 +57,11 @@ export default function Memoria() {
   const { reload: reloadData } = useData()
   const { toast } = useToast()
   const { itens, carregando, erro, recarregar } = useMemoria()
+  const desktop = useIsDesktop()
 
   const [filtro, setFiltro] = useState('tudo')
   const [consulta, setConsulta] = useState('')
   const [abertoId, setAbertoId] = useState(null)
-  const [seletorAberto, setSeletorAberto] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [criando, setCriando] = useState(false)
   const [tarefas, setTarefas] = useState([])
@@ -101,6 +102,11 @@ export default function Memoria() {
     setFiltro(chave)
     setAbertoId(null)
   }
+
+  // Fechar a folha devolve o foco a busca so quando era a busca que estava em
+  // uso; roubar o foco (e abrir o teclado) de quem so leu um item seria pior
+  // que nao fazer nada.
+  const fechar = () => setAbertoId(null)
 
   const recarregarTudo = useCallback(async () => {
     await recarregar()
@@ -212,7 +218,7 @@ export default function Memoria() {
   const acoes = {
     ocupado,
     filtro,
-    onFechar: () => setAbertoId(null),
+    onFechar: fechar,
     onEditar: editar,
     onDecidir: decidir,
     onCriarTarefa: criarTarefa,
@@ -222,139 +228,202 @@ export default function Memoria() {
   }
 
   const buscando = consulta.trim().length > 0
+  const rotuloFiltro = FILTROS.find((f) => f.chave === filtro)?.rotulo || 'Tudo'
+
+  // A linha de contexto do telefone. Diz o TAMANHO do que esta na tela, que e
+  // a unica pergunta que se faz ao chegar numa memoria: "tem muita coisa
+  // aqui?". Durante o carregamento ela nao chuta um numero.
+  const contexto = carregando && itens.length === 0
+    ? 'Abrindo o que você guardou…'
+    : buscando
+      ? `${visiveis.length} ${visiveis.length === 1 ? 'resultado' : 'resultados'} para “${consulta.trim()}”`
+      : filtro === 'tudo'
+        ? (visiveis.length > 0
+          ? `${visiveis.length} ${visiveis.length === 1 ? 'item guardado' : 'itens guardados'}`
+          : 'Nada guardado ainda')
+        : `${rotuloFiltro} · ${visiveis.length}`
+
+  // A BUSCA e os FILTROS sao montados UMA VEZ por composicao, e nao escondidos
+  // por classe: os dois cabecalhos usam os mesmos `data-testid`, e com ambos no
+  // DOM um `.first()` acabaria clicando no que esta com `display:none` —
+  // exatamente o que quebrou o UX-T1 antes de ser corrigido na raiz.
 
   return (
     <Page width="workspace" className="max-w-6xl">
-      <PageHeader
-        title="Memória"
-        subtitle="O que você guardou"
-        actions={
-          <>
-            <AcaoCopiloto
-              superficie={SUPERFICIE.MEMORIA}
-              extra={{ filtro }}
-              className="hidden sm:inline-flex"
-            />
-            {/* SECUNDARIO, e nao primario, por um motivo de telefone: ali
-                embaixo ja existe um `+` roxo — o criar GLOBAL da barra
-                inferior. Dois botoes roxos identicos a poucos centimetros um
-                do outro, um "criar qualquer coisa" e um "criar nota",
-                obrigavam a pessoa a aprender a diferenca pela posicao. Esta e
-                a acao DESTA tela; a global continua sendo aquela. */}
+      {/* A atmosfera da familia, so no telefone — o mesmo plano fixo de Hoje,
+          Agenda e Tarefas. Acima de `lg` a tela continua sobre o fundo de
+          sempre, porque a composicao de duas colunas ja da a ela um desenho
+          proprio. */}
+      {!desktop && <div className="am-fundo" aria-hidden="true" />}
+
+      {/* ===================== TELEFONE ===================== */}
+      {!desktop && (
+        <header className="relative mb-3 px-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[15px] leading-snug text-secondary short:hidden">{contexto}</p>
+              <h1 className="mt-0.5 text-[30px] font-bold leading-[1.12] tracking-[-0.03em] text-primary short:text-page">
+                Memória
+              </h1>
+            </div>
+            {/* Continua SECUNDARIO, pelo motivo de sempre: ali embaixo ja ha um
+                `+` roxo, o criar global. Dois botoes roxos a poucos centimetros
+                obrigariam a aprender a diferenca pela posicao. */}
             <button
               onClick={novaNota}
               disabled={criando}
-              className="btn-secondary press !px-3"
+              className="am-redondo mt-1 shrink-0"
               data-testid="memoria-nova-nota"
               aria-label="Nova nota"
             >
-              {criando ? <Loader2 size={17} className="animate-spin" /> : <PenLine size={17} />}
-              <span className="hidden sm:inline">Nova nota</span>
+              {criando ? <Loader2 size={18} className="animate-spin" /> : <PenLine size={18} />}
             </button>
-          </>
-        }
-      />
+          </div>
 
-      {/* BUSCA — visivel sempre, nao escondida atras de um icone. Procurar e o
-          gesto central de uma memoria; esconde-lo seria esconder a funcao. */}
-      <div className="px-2">
-        <div className="relative">
-          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            ref={buscaRef}
-            value={consulta}
-            onChange={(e) => { setConsulta(e.target.value); setAbertoId(null) }}
-            placeholder="Buscar no que guardei…"
-            aria-label="Buscar na memória"
-            data-testid="memoria-busca"
-            className="input !pl-9 !pr-9"
+          <AcaoCopiloto
+            superficie={SUPERFICIE.MEMORIA}
+            extra={{ filtro }}
+            className="-ml-2 mt-1 short:hidden"
           />
-          {buscando && (
-            <button
-              type="button"
-              onClick={() => { setConsulta(''); buscaRef.current?.focus() }}
-              aria-label="Limpar busca"
-              data-testid="memoria-limpar-busca"
-              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted active:bg-surface-3 hover:bg-surface-3"
-            >
-              <X size={15} />
-            </button>
-          )}
-        </div>
 
-        {/* ------------------------------------------------------------------
-            FILTROS — DUAS FORMAS, UM ESTADO.
-
-            No desktop, cinco pilulas cabem numa linha e mostram de uma vez os
-            recortes que existem: ver o vocabulario inteiro ajuda.
-
-            No telefone, cinco pilulas ocupam a largura toda e ainda transbordam
-            — a quinta fica escondida atras de uma rolagem horizontal que
-            ninguem descobre, e a fileira come 44px da dobra. Entao vira UM
-            controle: o recorte atual, e um toque para trocar. Mesmo estado,
-            mesmos testids, composicao diferente.
-            ------------------------------------------------------------------ */}
-        <div className="mt-2.5 sm:hidden">
-          <button
-            type="button"
-            data-testid="memoria-seletor-filtro"
-            aria-expanded={seletorAberto}
-            onClick={() => setSeletorAberto((v) => !v)}
-            className="press inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3.5 py-1.5 text-[13px] font-semibold text-primary"
-          >
-            {FILTROS.find((f) => f.chave === filtro)?.rotulo || 'Tudo'}
-            <ChevronDown
-              size={14}
-              className={cx('transition-transform', seletorAberto && 'rotate-180')}
+          {/* BUSCA — visivel sempre, nunca atras de um icone. Procurar e o
+              gesto central de uma memoria; esconde-lo seria esconder a funcao. */}
+          <div className="am-busca mt-3">
+            <Search size={17} className="shrink-0 text-muted" aria-hidden />
+            <input
+              ref={buscaRef}
+              value={consulta}
+              onChange={(e) => { setConsulta(e.target.value); setAbertoId(null) }}
+              placeholder="Buscar no que guardei…"
+              aria-label="Buscar na memória"
+              data-testid="memoria-busca"
             />
-          </button>
-          {seletorAberto && (
-            <div className="mt-1.5 overflow-hidden rounded-surface bg-surface ring-1 ring-hairline/60">
+            {buscando && (
+              <button
+                type="button"
+                onClick={() => { setConsulta(''); buscaRef.current?.focus() }}
+                aria-label="Limpar busca"
+                data-testid="memoria-limpar-busca"
+                className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted active:bg-surface-3"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          {/* OS CINCO RECORTES REAIS, no trilho de chips ja aprovado em UX-T1.
+              Antes eram um menu suspenso, escolhido quando cinco pilulas
+              transbordavam sem aviso. O trilho resolve o mesmo problema sem
+              esconder o vocabulario: o ultimo chip aparece pela metade na
+              borda, que e como se mostra que ha mais ao lado.
+
+              "Imagens", que aparece na referencia, NAO existe aqui — ver o
+              relatorio deste checkpoint. Um recorte que depende de uma leitura
+              opcional viria vazio sem explicar por que. */}
+          <div
+            className="-mx-2 mt-3 flex gap-2 overflow-x-auto px-2 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="tablist"
+            aria-label="Filtros da memória"
+          >
+            {FILTROS.map((f) => (
+              <button
+                key={f.chave}
+                type="button"
+                role="tab"
+                aria-selected={filtro === f.chave}
+                data-testid={`memoria-filtro-${f.chave}`}
+                onClick={() => trocarFiltro(f.chave)}
+                className={cx('am-chip', filtro === f.chave && 'am-chip-on')}
+              >
+                {f.rotulo}
+              </button>
+            ))}
+          </div>
+        </header>
+      )}
+
+      {/* ===================== DESKTOP — intocado ===================== */}
+      {desktop && (
+        <>
+          <PageHeader
+            title="Memória"
+            subtitle="O que você guardou"
+            actions={
+              <>
+                <AcaoCopiloto
+                  superficie={SUPERFICIE.MEMORIA}
+                  extra={{ filtro }}
+                  className="hidden sm:inline-flex"
+                />
+                <button
+                  onClick={novaNota}
+                  disabled={criando}
+                  className="btn-secondary press !px-3"
+                  data-testid="memoria-nova-nota"
+                  aria-label="Nova nota"
+                >
+                  {criando ? <Loader2 size={17} className="animate-spin" /> : <PenLine size={17} />}
+                  <span className="hidden sm:inline">Nova nota</span>
+                </button>
+              </>
+            }
+          />
+
+          <div className="px-2">
+            <div className="relative">
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+              <input
+                ref={buscaRef}
+                value={consulta}
+                onChange={(e) => { setConsulta(e.target.value); setAbertoId(null) }}
+                placeholder="Buscar no que guardei…"
+                aria-label="Buscar na memória"
+                data-testid="memoria-busca"
+                className="input !pl-9 !pr-9"
+              />
+              {buscando && (
+                <button
+                  type="button"
+                  onClick={() => { setConsulta(''); buscaRef.current?.focus() }}
+                  aria-label="Limpar busca"
+                  data-testid="memoria-limpar-busca"
+                  className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted active:bg-surface-3 hover:bg-surface-3"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+
+            <div
+              className="-mx-2 mt-2.5 flex gap-1.5 overflow-x-auto px-2 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              role="tablist"
+              aria-label="Filtros da memória"
+            >
               {FILTROS.map((f) => (
                 <button
                   key={f.chave}
-                  data-testid={`memoria-filtro-${f.chave}`}
+                  role="tab"
                   aria-selected={filtro === f.chave}
-                  role="option"
-                  onClick={() => { trocarFiltro(f.chave); setSeletorAberto(false) }}
-                  className={cx(
-                    'block w-full border-b hair px-3.5 py-2.5 text-left text-[14px] last:border-b-0',
-                    filtro === f.chave ? 'bg-surface-2 font-semibold text-primary' : 'text-secondary',
-                  )}
+                  data-testid={`memoria-filtro-${f.chave}`}
+                  onClick={() => trocarFiltro(f.chave)}
+                  className={filtro === f.chave ? 'pill-on' : 'pill-off'}
                 >
                   {f.rotulo}
                 </button>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        </>
+      )}
 
-        <div
-          className="-mx-2 mt-2.5 hidden gap-1.5 overflow-x-auto px-2 pb-1 sm:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          role="tablist"
-          aria-label="Filtros da memória"
-        >
-          {FILTROS.map((f) => (
-            <button
-              key={f.chave}
-              role="tab"
-              aria-selected={filtro === f.chave}
-              data-testid={`memoria-filtro-${f.chave}`}
-              onClick={() => trocarFiltro(f.chave)}
-              className={filtro === f.chave ? 'pill-on' : 'pill-off'}
-            >
-              {f.rotulo}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-4 px-2">
+      <div className={cx('relative px-2', desktop && 'mt-4')}>
         {erro ? (
           <ErrorState onRetry={recarregar} />
         ) : carregando && itens.length === 0 ? (
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton h-16" />)}
+          <div className={desktop ? 'space-y-2' : 'space-y-2.5'}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className={cx('skeleton', desktop ? 'h-16' : 'h-[76px] !rounded-2xl')} />
+            ))}
           </div>
         ) : (
           <div
@@ -366,21 +435,62 @@ export default function Memoria() {
           >
             <div className="min-w-0">
               {visiveis.length === 0 ? (
-                <EmptyState
-                  icon={Library}
-                  title={buscando ? 'Nada encontrado' : 'Nada guardado por aqui ainda'}
-                  description={
-                    buscando
-                      ? 'Tente outra palavra — a busca olha o título e o conteúdo.'
-                      : 'Anote um pensamento, salve um link, capture o que não pode esquecer.'
-                  }
-                />
-              ) : (
+                desktop ? (
+                  <EmptyState
+                    icon={Library}
+                    title={buscando ? 'Nada encontrado' : 'Nada guardado por aqui ainda'}
+                    description={
+                      buscando
+                        ? 'Tente outra palavra — a busca olha o título e o conteúdo.'
+                        : 'Anote um pensamento, salve um link, capture o que não pode esquecer.'
+                    }
+                  />
+                ) : (
+                  // O VAZIO no telefone e uma superficie da familia, nao um
+                  // icone solto no meio da tela. E, quando ha o que fazer a
+                  // respeito, ele oferece a acao em vez de so descrever a falta.
+                  <div className="am-superficie am-branca text-center" data-testid="memoria-vazio">
+                    <Library size={24} className="mx-auto text-muted" aria-hidden />
+                    <p className="mt-2.5 text-[17px] font-semibold text-primary">
+                      {buscando ? 'Nada encontrado' : 'Nada guardado por aqui ainda'}
+                    </p>
+                    <p className="mt-1 text-[14px] leading-snug text-secondary">
+                      {buscando
+                        ? 'Tente outra palavra — a busca olha o título e o conteúdo.'
+                        : 'Anote um pensamento, salve um link, capture o que não pode esquecer.'}
+                    </p>
+                    {!buscando && (
+                      <button
+                        type="button"
+                        onClick={novaNota}
+                        disabled={criando}
+                        className="btn-primary press mt-3.5"
+                      >
+                        <PenLine size={16} />
+                        Escrever uma nota
+                      </button>
+                    )}
+                  </div>
+                )
+              ) : desktop ? (
                 <ul className="list" data-testid="memoria-lista">
                   {visiveis.map((item) => (
                     <li key={item.id}>
                       <LinhaMemoria
                         item={item}
+                        selecionado={item.id === abertoId}
+                        onAbrir={(i) => setAbertoId(i.id)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <ul className="space-y-2.5" data-testid="memoria-lista">
+                  {visiveis.map((item) => (
+                    <li key={item.id}>
+                      <LinhaMemoria
+                        item={item}
+                        telefone
                         selecionado={item.id === abertoId}
                         onAbrir={(i) => setAbertoId(i.id)}
                       />
@@ -411,16 +521,14 @@ export default function Memoria() {
       {/* LEITURA NO TELEFONE — folha por cima, com a lista intacta embaixo.
           Fechar devolve o mesmo filtro, a mesma busca e a mesma rolagem,
           porque nada foi desmontado. */}
-      {aberto && (
+      {aberto && !desktop && (
         <div
-          className="fixed inset-0 z-40 flex flex-col bg-canvas pt-safe lg:hidden"
+          className="am-folha fixed inset-0 z-40 flex flex-col pt-safe"
           data-testid="memoria-folha"
           role="dialog"
           aria-label={aberto.titulo}
         >
-          <div className="min-h-0 flex-1 px-4 pb-safe pt-3">
-            <DetalheMemoria item={aberto} tarefas={tarefasDoAberto} {...acoes} />
-          </div>
+          <DetalheMemoria item={aberto} tarefas={tarefasDoAberto} telefone {...acoes} />
         </div>
       )}
     </Page>

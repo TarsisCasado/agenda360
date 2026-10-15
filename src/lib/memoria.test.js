@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   agregarMemoria,
+  imagemDoItem,
   aplicarFiltro,
   buscarMemoria,
   listarMemoria,
@@ -323,5 +324,62 @@ describe('memoria — a previa nunca repete o titulo', () => {
     const [i] = agregarMemoria({ notas: [nota({ title: '', content: 'primeira\nsegunda' })] })
     expect(i.titulo).toBe('primeira')
     expect(i.previa).toBe('segunda')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// UX-M1 — ANEXOS. A forma e a REAL da tabela `inbox_attachments` (migration
+// 0009): descritor com kind/storage_bucket/storage_path/mime/bytes. Nenhum
+// campo inventado.
+// ---------------------------------------------------------------------------
+const anexo = (over = {}) => ({
+  id: 'a1',
+  inbox_item_id: 'n1',
+  kind: 'image',
+  storage_bucket: 'captures',
+  storage_path: 'ws/n1/foto.jpg',
+  mime: 'image/jpeg',
+  bytes: 1024,
+  ...over,
+})
+
+describe('memoria — anexos (UX-M1)', () => {
+  it('os descritores chegam ao item pelo id da nota', () => {
+    const itens = agregarMemoria({
+      notas: [nota({ id: 'n1' })],
+      anexos: { n1: [anexo()] },
+    })
+    expect(itens[0].anexos).toHaveLength(1)
+    expect(itens[0].anexos[0].storage_path).toBe('ws/n1/foto.jpg')
+  })
+
+  it('sem leitura de anexos, o item fica com lista VAZIA — nunca indefinida', () => {
+    // E o caso de quem nao rodou a migration 0009, e tambem o de quem rodou e
+    // simplesmente nao tem anexo. Os dois tem de produzir a mesma tela: o que
+    // foi escrito, sem secao de anexos e sem espaco reservado.
+    const itens = agregarMemoria({ notas: [nota({ id: 'n1' })] })
+    expect(itens[0].anexos).toEqual([])
+  })
+
+  it('um link nunca tem anexo: a tabela referencia inbox_item_id', () => {
+    const itens = agregarMemoria({ links: [link({ id: 'l1' })], anexos: { l1: [anexo()] } })
+    expect(itens[0].anexos).toEqual([])
+  })
+
+  it('a miniatura e a primeira IMAGEM — pdf e audio nao viram miniatura', () => {
+    const item = {
+      anexos: [
+        anexo({ id: 'a1', kind: 'pdf', mime: 'application/pdf' }),
+        anexo({ id: 'a2', kind: 'image', storage_path: 'ws/n1/segunda.png' }),
+        anexo({ id: 'a3', kind: 'image', storage_path: 'ws/n1/terceira.png' }),
+      ],
+    }
+    expect(imagemDoItem(item).storage_path).toBe('ws/n1/segunda.png')
+  })
+
+  it('sem imagem nenhuma, nao ha miniatura', () => {
+    expect(imagemDoItem({ anexos: [anexo({ kind: 'audio', mime: 'audio/mpeg' })] })).toBe(null)
+    expect(imagemDoItem({ anexos: [] })).toBe(null)
+    expect(imagemDoItem({})).toBe(null)
   })
 })

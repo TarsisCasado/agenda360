@@ -565,13 +565,21 @@ describe('Q — 390x844: lista -> detalhe -> volta ao mesmo contexto', () => {
     expect(await tel.locator('[data-testid="memoria-detalhe"]:visible').innerText()).toMatch(/checklist unico/i)
   }, 60000)
 
-  // TRANSIÇÃO — UX1.6: em 390px os cinco filtros deixaram de ser uma fileira
-  // de pílulas (que transbordava e comia 44px da dobra) e passaram a ser um
-  // seletor: o recorte atual, e um toque para trocar. Mesmo estado, mesmos
-  // testids — só que agora a lista de opções precisa ser ABERTA antes.
+  // TRANSIÇÃO DE CONTRATO — UX-M1. Em UX1.6 os cinco filtros viraram um
+  // SELETOR suspenso, porque uma fileira de pílulas transbordava sem avisar.
+  // O helper era:
+  //
+  //   const escolherFiltro = async (chave) => {
+  //     await tel.locator('[data-testid="memoria-seletor-filtro"]').click()
+  //     await tel.waitForTimeout(200)
+  //     await tel.locator(`[data-testid="memoria-filtro-${chave}"]:visible`).click()
+  //   }
+  //
+  // UX-M1 resolve o mesmo transbordo sem esconder o vocabulário: trilho de
+  // chips rolável, o mesmo já aprovado em Tarefas, com o último chip aparecendo
+  // pela metade na borda. Mesmo estado, mesmos testids — e agora sem abrir nada
+  // antes, porque os cinco recortes estão à vista.
   const escolherFiltro = async (chave) => {
-    await tel.locator('[data-testid="memoria-seletor-filtro"]').click()
-    await tel.waitForTimeout(200)
     await tel.locator(`[data-testid="memoria-filtro-${chave}"]:visible`).click()
     await tel.waitForTimeout(250)
   }
@@ -590,7 +598,11 @@ describe('Q — 390x844: lista -> detalhe -> volta ao mesmo contexto', () => {
     await tel.waitForTimeout(400)
 
     expect(await tel.locator('[data-testid="memoria-busca"]').inputValue()).toBe('nota 1')
-    expect(await tel.locator('[data-testid="memoria-seletor-filtro"]').innerText()).toMatch(/Notas/)
+    // O recorte ativo agora se lê no chip marcado, não no rótulo do seletor.
+    // A asserção anterior era:
+    //   expect(await tel.locator('[data-testid="memoria-seletor-filtro"]').innerText()).toMatch(/Notas/)
+    expect(await tel.locator('[data-testid="memoria-filtro-notas"]:visible')
+      .getAttribute('aria-selected')).toBe('true')
     const depois = await tel.evaluate(() =>
       [...document.querySelectorAll('[data-testid="memoria-item"]')].map((n) => n.innerText.split('\n')[0]))
     expect(depois).toEqual(antes)
@@ -608,6 +620,116 @@ describe('Q — 390x844: lista -> detalhe -> volta ao mesmo contexto', () => {
     expect(itens.join('|')).toMatch(/Agenda/)
     expect(itens.join('|')).toMatch(/Tarefas/)
     expect(itens.join('|')).toMatch(/Memória/)
+  }, 60000)
+})
+
+// ===========================================================================
+// UX-M1 — ANEXOS QUE JA EXISTEM, FINALMENTE NA TELA.
+//
+// A tabela `inbox_attachments` e o bucket `captures` sao da migration 0009 e
+// ja tinham services e testes proprios; o que faltava era alguma tela que os
+// mostrasse. A semente abaixo grava o descritor e o binario no MESMO formato
+// em que o captureService os grava em modo demo — nada e simulado na camada
+// de cima.
+//
+// O QUE ESTE CHECKPOINT NAO FAZ, e por isso nao ha teste disso: CAPTURAR.
+// Escolher arquivo, enviar binario e gravar descritor sao ESCRITAS no banco
+// compartilhado, fora do que este checkpoint autoriza.
+// ===========================================================================
+describe('UX-M1 — anexos no telefone', () => {
+  let anx
+
+  // PNG 2x2 de verdade, para a miniatura ter o que decodificar.
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC'
+
+  // A funcao e SERIALIZADA para o navegador: nada do escopo daqui viaja
+  // junto, entao tudo o que ela usa entra pelo unico argumento.
+  const semear = ({ comAnexo, png }) => {
+    const KEY = 'agenda360.db.v2'
+    const db = JSON.parse(localStorage.getItem(KEY))
+    const ws = db.workspaces[0].id, uid = db.profiles[0].id
+    const agora = new Date().toISOString()
+    db.inbox_items = [{
+      id: 'qa-foto', workspace_id: ws, created_by: uid, type: 'note', status: 'inbox',
+      origin: 'photo', title: 'Proposta impressa', content: 'o cliente trouxe no balcao',
+      seen: false, created_at: agora, updated_at: agora,
+    }]
+    db.links = []
+    db.inbox_task_links = []
+    db.inbox_attachments = comAnexo ? [{
+      id: 'qa-anexo', workspace_id: ws, inbox_item_id: 'qa-foto', kind: 'image',
+      storage_bucket: 'captures', storage_path: 'demo/qa-foto/proposta.png',
+      mime: 'image/png', bytes: 72, width: 2, height: 2, created_by: uid, created_at: agora,
+    }] : []
+    db.capture_asset_blobs = comAnexo
+      ? [{ path: 'demo/qa-foto/proposta.png', dataUrl: png, mime: 'image/png', bytes: 72 }]
+      : []
+    localStorage.setItem(KEY, JSON.stringify(db))
+  }
+
+  const recarregar = async (comAnexo) => {
+    await anx.evaluate(semear, { comAnexo, png: PNG })
+    await anx.reload({ waitUntil: 'domcontentloaded' })
+    await anx.waitForTimeout(1400)
+  }
+
+  beforeAll(async () => {
+    anx = await ctx.newPage()
+    await anx.setViewportSize({ width: 390, height: 844 })
+    await anx.goto(`http://127.0.0.1:${porta}/memoria`, { waitUntil: 'domcontentloaded' })
+    await anx.waitForTimeout(1200)
+  }, 120000)
+
+  afterAll(async () => { await anx?.close() })
+
+  it('a lista mostra a miniatura do que foi fotografado', async () => {
+    await recarregar(true)
+    const mini = anx.locator('[data-testid="memoria-miniatura"] img')
+    await mini.first().waitFor({ state: 'visible', timeout: 10000 })
+    // Imagem DECODIFICADA, nao so um <img> no DOM: um src quebrado passaria
+    // num teste de presenca e mostraria um icone de erro na tela.
+    expect(await mini.first().evaluate((n) => n.naturalWidth)).toBeGreaterThan(0)
+  }, 60000)
+
+  it('o detalhe abre a imagem em tamanho de leitura', async () => {
+    await recarregar(true)
+    await anx.locator('[data-testid="memoria-item"]').first().click()
+    await anx.waitForTimeout(600)
+    const secao = anx.locator('[data-testid="memoria-anexos"]:visible')
+    expect(await secao.isVisible()).toBe(true)
+    const anexo = anx.locator('[data-testid="memoria-anexo"]:visible').first()
+    expect(await anexo.getAttribute('data-anexo-kind')).toBe('image')
+    const caixa = await anexo.boundingBox()
+    expect(caixa.width).toBeGreaterThan(200)
+  }, 60000)
+
+  it('sem anexo, nao sobra secao nem espaco reservado', async () => {
+    await recarregar(false)
+    await anx.locator('[data-testid="memoria-item"]').first().click()
+    await anx.waitForTimeout(600)
+    expect(await anx.locator('[data-testid="memoria-anexos"]').count()).toBe(0)
+    expect(await anx.locator('[data-testid="memoria-miniatura"]').count()).toBe(0)
+    // O que foi escrito continua la: a ausencia de anexo nao e um erro.
+    expect(await anx.locator('[data-testid="memoria-detalhe"]:visible').innerText())
+      .toMatch(/balcao/i)
+  }, 60000)
+
+  // A migration 0009 e de execucao MANUAL: o ambiente pode legitimamente nao
+  // ter a tabela. Isso NAO pode virar "Memoria nao abre".
+  it('se a leitura de anexos falhar, a Memoria abre do mesmo jeito', async () => {
+    await recarregar(true)
+    await anx.evaluate(() => {
+      const KEY = 'agenda360.db.v2'
+      const db = JSON.parse(localStorage.getItem(KEY))
+      // Remove a TABELA inteira, que e o que acontece quando ela nao existe.
+      delete db.inbox_attachments
+      localStorage.setItem(KEY, JSON.stringify(db))
+    })
+    await anx.reload({ waitUntil: 'domcontentloaded' })
+    await anx.waitForTimeout(1400)
+    expect(await anx.locator('[data-testid="memoria-lista"]').isVisible()).toBe(true)
+    expect(await anx.locator('[data-testid="memoria-item"]').count()).toBe(1)
+    expect(await anx.locator('[data-testid="memoria-miniatura"]').count()).toBe(0)
   }, 60000)
 })
 

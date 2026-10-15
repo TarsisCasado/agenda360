@@ -402,3 +402,122 @@
     background: var(--am-cor, rgb(var(--c-accent)));
   }
 }
+
+/* ==========================================================================
+   UX-M1 — MEMÓRIA NO TELEFONE.
+
+   Memoria era a unica das quatro telas de primeiro nivel que ainda falava a
+   lingua antiga: linhas coladas umas nas outras separadas por fio, detalhe
+   chapado sem moldura. Ao vir de Hoje ou da Agenda a pessoa trocava de
+   aplicativo no meio do caminho.
+
+   Nada aqui inventa peca nova. A busca usa a mesma pilula de `.am-redondo`; a
+   lista usa o cartao de `.am-cartao`; os filtros usam o chip ja aprovado em
+   UX-T1. O que muda e que agora Memoria tambem os usa.
+
+   De novo: SO no telefone. A composicao de duas colunas do desktop e
+   deliberada (lista a esquerda, leitura a direita) e nao e tocada por nenhuma
+   regra deste bloco.
+   ========================================================================== */
+@media (max-width: 1023.98px) {
+  /* A BUSCA. Alta o bastante para o dedo (44px) e redonda como as demais
+     utilidades da familia. Fundo lavanda, nao branco: campo de texto sobre
+     superficie branca precisaria de borda para existir, e borda e exatamente
+     o que esta linguagem nao usa. */
+  .am-busca {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgb(var(--am-lavanda));
+  }
+  .am-busca input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    font-size: 15px;
+    color: rgb(var(--c-text-1));
+    outline: none;
+  }
+  .am-busca input::placeholder { color: rgb(var(--c-text-4)); }
+
+  /* O ITEM GUARDADO. Cartao, e nao linha de tabela: o que a pessoa guardou e
+     uma coisa, nao um registro. Mesmo raio e mesma sombra do cartao de
+     trabalho do quadro — e o mesmo objeto visual em outra tela. */
+  .am-item {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 13px 14px;
+    text-align: left;
+    border-radius: 16px;
+    background: rgb(var(--c-surface));
+    box-shadow: 0 1px 2px rgb(var(--c-accent) / 0.05), 0 6px 16px -12px rgb(23 20 70 / 0.3);
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .dark .am-item {
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 18px -14px rgb(0 0 0 / 0.7);
+  }
+  .am-item:active { transform: scale(0.99); }
+  /* Aberto = superficie, como o destino ativo da barra lateral. A mesma
+     gramatica de "selecionado" do resto do produto, nao uma borda colorida. */
+  .am-item-aberto { background: rgb(var(--am-lavanda)); }
+
+  .am-item-titulo {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: rgb(var(--c-text-1));
+  }
+  .am-item-previa {
+    font-size: 13px;
+    line-height: 1.35;
+    color: rgb(var(--c-text-3));
+  }
+
+  /* A MINIATURA de um anexo de imagem, quando ele existe de verdade. Quadrada
+     e pequena: ela identifica o item, nao o apresenta — ver a foto inteira e
+     trabalho do detalhe. */
+  .am-miniatura {
+    width: 46px;
+    height: 46px;
+    flex: none;
+    overflow: hidden;
+    border-radius: 12px;
+    background: rgb(var(--am-utilidade));
+  }
+  .am-miniatura img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* A FOLHA de leitura. Ocupa a tela inteira porque em 390px ler e a tarefa
+     inteira; a lista continua montada atras dela, entao fechar devolve filtro,
+     busca e rolagem sem ninguem guardar nada. */
+  .am-folha { background: rgb(var(--am-canvas)); }
+  .am-folha-topo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px 10px;
+  }
+  /* O corpo do detalhe num cartao branco, como as secoes do Hoje: o conteudo
+     guardado ganha moldura em vez de flutuar sobre o fundo. */
+  .am-folha-corpo {
+    border-radius: 22px;
+    background: rgb(var(--c-surface));
+    padding: 16px;
+  }
+  /* As acoes moram numa barra ancorada embaixo, ao alcance do polegar — antes
+     ficavam no fim do conteudo, isto e, a uma rolagem de distancia em nota
+     longa e grudadas no texto em nota curta. */
+  .am-folha-acoes {
+    border-radius: 22px 22px 0 0;
+    background: rgb(var(--c-surface));
+    box-shadow: 0 -8px 24px -18px rgb(23 20 70 / 0.5);
+  }
+  .dark .am-folha-acoes { box-shadow: 0 -8px 24px -18px rgb(0 0 0 / 0.9); }
+}
