@@ -3,8 +3,10 @@ import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import TaskCard from '../components/tasks/TaskCard'
 import TaskRow from '../components/tasks/TaskRow'
 import TaskModal from '../components/tasks/TaskModal'
-import { EmptyState } from '../components/ui/Common'
+import { EmptyState, ErrorState } from '../components/ui/Common'
+import { TaskListSkeleton } from '../components/ui/Skeleton'
 import { useTasks } from '../hooks/useTasks'
+import { viewState } from '../lib/loadState'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { taskService } from '../services/taskService'
@@ -19,7 +21,7 @@ export default function WeekKanban({ embedded = false }) {
   const [reference, setReference] = useState(new Date())
   const days = useMemo(() => getWeekDays(reference), [reference])
   const range = useMemo(() => ({ start: toISODate(days[0]), end: toISODate(days[6]) }), [days])
-  const { tasks, reload } = useTasks(range)
+  const { tasks, loading, error, reload } = useTasks(range)
   const [modal, setModal] = useState({ open: false, task: null, defaults: null })
   const [dragOver, setDragOver] = useState(null)
   const [selected, setSelected] = useState(() => toISODate(new Date()))
@@ -59,6 +61,19 @@ export default function WeekKanban({ embedded = false }) {
         </div>
       </header>
 
+      {/* Falha de carregamento NAO e semana vazia: com erro, nunca mostrar
+          "Dia livre" — surge o estado de erro com "Tentar novamente". Carregando
+          inicial mostra esqueleto, nao vazio. Preserva o Kanban touch intacto. */}
+      {error ? (
+        <ErrorState
+          title="Não foi possível carregar a semana"
+          description="Houve uma falha ao buscar as atividades. Isso não quer dizer que a semana está vazia."
+          onRetry={reload}
+        />
+      ) : viewState({ loading, error, hasItems: tasks.length > 0 }) === 'loading' ? (
+        <TaskListSkeleton count={5} />
+      ) : (
+        <>
       {/* ---------- MOBILE/TABLET: seletor de dia + lista ---------- */}
       <div className="xl:hidden">
         <div className="mb-4 grid grid-cols-7 gap-1.5">
@@ -145,6 +160,8 @@ export default function WeekKanban({ embedded = false }) {
           })}
         </div>
       </div>
+        </>
+      )}
 
       <TaskModal open={modal.open} task={modal.task} defaults={modal.defaults} onClose={() => setModal({ open: false, task: null, defaults: null })} />
     </div>

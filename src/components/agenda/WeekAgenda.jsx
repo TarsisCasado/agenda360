@@ -2,7 +2,10 @@ import { useMemo } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import TaskRow from '../tasks/TaskRow'
+import { ErrorState } from '../ui/Common'
+import { TaskListSkeleton } from '../ui/Skeleton'
 import { useTasks } from '../../hooks/useTasks'
+import { viewState } from '../../lib/loadState'
 import { getWeekDays, toISODate, fromISODate, isToday, byTime } from '../../lib/date'
 import { partitionDayTasks } from '../../lib/dayView'
 import { DAY_START_HOUR, DAY_END_HOUR } from '../../lib/constants'
@@ -29,7 +32,7 @@ export default function WeekAgenda({ date, onOpenTask, onPickDay }) {
     () => ({ start: toISODate(dias[0]), end: toISODate(dias[6]) }),
     [dias],
   )
-  const { tasks } = useTasks(range)
+  const { tasks, loading, error, reload } = useTasks(range)
 
   const semana = useMemo(
     () =>
@@ -50,6 +53,23 @@ export default function WeekAgenda({ date, onOpenTask, onPickDay }) {
       }),
     [dias, tasks],
   )
+
+  // Falha de carregamento NAO e "semana sem nada": com erro, em vez de sete
+  // "Dia livre" enganosos, mostra o estado de erro com "Tentar novamente".
+  const estado = viewState({ loading, error, hasItems: tasks.length > 0 })
+  if (estado === 'error') {
+    return (
+      <ErrorState
+        title="Não foi possível carregar a semana"
+        description="Houve uma falha ao buscar as atividades. Isso não quer dizer que a semana está vazia."
+        onRetry={reload}
+      />
+    )
+  }
+  // Carregando o primeiro resultado: esqueleto, nunca "Dia livre" prematuro.
+  if (estado === 'loading') {
+    return <TaskListSkeleton count={5} />
+  }
 
   return (
     <div className="px-1">

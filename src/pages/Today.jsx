@@ -4,7 +4,9 @@ import { ChevronRight, Plus } from 'lucide-react'
 import TaskRow from '../components/tasks/TaskRow'
 import TaskModal from '../components/tasks/TaskModal'
 import { TaskListSkeleton } from '../components/ui/Skeleton'
+import { ErrorState } from '../components/ui/Common'
 import { useTasks } from '../hooks/useTasks'
+import { viewState } from '../lib/loadState'
 import { useAuth } from '../context/AuthContext'
 import { toISODate, formatLong } from '../lib/date'
 import {
@@ -161,7 +163,7 @@ export default function Today() {
   // atrasada de 40 dias e QUALQUER tarefa em andamento sem data simplesmente
   // não existiam nesta tela. Hoje precisa do universo aberto para responder o
   // que promete; quem recorta é `buildToday`.
-  const { tasks, loading, reload } = useTasks({})
+  const { tasks, loading, error, reload } = useTasks({})
   const [editing, setEditing] = useState(null)
   const [criando, setCriando] = useState(false)
   const [verTodasAtrasadas, setVerTodasAtrasadas] = useState(false)
@@ -182,6 +184,23 @@ export default function Today() {
   const restoAtrasadas = t.baldes.atrasada.length - atrasadas.length
   const semData = t.baldes.sem_data.slice(0, AMOSTRA_SEM_DATA)
   const restoSemData = t.baldes.sem_data.length - semData.length
+
+  // FALHA DE CARREGAMENTO != DIA VAZIO. Se a busca das atividades falhou, "Seu
+  // dia está livre" seria uma mentira tranquilizadora: o dia pode estar cheio e
+  // o app apenas não conseguiu ler. Com erro, nenhuma das composições (mobile
+  // ou desktop) é mostrada — surge o estado de erro com "Tentar novamente".
+  // Vale para ambas as telas por vir antes da bifurcação lg:hidden/lg:block.
+  if (viewState({ loading, error, hasItems: tasks.length > 0 }) === 'error') {
+    return (
+      <div className="mx-auto w-full max-w-2xl xl:max-w-5xl">
+        <ErrorState
+          title="Não foi possível carregar o seu dia"
+          description="Houve uma falha ao buscar suas atividades. Isso não significa que o dia está vazio — tente novamente."
+          onRetry={reload}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto w-full max-w-2xl xl:max-w-5xl">
