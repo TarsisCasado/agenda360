@@ -168,9 +168,14 @@ describe('Nova atividade — a captura deixa de ser obrigatoria', () => {
     await page.waitForTimeout(400)
   }, 90_000)
 
-  it('6. Tarefas: "Adicionar" da coluna cria TAREFA, sem menu e sem Copiloto', async () => {
+  it('6. Tarefas: "Nova tarefa" da coluna cria TAREFA, sem menu e sem Copiloto', async () => {
+    // TRANSIÇÃO DE CONTRATO — UX-T1. O rodapé da coluna passou a se chamar
+    // "+ Nova tarefa" (era "Adicionar"), seguindo a referência aprovada. A
+    // afirmação do teste não mudou: criar POR ALI é criação em linha, sem menu
+    // de escolha e sem captura conversacional.
+    //     await page.getByRole('button', { name: /^Adicionar$/ }).first().click()
     await ir(page, '/tarefas')
-    await page.getByRole('button', { name: /^Adicionar$/ }).first().click()
+    await page.getByRole('button', { name: /Nova tarefa/ }).first().click()
     await page.waitForTimeout(600)
     // criacao em linha: nem menu de escolha, nem captura conversacional
     expect(await menu(page).count()).toBe(0)

@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { Bell, Repeat2, UserRound, MoreHorizontal, Check } from 'lucide-react'
+import { Bell, Repeat2, UserRound, MoreHorizontal, Check, Flag } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useIsDesktop } from '../../hooks/useMediaQuery'
@@ -40,9 +40,13 @@ const TONE_CLASS = {
   muted: 'text-muted',
 }
 
+// UX-T1 — a referencia aprovada diz prioridade com uma BANDEIRA, nao com um
+// ponto. O simbolo muda; a regra, nao: so `alta` e `urgente` aparecem. Media e
+// baixa continuam em silencio, porque a maioria e media e pintar a maioria e
+// nao pintar nada (CP5.3).
 const PRIORITY_DOT = {
-  urgent: { class: 'bg-danger', label: 'Prioridade urgente' },
-  high: { class: 'bg-warning', label: 'Prioridade alta' },
+  urgent: { class: 'text-danger', label: 'Prioridade urgente' },
+  high: { class: 'text-warning', label: 'Prioridade alta' },
 }
 
 function BoardCard({ task, columnKey, today, onOpen, onMove, dragging = false }) {
@@ -70,37 +74,53 @@ function BoardCard({ task, columnKey, today, onOpen, onMove, dragging = false })
       data-testid="board-card"
       data-task-id={task.id}
       className={cx(
-        'group relative rounded-control bg-board-card ring-1 ring-hairline/45 transition-[opacity,box-shadow] lg:min-h-0 lg:cursor-grab lg:active:cursor-grabbing',
+        // No telefone a superficie vem de `.am-cartao` (raio 14, sombra da
+        // familia), que so existe abaixo de 1024px. No desktop valem as
+        // utilidades de sempre — a densidade de quatro colunas nao muda.
+        'group am-cartao relative rounded-control transition-[opacity,box-shadow] lg:bg-board-card lg:ring-1 lg:ring-hairline/45 lg:min-h-0 lg:cursor-grab lg:active:cursor-grabbing',
         dragging ? 'opacity-35' : 'hover:shadow-raised',
         // Concluida ja aconteceu: continua legivel, para de competir.
         done && !dragging && 'opacity-60',
       )}
     >
-      {/* Trilho de atraso: 2px, na borda, sem consumir espaco do conteudo. */}
-      {atrasada && (
+      {/* TRILHO. Atrasada manda e pinta de `danger` — e a unica informacao do
+          cartao que pede acao hoje. Sem atraso, no telefone, o trilho recebe a
+          cor da CATEGORIA, como na referencia aprovada; no desktop ele continua
+          existindo so para o atraso, onde a densidade nao comporta mais sinal. */}
+      {atrasada ? (
         <span
           aria-hidden
           className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-danger"
         />
+      ) : (
+        category && !done && (
+          <span
+            aria-hidden
+            className="am-trilho lg:hidden"
+            style={{ '--am-cor': category.color }}
+          />
+        )
       )}
 
       <button
         type="button"
         onClick={() => onOpen?.(task)}
-        className="block min-h-[44px] w-full rounded-control py-2 pl-2.5 pr-12 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 lg:min-h-0 lg:pr-2.5"
+        className="block min-h-[44px] w-full rounded-control py-3 pl-3 pr-12 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 lg:min-h-0 lg:py-2 lg:pl-2.5 lg:pr-2.5"
       >
         <span className="flex items-start gap-1.5">
           {prio && !done && (
-            <span
+            <Flag
+              size={13}
+              strokeWidth={2.4}
               title={prio.label}
               aria-label={prio.label}
-              className={cx('mt-[6px] h-[5px] w-[5px] shrink-0 rounded-full', prio.class)}
+              className={cx('mt-[2px] shrink-0 lg:mt-[1px] lg:h-3 lg:w-3', prio.class)}
             />
           )}
           {done && <Check size={12} className="mt-[3px] shrink-0 text-positive" aria-hidden />}
           <span
             className={cx(
-              'line-clamp-3 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]',
+              'am-cartao-titulo line-clamp-3 [overflow-wrap:anywhere] lg:text-[13px] lg:font-medium lg:leading-snug',
               done ? 'text-muted' : 'text-primary',
               // 8px a mais quando ha trilho, para o texto nao encostar nele.
               atrasada && 'pl-1',
@@ -117,7 +137,7 @@ function BoardCard({ task, columnKey, today, onOpen, onMove, dragging = false })
               task.alert_enabled ||
               task.status === STATUS.DELEGATED ||
               task.reschedule_count > 0))) && (
-          <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-none">
+          <span className="am-cartao-apoio mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 lg:mt-1 lg:gap-x-1.5 lg:text-[11px] lg:leading-none">
             {label && <span className={TONE_CLASS[label.tone]}>{label.text}</span>}
             {task.start_time && !done && (
               <span className="tabular-nums text-muted">{task.start_time.slice(0, 5)}</span>

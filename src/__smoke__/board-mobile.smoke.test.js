@@ -317,9 +317,14 @@ describe('quadro no toque — o resto da tela continua de pé', () => {
   it('criar em "A fazer" pergunta a data em vez de assumir hoje', async () => {
     await tabs().nth(1).click()
     await page.waitForTimeout(800)
+    // TRANSIÇÃO DE CONTRATO — UX-T1. O rodapé da coluna que ABRE a composição
+    // chamava-se "Adicionar"; a referência aprovada o chama de "+ Nova tarefa",
+    // e é esse o rótulo agora. O botão que SUBMETE continua "Adicionar" — são
+    // dois botões diferentes, e só o primeiro mudou de nome.
+    //     .getByRole('button', { name: /Adicionar/ })
     await page
       .locator('[data-testid="board-column-a_fazer"]')
-      .getByRole('button', { name: /Adicionar/ })
+      .getByRole('button', { name: /Nova tarefa/ })
       .click()
     await page.waitForTimeout(400)
     await page.locator('[data-testid="board-column-a_fazer"] textarea').fill('Tarefa criada pelo QA')

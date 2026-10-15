@@ -96,16 +96,24 @@ export default function BoardColumn({
           // entre etapas seria feio. Entao no mobile a bandeja tem a altura do
           // CONTEUDO, ate o teto da area do quadro (que e fixa, o que evita o
           // salto), e a partir dai a lista rola por dentro.
-          'flex min-h-0 max-h-full flex-none flex-col rounded-row bg-board transition-shadow lg:flex-1',
-          isDropTarget && 'ring-2 ring-accent/55',
+          // UX-T1 — a bandeja continua sendo SUPERFICIE rebaixada e nao caixa
+          // (a decisao do CP5.3), so que com o raio da familia no telefone.
+          'am-bandeja flex min-h-0 max-h-full flex-none flex-col rounded-row bg-board transition-shadow lg:flex-1',
+          // COLUNA CANDIDATA durante o arraste. O anel sozinho era discreto
+          // demais num fundo claro; agora ela tambem recebe o veu violeta que
+          // a Semana ja usa para o dia escolhido. Quem DECIDE o alvo continua
+          // sendo o mesmo codigo — isto e so como ele aparece.
+          isDropTarget && 'am-bandeja-alvo ring-2 ring-accent/55',
         )}
       >
-        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-1.5">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:space-y-1.5 lg:p-1.5">
           {tasks.length === 0 && !composing ? (
             // ZERO STATE: uma frase, sem ilustracao e sem caixa. A ESTRUTURA
             // continua visivel — quatro colunas com quatro alturas iguais —
             // porque um quadro vazio ainda precisa parecer um quadro.
-            <p className="px-1.5 py-3 text-[12px] leading-snug text-faint">{column.empty}</p>
+            <p className="px-1.5 py-4 text-[13.5px] leading-snug text-muted lg:py-3 lg:text-[12px] lg:text-faint">
+              {column.empty}
+            </p>
           ) : (
             tasks.map((task) => (
               <BoardCard
@@ -164,9 +172,9 @@ export default function BoardColumn({
           <button
             type="button"
             onClick={() => setComposing(true)}
-            className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-b-row px-3 text-left text-[13px] font-medium text-muted transition-colors hover:bg-surface-2/60 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 lg:min-h-[36px] lg:text-[12px]"
+            className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-b-row px-3 text-left text-[14px] font-semibold text-accent-text transition-colors hover:bg-surface-2/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 lg:min-h-[36px] lg:text-[12px] lg:font-medium lg:text-muted lg:hover:text-primary"
           >
-            <Plus size={13} /> Adicionar
+            <Plus size={15} className="lg:h-3 lg:w-3" /> Nova tarefa
           </button>
         )}
         {footer}

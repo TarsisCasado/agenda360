@@ -306,7 +306,11 @@ export default function FlowBoard({ tasks, setTasks, reload, onOpenTask, classNa
 
   return (
     <div
-      className={cx('flex min-h-0 flex-col', className)}
+      // `relative`: o plano de fundo do telefone (`.am-fundo`, em Tasks.jsx) e
+      // um elemento FIXO com `z-index: 0`, que cria contexto de empilhamento.
+      // Sem isto, filtros e barra de etapas — que nao sao posicionados —
+      // ficavam ATRAS dele e desapareciam da tela.
+      className={cx('relative flex min-h-0 flex-col', className)}
       onDragStart={(e) => setDraggingId(e.target?.dataset?.taskId || null)}
       onDragEnd={() => {
         setDraggingId(null)
@@ -327,9 +331,16 @@ export default function FlowBoard({ tasks, setTasks, reload, onOpenTask, classNa
               // 44px no toque (minimo confortavel para o polegar), 30px no
               // desktop, onde o alvo e o ponteiro.
               'press min-h-[44px] shrink-0 rounded-full px-3 text-[12.5px] transition-colors short:min-h-[38px] lg:min-h-[30px]',
+              // UX-T1 — no telefone o chip entra na familia: lavanda em
+              // repouso, violeta solido quando escolhido. O preto do estado
+              // ativo nao pertencia a paleta de lugar nenhum do produto. O
+              // desktop fica como estava.
+              // `.am-chip` so existe abaixo de 1024px (ver agendaMobile.css):
+              // acima disso ela nao define nada e as utilidades `lg:` mandam.
+              'am-chip lg:bg-transparent lg:px-3 lg:text-[12.5px]',
               filtro === f.key
-                ? 'bg-primary font-semibold text-canvas'
-                : 'font-medium text-muted hover:bg-surface-2 hover:text-primary',
+                ? 'am-chip-on lg:bg-primary lg:font-semibold lg:text-canvas'
+                : 'lg:font-medium lg:text-muted lg:hover:bg-surface-2 lg:hover:text-primary',
             )}
           >
             {f.label}
@@ -373,8 +384,10 @@ export default function FlowBoard({ tasks, setTasks, reload, onOpenTask, classNa
               aria-selected={ativa}
               onClick={() => irParaEtapa(i)}
               className={cx(
-                'press flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-row px-3 text-[13px] transition-colors short:min-h-[36px]',
-                ativa ? 'bg-surface font-semibold text-primary shadow-raised' : 'font-medium text-muted',
+                'press flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13.5px] transition-colors short:min-h-[36px]',
+                ativa
+                  ? 'bg-surface font-semibold text-primary shadow-raised'
+                  : 'font-medium text-muted',
               )}
             >
               {col.label}

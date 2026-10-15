@@ -313,3 +313,92 @@
    viram uma mancha so, e a sobreposicao — que e o que a grade existe para
    revelar — deixa de ser legivel como duas coisas. */
 .am-bloco-sobre { box-shadow: -2px 0 6px rgb(2 6 23 / 0.16); }
+
+/* ===========================================================================
+   UX-T1 — TAREFAS E O QUADRO NO TELEFONE.
+
+   Mesma linguagem do Hoje (UX-M2) e da Agenda (UX-M3.1): mesmos tokens, mesmo
+   violeta, mesmas superficies, mesmo raio. Nada aqui inventa uma terceira
+   identidade — sao as mesmas pecas aplicadas a outra tela.
+
+   Tudo abaixo vale SO no telefone. A densidade do desktop e deliberada (quatro
+   colunas lado a lado pedem cartao compacto) e continua intocada: os seletores
+   que mudam medida moram dentro do componente, atras de `lg:`.
+   ======================================================================== */
+
+/* O recorte: `lg` do Tailwind e 1024px. Acima disso nenhuma destas regras
+   existe, e o desktop continua exatamente com as utilidades que ja tinha. */
+@media (max-width: 1023.98px) {
+  /* O chip de filtro. E LEITURA, nao acao destrutiva: escolhido fica violeta
+     solido, como o segmento ativo; o resto descansa na lavanda. Antes o ativo
+     era preto, que nao pertence a paleta de lugar nenhum do produto. */
+  .am-chip {
+    flex: none;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 13.5px;
+    font-weight: 550;
+    color: rgb(var(--c-text-2));
+    background: rgb(var(--am-lavanda));
+    transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .am-chip-on {
+    background: rgb(var(--c-accent));
+    color: #fff;
+    font-weight: 650;
+  }
+
+  /* A BANDEJA de uma etapa. Continua sendo superficie rebaixada e nao caixa — a
+     decisao do CP5.3 —, so que agora com o raio da familia (18px) em vez do raio
+     de linha, para a coluna pertencer a mesma tela que o Hoje e a Agenda. */
+  .am-bandeja {
+    border-radius: 18px;
+    background: rgb(var(--c-board));
+  }
+
+  /* A coluna candidata durante o arraste. O anel sozinho era discreto demais num
+     fundo claro; aqui ele ganha o veu violeta que a Semana ja usa para o dia
+     escolhido. NAO muda o gesto nem quem decide o alvo — so como ele aparece. */
+  .am-bandeja-alvo {
+    background: rgb(var(--c-accent) / 0.08);
+    box-shadow: inset 0 0 0 2px rgb(var(--c-accent) / 0.55);
+  }
+
+  /* O CARTAO DE TRABALHO, confortavel ao toque.
+     O cartao do desktop e compacto de proposito (13px, 11px de apoio): quatro
+     colunas lado a lado nao comportam mais. No telefone ha UMA coluna em foco, e
+     a largura recuperada volta para a tipografia — 15px no titulo, 13px no
+     apoio. Mesma regra do UX-M3.1: a representacao se adapta ao conteudo. */
+  .am-cartao {
+    border-radius: 14px;
+    background: rgb(var(--c-board-card));
+    box-shadow: 0 1px 2px rgb(var(--c-accent) / 0.05), 0 6px 16px -12px rgb(23 20 70 / 0.3);
+  }
+  .dark .am-cartao {
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 18px -14px rgb(0 0 0 / 0.7);
+  }
+  .am-cartao-titulo {
+    font-size: 15px;
+    font-weight: 550;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+  .am-cartao-apoio {
+    font-size: 13px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+
+  /* O trilho de cor na borda esquerda do cartao. `--am-cor` chega inline, da
+     categoria; o atraso continua tendo precedencia e pinta de `danger`, porque e
+     a unica informacao do cartao que pede acao hoje. */
+  .am-trilho {
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: 0;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--am-cor, rgb(var(--c-accent)));
+  }
+}
