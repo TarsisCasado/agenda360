@@ -3,6 +3,7 @@ import { toISODate, fromISODate, addDays, getWeekDays } from './date'
 import { toMinutes } from './agendaTime'
 import { tipoDeAtividade, COMPROMISSO } from './activityKind'
 import { disporDia, faixaDeHoras, conflitosDoDia } from './agendaGrade'
+import { viewState } from './loadState'
 
 // ---------------------------------------------------------------------------
 // O ADAPTADOR (C2) — entre os servicos reais e a Agenda aprovada.
@@ -228,4 +229,31 @@ export function situacaoDoEvento(e, agora) {
   const faltam = toMinutes(e.inicio) - toMinutes(agora)
   if (faltam > 0 && faltam <= 90) return { tipo: 'proximo', texto: `em ${faltam} min` }
   return null
+}
+
+// ---------------------------------------------------------------------------
+// O ESTADO DA BUSCA NA AGENDA (C2.3).
+//
+// A mesma regra de quatro estados do resto do produto (`lib/loadState.js`),
+// com uma diferenca que precisa estar escrita e testada: aqui `hasItems` e
+// SEMPRE falso.
+//
+// Em `viewState`, `hasItems` existe para nao piscar um esqueleto por cima de
+// uma lista que ja esta correta. A Agenda nao tem esse caso: ela recarrega por
+// INTERVALO (a semana, ou a grade do mes). Enquanto a busca nova nao chega, o
+// que esta em memoria e do recorte ANTERIOR — e, filtrado pelos dias que estao
+// na tela agora, ele simplesmente nao aparece. A tela entao afirmaria "Nada
+// marcado neste dia" sobre dias que podem estar cheios, que e exatamente o
+// defeito que o C2.2 encontrou.
+//
+// Dado de outro recorte nunca vale como dado deste. Por isso: carregando e
+// carregando, mesmo havendo itens em memoria.
+//
+// Devolve 'error' | 'loading' | 'pronto'. A distincao entre "vazio" e "com
+// atividades" NAO mora aqui: ela e por DIA, e cada visao ja a faz — um dia
+// livre no meio de uma semana cheia continua sendo um dia livre.
+// ---------------------------------------------------------------------------
+export function estadoDaAgenda({ loading, error } = {}) {
+  const estado = viewState({ loading, error, hasItems: false })
+  return estado === 'empty' ? 'pronto' : estado
 }

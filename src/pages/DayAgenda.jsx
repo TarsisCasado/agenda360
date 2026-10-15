@@ -127,7 +127,7 @@ export default function DayAgenda() {
     () => (desktop ? { start: date, end: date } : intervaloDoRecorte(visao, date)),
     [desktop, visao, date],
   )
-  const { tasks, error, reload } = useTasks(range)
+  const { tasks, loading, error, reload } = useTasks(range)
   const [modal, setModal] = useState({ open: false, task: null, defaults: null })
 
   const taskParam = searchParams.get('task')
@@ -212,6 +212,7 @@ export default function DayAgenda() {
           date={date}
           visao={visao}
           tasks={tasks}
+          loading={loading}
           error={error}
           reload={reload}
           onDate={setDate}

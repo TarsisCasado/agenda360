@@ -3,7 +3,8 @@ import { STATUS } from './constants'
 import {
   eventoDeTask, eventosDoDia, semHorarioDoDia, disposicaoDoDia,
   faixaDeHorasDaSemana, conflitosDoDiaReal, gradeDoMes, intervaloDoRecorte,
-  situacaoDoEvento, textoDoAlerta, DURACAO_PADRAO_MIN, COR_PADRAO, FORA_DA_AGENDA,
+  situacaoDoEvento, textoDoAlerta, estadoDaAgenda,
+  DURACAO_PADRAO_MIN, COR_PADRAO, FORA_DA_AGENDA,
 } from './agendaReal'
 
 // ---------------------------------------------------------------------------
@@ -248,5 +249,34 @@ describe('agora e a seguir', () => {
     const r = eventoDeTask(RESERVA, cat)
     expect(situacaoDoEvento(r, '14:30')).toMatchObject({ tipo: 'agora' })
     expect(situacaoDoEvento(r, '15:30')).toBe(null)
+  })
+})
+
+// ---------------------------------------------------------------------------
+describe('o estado da busca na Agenda (C2.3)', () => {
+  it('erro vence tudo — inclusive um carregamento em curso', () => {
+    expect(estadoDaAgenda({ loading: true, error: new Error('x') })).toBe('error')
+    expect(estadoDaAgenda({ loading: false, error: new Error('x') })).toBe('error')
+  })
+
+  it('carregando é carregando, e NUNCA "pronto"', () => {
+    expect(estadoDaAgenda({ loading: true, error: null })).toBe('loading')
+  })
+
+  it('sem erro e sem carregamento, quem decide vazio x cheio é cada dia', () => {
+    expect(estadoDaAgenda({ loading: false, error: null })).toBe('pronto')
+  })
+
+  it('a regra que o C2.2 encontrou: dado do recorte ANTERIOR não vale como deste', () => {
+    // Na Hoje, `viewState` devolve 'data' quando ha itens em memoria, para nao
+    // piscar esqueleto sobre uma lista correta. Na Agenda isso seria mentira:
+    // os itens em memoria sao da semana anterior e, filtrados pelos dias que
+    // estao na tela, desaparecem — e a tela diria "Nada marcado neste dia".
+    // Por isso carregar sempre vence, haja o que houver em memoria.
+    expect(estadoDaAgenda({ loading: true, error: null })).toBe('loading')
+  })
+
+  it('sem argumentos não explode', () => {
+    expect(estadoDaAgenda()).toBe('pronto')
   })
 })

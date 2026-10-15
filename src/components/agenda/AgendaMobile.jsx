@@ -13,12 +13,14 @@ import { toISODate, fromISODate, addDays } from '../../lib/date'
 import { cx, capitalizeFirst } from '../../lib/utils'
 import {
   eventosDoDia, semHorarioDoDia, disposicaoDoDia, faixaDeHorasDaSemana,
-  conflitosDoDiaReal, gradeDoMes, situacaoDoEvento,
+  conflitosDoDiaReal, gradeDoMes, situacaoDoEvento, estadoDaAgenda,
 } from '../../lib/agendaReal'
 import {
   semanaDe, recorteDaSemana, andarNoRecorte, detalheDoBloco, faixaDoBloco,
   posicaoNaGrade, PX_HORA_SEMANA, ALTURA_MINIMA_BLOCO,
+  HORA_PADRAO_INICIO, HORA_PADRAO_FIM,
 } from '../../lib/agendaGrade'
+import { Skeleton } from '../ui/Skeleton'
 import AcaoCopiloto from '../copiloto/AcaoCopiloto'
 import { SUPERFICIE } from '../../lib/copilotoContexto'
 import { ErrorState } from '../ui/Common'
@@ -168,6 +170,117 @@ function SemHorario({ itens, onOpen, onChanged, testid = 'dia-tarefas' }) {
 }
 
 // ===========================================================================
+// CARREGANDO (C2.3).
+//
+// A Agenda recarrega por INTERVALO. Enquanto a busca nova nao chega, o que
+// esta em memoria e do recorte ANTERIOR — e filtrado pelos dias de agora ele
+// simplesmente desaparece, fazendo a tela afirmar "Nada marcado neste dia"
+// sobre dias que podem estar cheios. Foi o que o C2.2 encontrou.
+//
+// Cada esqueleto espelha a FORMA do que vem, para a tela nao pular quando os
+// dados chegam — e nenhum deles inventa conteudo. O que NAO vira esqueleto e a
+// moldura: cabecalho, seletor de visao e navegacao continuam de pe, porque a
+// data escolhida e a visao em foco nao sao dado que se busca, e perde-las
+// durante o carregamento seria perder o lugar da pessoa.
+// ===========================================================================
+const HORAS_PADRAO = Array.from(
+  { length: HORA_PADRAO_FIM - HORA_PADRAO_INICIO },
+  (_, i) => HORA_PADRAO_INICIO + i,
+)
+
+function EsqueletoDia() {
+  return (
+    <div className="relative mt-4" data-testid="am-carregando-dia" aria-busy="true" aria-label="Carregando o dia">
+      <span className="am-fio" aria-hidden="true" />
+      {['h-[76px]', 'h-[104px]', 'h-[76px]'].map((altura, i) => (
+        <div key={i} className="relative flex items-stretch gap-2 pb-2.5">
+          <span className="w-[42px] flex-none pt-3"><Skeleton className="ml-auto h-[13px] w-9" /></span>
+          <Skeleton className="absolute left-[45px] top-[17px] h-[7px] w-[7px] rounded-full" />
+          <Skeleton className={cx('ml-3 min-w-0 flex-1 rounded-[14px]', altura)} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function EsqueletoSemana() {
+  return (
+    <div
+      className="am-superficie am-branca -mx-3 mt-3 overflow-hidden px-0 py-0 sm:mx-0"
+      data-testid="am-carregando-semana"
+      aria-busy="true"
+      aria-label="Carregando a semana"
+    >
+      <div className="flex px-1 pb-3 pt-2">
+        <div className="w-[34px] flex-none">
+          <div style={{ height: ALTURA_CABECA }} />
+          {HORAS_PADRAO.map((h) => (
+            <div key={h} style={{ height: PX_HORA_SEMANA }} className="relative">
+              <Skeleton className="absolute right-1 top-0 h-[10px] w-7" />
+            </div>
+          ))}
+        </div>
+        {[0, 1, 2].map((coluna) => (
+          <div key={coluna} className="relative min-w-0 flex-1 border-l border-hairline/60">
+            <div style={{ height: ALTURA_CABECA }} className="flex items-center justify-center">
+              <Skeleton className="h-[12px] w-12" />
+            </div>
+            <div className="relative">
+              {HORAS_PADRAO.map((h) => (
+                <div key={h} style={{ height: PX_HORA_SEMANA }} className="border-t border-hairline/40 first:border-t-0" />
+              ))}
+              {/* `Skeleton` so recebe className; a posicao na grade e em px e
+                  vem de um invólucro, para o primitivo continuar o mesmo que o
+                  resto do produto usa. */}
+              {[[1, 2], [3, 1], [6, 2]].map(([faixa, duracao], i) => (
+                <div
+                  key={i}
+                  className="absolute left-[1px] right-[1px]"
+                  style={{ top: faixa * PX_HORA_SEMANA, height: duracao * PX_HORA_SEMANA - 4 }}
+                >
+                  <Skeleton className="h-full w-full rounded-[8px]" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function EsqueletoMes() {
+  return (
+    <>
+      <div className="am-superficie am-branca mt-3 px-2 py-2" data-testid="am-carregando-mes" aria-busy="true" aria-label="Carregando o mês">
+        <div className="grid grid-cols-7">
+          {CABECA_MES.map((d) => (
+            <span key={d} className="pb-1 text-center text-[10px] font-semibold uppercase tracking-wider text-faint">{d}</span>
+          ))}
+          {Array.from({ length: 42 }).map((_, i) => (
+            <span key={i} className="flex flex-col items-center gap-[3px] py-1.5">
+              <Skeleton className="h-[32px] w-[32px] rounded-full" />
+              <span className="h-[5px]" />
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="am-superficie am-branca mt-4 px-4 py-4">
+        <Skeleton className="h-[16px] w-40" />
+        <div className="mt-4 space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-[13px] w-10 flex-none" />
+              <Skeleton className="h-[15px] flex-1" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ===========================================================================
 // DIA — timeline. Os blocos nao sao cartoes soltos: eles pendem do mesmo fio,
 // e e o fio que faz a sequencia virar um dia.
 // ===========================================================================
@@ -207,7 +320,7 @@ function LinhaDaTimeline({ e, agora, onOpen }) {
   )
 }
 
-function VisaoDia({ tasks, dia, hojeISO, agora, cat, onDia, onMes, onOpen, onChanged, onNew }) {
+function VisaoDia({ tasks, dia, hojeISO, agora, cat, carregando, onDia, onMes, onOpen, onChanged, onNew }) {
   const eventos = useMemo(() => eventosDoDia(tasks, dia, cat), [tasks, dia, cat])
   const soltas = useMemo(() => semHorarioDoDia(tasks, dia), [tasks, dia])
   const conflito = useMemo(() => conflitosDoDiaReal(tasks, dia, cat).length > 0, [tasks, dia, cat])
@@ -247,18 +360,23 @@ function VisaoDia({ tasks, dia, hojeISO, agora, cat, onDia, onMes, onOpen, onCha
         </div>
       )}
 
-      {conflito && (
+      {/* Durante o carregamento so a MOLDURA fica: as setas, o rotulo do dia e
+          o botao "Hoje" continuam respondendo, porque navegar nao depende da
+          busca. O conteudo — e so ele — vira esqueleto. */}
+      {carregando && <EsqueletoDia />}
+
+      {!carregando && conflito && (
         <p className="mt-3 flex items-center gap-1.5 text-[13.5px] text-warning">
           <AlertTriangle size={14} className="flex-none" />
           Dois compromissos se sobrepõem neste dia.
         </p>
       )}
 
-      {eventos.length === 0 && soltas.length === 0 && (
+      {!carregando && eventos.length === 0 && soltas.length === 0 && (
         <p className="mt-6 text-[15px] text-muted" data-testid="am-dia-vazio">Nada marcado neste dia.</p>
       )}
 
-      {eventos.length > 0 && (
+      {!carregando && eventos.length > 0 && (
         <div className="relative mt-4" data-testid="dia-timeline">
           <span className="am-fio" aria-hidden="true" />
           {eventos.map((e) => (
@@ -267,10 +385,11 @@ function VisaoDia({ tasks, dia, hojeISO, agora, cat, onDia, onMes, onOpen, onCha
         </div>
       )}
 
-      {soltas.length > 0 && <SemHorario itens={soltas} onOpen={onOpen} onChanged={onChanged} />}
+      {!carregando && soltas.length > 0 && <SemHorario itens={soltas} onOpen={onOpen} onChanged={onChanged} />}
 
       {/* A porta de criacao e o [+] da barra de baixo. Aqui fica so uma acao
           contextual discreta — a mesma intencao, com o dia ja escolhido. */}
+      {!carregando && (
       <button
         type="button"
         onClick={() => onNew(dia)}
@@ -279,6 +398,7 @@ function VisaoDia({ tasks, dia, hojeISO, agora, cat, onDia, onMes, onOpen, onCha
       >
         <Plus size={16} /> Novo compromisso neste dia
       </button>
+      )}
     </>
   )
 }
@@ -415,7 +535,7 @@ function ColunaDaSemana({ tasks, data, cat, selecionado, hoje, agora, inicio, ho
   )
 }
 
-function VisaoSemana({ tasks, dias, dia, agora, cat, hojeISO, onDia, onSemana, onOpen, onChanged, onVerDia }) {
+function VisaoSemana({ tasks, dias, dia, agora, cat, hojeISO, carregando, onDia, onSemana, onOpen, onChanged, onVerDia }) {
   const recorte = recorteDaSemana(dias, dia)
   // A faixa de horas olha a SEMANA inteira, nao so o recorte: a altura da
   // grade nao pode pular a cada deslize.
@@ -439,7 +559,12 @@ function VisaoSemana({ tasks, dias, dia, agora, cat, hojeISO, onDia, onSemana, o
           {dias.map((d) => {
             const sel = d === dia
             const naGrade = recorte.includes(d)
-            const cores = [...new Set(eventosDoDia(tasks, d, cat).map((e) => e.cor))].slice(0, 1)
+            // O ponto da faixa sai do dado. Durante o carregamento ele seria
+            // indistinguivel de "dia sem nada" — entao vira esqueleto, nao
+            // ausencia.
+            const cores = carregando
+              ? []
+              : [...new Set(eventosDoDia(tasks, d, cat).map((e) => e.cor))].slice(0, 1)
             return (
               <button
                 key={d}
@@ -459,10 +584,14 @@ function VisaoSemana({ tasks, dias, dia, agora, cat, hojeISO, onDia, onSemana, o
                 <span className={cx('am-numero am-num', sel && 'am-numero-sel', d === hojeISO && !sel && 'am-numero-hoje')}>
                   {numeroDoDia(d)}
                 </span>
-                <span
-                  className={cx('h-[5px] w-[5px] rounded-full', cores.length ? 'am-ponto-chapado' : 'bg-transparent')}
-                  style={cores.length ? { '--am-cor': cores[0] } : undefined}
-                />
+                {carregando ? (
+                  <Skeleton className="h-[5px] w-[5px] rounded-full" />
+                ) : (
+                  <span
+                    className={cx('h-[5px] w-[5px] rounded-full', cores.length ? 'am-ponto-chapado' : 'bg-transparent')}
+                    style={cores.length ? { '--am-cor': cores[0] } : undefined}
+                  />
+                )}
               </button>
             )
           })}
@@ -472,6 +601,10 @@ function VisaoSemana({ tasks, dias, dia, agora, cat, hojeISO, onDia, onSemana, o
         </button>
       </div>
 
+      {carregando && <EsqueletoSemana />}
+
+      {!carregando && (
+      <>
       {/* A GRADE DE TRES DIAS — o detalhe operacional.
 
           ELA SANGRA ATE A BORDA (`-mx-3`, que anula o `px-3` do <main>). Nao e
@@ -539,6 +672,8 @@ function VisaoSemana({ tasks, dias, dia, agora, cat, hojeISO, onDia, onSemana, o
       {soltas.length > 0 && (
         <SemHorario itens={soltas} onOpen={onOpen} onChanged={onChanged} testid="am-semana-sem-horario" />
       )}
+      </>
+      )}
     </>
   )
 }
@@ -555,7 +690,7 @@ function VisaoSemana({ tasks, dias, dia, agora, cat, hojeISO, onDia, onSemana, o
 // ===========================================================================
 const CABECA_MES = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
 
-function VisaoMes({ tasks, mesRef, cat, dia, hojeISO, agora, onMes, onDia, onOpen, onChanged }) {
+function VisaoMes({ tasks, mesRef, cat, dia, hojeISO, agora, carregando, onMes, onDia, onOpen, onChanged }) {
   const celulas = useMemo(() => gradeDoMes(tasks, mesRef.ano, mesRef.mes, cat), [tasks, mesRef, cat])
   const eventos = useMemo(() => eventosDoDia(tasks, dia, cat), [tasks, dia, cat])
   const soltas = useMemo(() => semHorarioDoDia(tasks, dia), [tasks, dia])
@@ -579,6 +714,10 @@ function VisaoMes({ tasks, mesRef, cat, dia, hojeISO, agora, onMes, onDia, onOpe
         </button>
       </div>
 
+      {carregando && <EsqueletoMes />}
+
+      {!carregando && (
+      <>
       <div className="am-superficie am-branca mt-3 px-2 py-2" data-testid="am-mes">
         <div className="grid grid-cols-7">
           {CABECA_MES.map((d) => (
@@ -661,6 +800,8 @@ function VisaoMes({ tasks, mesRef, cat, dia, hojeISO, agora, onMes, onDia, onOpe
           )}
         </div>
       </section>
+      </>
+      )}
     </>
   )
 }
@@ -670,10 +811,15 @@ function VisaoMes({ tasks, mesRef, cat, dia, hojeISO, agora, onMes, onDia, onOpe
 // proprio: a tela tem de fazer UMA consulta, nao duas. Qual intervalo pedir e
 // decisao de quem busca — `lib/agendaReal.js:intervaloDoRecorte` tem a regra.
 export default function AgendaMobile({
-  date, visao, tasks = [], error, reload, onDate, onVisao, onOpenTask, onNew,
+  date, visao, tasks = [], loading, error, reload, onDate, onVisao, onOpenTask, onNew,
 }) {
   const { categoryById } = useData()
   const cat = useMemo(() => ({ categoriaPorId: categoryById }), [categoryById])
+
+  // A regra dos estados — e o porque de dado de outro recorte nunca valer como
+  // dado deste — mora em `lib/agendaReal.js`, onde pode ser testada.
+  const estado = estadoDaAgenda({ loading, error })
+  const carregando = estado === 'loading'
 
   const agoraRef = useMemo(() => new Date(), [])
   const agora = horaAgora(agoraRef)
@@ -746,7 +892,7 @@ export default function AgendaMobile({
           ))}
         </div>
 
-        {error ? (
+        {estado === 'error' ? (
           <div className="mt-6"><ErrorState onRetry={reload} /></div>
         ) : visao === 'dia' ? (
           <VisaoDia
@@ -755,6 +901,7 @@ export default function AgendaMobile({
             hojeISO={hojeISO}
             agora={agora}
             cat={cat}
+            carregando={carregando}
             onDia={onDate}
             onMes={() => onVisao('mes')}
             onOpen={onOpenTask}
@@ -769,6 +916,7 @@ export default function AgendaMobile({
             agora={agora}
             cat={cat}
             hojeISO={hojeISO}
+            carregando={carregando}
             onDia={onDate}
             onSemana={(delta) => onDate(toISODate(addDays(fromISODate(date), delta * 7)))}
             onOpen={onOpenTask}
@@ -783,6 +931,7 @@ export default function AgendaMobile({
             dia={date}
             hojeISO={hojeISO}
             agora={agora}
+            carregando={carregando}
             onMes={setMesRef}
             onDia={onDate}
             onOpen={onOpenTask}
