@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { opcoesAntecedencia } from '../AlertaRows'
+import { opcoesAntecedencia } from '../../../lib/alertaOpcoes'
 
 // ---------------------------------------------------------------------------
 // CP5.9 — a antecedencia deixou de ser um campo numerico com setinhas e virou
