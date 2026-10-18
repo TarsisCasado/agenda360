@@ -1,6 +1,10 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
-import { localStore } from './localStore'
+import { localStore, ehErroDeCota, CotaExcedidaError } from './localStore'
 import { uid } from '../lib/utils'
+import {
+  MAX_BYTES, MIMES_ACEITOS, ACCEPT,
+  validarArquivo, kindDe, extensaoDe,
+} from '../lib/anexoPolitica'
 
 // ---------------------------------------------------------------------------
 // captureAssetService — PORT de armazenamento de ASSETS do dominio Capture.
@@ -24,48 +28,64 @@ export const CAPTURE_BUCKET = 'captures'
 // Tipos de asset reconhecidos pelo dominio (generico p/ midias futuras).
 export const CAPTURE_ASSET_KINDS = ['image', 'pdf', 'audio', 'file']
 
-// Teto de tamanho por asset. Vale para os dois modos; no modo demo (data-URL em
-// localStorage) e especialmente importante para nao estourar a cota do browser.
-export const MAX_ASSET_BYTES = 10 * 1024 * 1024 // 10 MB
+// Teto de tamanho por asset, agora definido em UM lugar so (anexoPolitica).
+// O nome antigo continua exportado porque e contrato publico deste modulo.
+export const MAX_ASSET_BYTES = MAX_BYTES
+
+// Reexportados para quem monta o seletor de arquivo (UX-M2.4) nao precisar
+// conhecer a politica por dentro.
+export { MIMES_ACEITOS, ACCEPT }
 
 // Tabela local (modo demo) que guarda o binario como data-URL, indexado por path.
 const DEMO_BLOB_TABLE = 'capture_asset_blobs'
 
-const EXT_BY_MIME = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-  'application/pdf': 'pdf',
-  'audio/mpeg': 'mp3',
-  'audio/wav': 'wav',
-  'audio/mp4': 'm4a',
-  'audio/webm': 'weba',
-}
-
-// Classifica o mime no `kind` do dominio. Puro.
+// Classifica o mime no `kind` do dominio. Puro. Delegado a allowlist: antes
+// isto era um prefixo (`image/*` -> image), o que classificava alegremente um
+// `image/svg+xml` como imagem.
 export function kindForMime(mime = '') {
-  if (mime.startsWith('image/')) return 'image'
-  if (mime === 'application/pdf') return 'pdf'
-  if (mime.startsWith('audio/')) return 'audio'
-  return 'file'
+  return kindDe(mime)
 }
 
 function extForMime(mime = '') {
-  if (EXT_BY_MIME[mime]) return EXT_BY_MIME[mime]
-  const sub = String(mime).split('/')[1]
-  const clean = sub ? sub.replace(/[^a-z0-9]/gi, '') : ''
-  return clean || 'bin'
+  return extensaoDe(mime)
 }
 
-// Valida o objeto de arquivo (Blob/File). Nao depende de FileReader.
-function assertValidFile(file) {
+// ---------------------------------------------------------------------------
+// A PORTA DE ENTRADA.
+//
+// Antes daqui so se exigia "tem mime" e "cabe em 10 MB" — qualquer tipo
+// passava. Agora a decisao inteira mora em `validarArquivo`, que e pura e
+// testada a parte; este servico so a aplica e traduz em excecao.
+//
+// O MODO IMPORTA: no demo o binario vira data-URL dentro do localStorage, cuja
+// cota e do site inteiro. Por isso o teto de la e menor, e a recusa acontece
+// ANTES de ler o arquivo — em vez de descobrir no meio do envio.
+// ---------------------------------------------------------------------------
+function assertValidFile(file, { bytes = null } = {}) {
   if (!file || typeof file.arrayBuffer !== 'function') {
     throw new Error('Arquivo invalido (esperado Blob/File).')
   }
-  if (!file.type) throw new Error('Tipo (mime) do arquivo ausente.')
-  if (typeof file.size === 'number' && file.size > MAX_ASSET_BYTES) {
-    throw new Error(`Arquivo excede o limite de ${MAX_ASSET_BYTES} bytes.`)
+  const veredito = validarArquivo(
+    { type: file.type, size: file.size },
+    { demo: !isSupabaseConfigured, bytes },
+  )
+  if (!veredito.ok) {
+    const err = new Error(veredito.mensagem)
+    err.motivo = veredito.motivo
+    throw err
+  }
+  return veredito
+}
+
+// Os primeiros bytes, para a conferencia de assinatura. Devolve null quando o
+// objeto nao sabe fatiar (fixtures de teste, streams): sem bytes a politica
+// simplesmente nao aplica essa camada, em vez de recusar por falta de prova.
+async function primeirosBytes(file, n = 16) {
+  if (!file || typeof file.slice !== 'function') return null
+  try {
+    return new Uint8Array(await file.slice(0, n).arrayBuffer())
+  } catch {
+    return null
   }
 }
 
@@ -90,7 +110,13 @@ export const captureAssetService = {
   async upload(workspaceId, { inboxItemId, file } = {}) {
     if (!workspaceId) throw new Error('workspaceId obrigatorio.')
     if (!inboxItemId) throw new Error('inboxItemId obrigatorio.')
+
+    // DUAS PASSADAS, de proposito. A primeira e so sobre tipo e tamanho e nao
+    // le byte nenhum: um arquivo de 40 MB tem de ser recusado sem ser aberto.
+    // A segunda confere a assinatura — e so acontece depois que o arquivo ja
+    // provou ser de um tipo aceito e de tamanho aceitavel.
     assertValidFile(file)
+    assertValidFile(file, { bytes: await primeirosBytes(file) })
 
     const kind = kindForMime(file.type)
     const path = `${workspaceId}/${inboxItemId}/${uid()}.${extForMime(file.type)}`
@@ -105,10 +131,23 @@ export const captureAssetService = {
     if (!isSupabaseConfigured) {
       // Demo: guarda como data-URL no localStore (paridade de leitura via URL).
       const dataUrl = `data:${file.type};base64,${arrayBufferToBase64(await file.arrayBuffer())}`
-      localStore.setTable(DEMO_BLOB_TABLE, [
-        ...localStore.table(DEMO_BLOB_TABLE),
-        { path, dataUrl, mime: file.type, bytes: descriptor.bytes },
-      ])
+      try {
+        localStore.setTable(DEMO_BLOB_TABLE, [
+          ...localStore.table(DEMO_BLOB_TABLE),
+          { path, dataUrl, mime: file.type, bytes: descriptor.bytes },
+        ])
+      } catch (err) {
+        // A cota do navegador estourou apesar do teto do modo demo — o balde e
+        // compartilhado com notas, tarefas e links, entao ele pode ja estar
+        // cheio por outro motivo. Vira uma frase que diz o que fazer, nunca um
+        // `QuotaExceededError` cru na cara da pessoa.
+        if (err instanceof CotaExcedidaError || ehErroDeCota(err)) {
+          const cota = err instanceof CotaExcedidaError ? err : new CotaExcedidaError(err)
+          cota.motivo = 'cota_excedida'
+          throw cota
+        }
+        throw err
+      }
       return descriptor
     }
 
