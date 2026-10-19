@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { localStore } from '../services/localStore'
 import { uid } from '../lib/utils'
+import { erroDeBanco } from '../lib/indisponibilidade'
 
 // ---------------------------------------------------------------------------
 // Registro de acoes da IA em `ai_actions`.
@@ -37,8 +38,12 @@ export const aiActionsService = {
       localStore.setTable('ai_actions', rows)
       return saved.id
     }
-    const { data, error } = await supabase.from('ai_actions').insert(row).select('id').single()
-    if (error) throw error
+    const { data, error, status } = await supabase
+      .from('ai_actions')
+      .insert(row)
+      .select('id')
+      .single()
+    if (error) throw erroDeBanco(error, status)
     return data.id
   },
 
@@ -59,7 +64,12 @@ export const aiActionsService = {
       }
       return
     }
-    const { error } = await supabase.from('ai_actions').update(patch).eq('id', actionId)
-    if (error) throw error
+    // `status` ja e o nome do parametro (proposed/applied/...): o HTTP vem com
+    // outro nome para nao se confundirem.
+    const { error, status: httpStatus } = await supabase
+      .from('ai_actions')
+      .update(patch)
+      .eq('id', actionId)
+    if (error) throw erroDeBanco(error, httpStatus)
   },
 }

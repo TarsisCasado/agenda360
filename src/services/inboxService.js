@@ -87,6 +87,34 @@ export const inboxService = {
     return data
   },
 
+  // ---------------------------------------------------------------------------
+  // UMA nota, SEMPRE escopada por workspace (UX-M2.3).
+  //
+  // Existe porque anexar exige provar que o item de destino e real E e deste
+  // workspace. Fazer isso com `list()` funcionaria e traria a caixa inteira
+  // pela rede para conferir um id; e, pior, convidaria quem chama a filtrar
+  // por id DEPOIS — o que esquece o workspace na primeira distracao.
+  //
+  // Devolve `null` para id inexistente E para id de outro workspace: quem nao
+  // pode ver nao descobre que existe.
+  // ---------------------------------------------------------------------------
+  async get(workspaceId, id) {
+    if (!workspaceId || !id) return null
+    if (!isSupabaseConfigured) {
+      return localStore
+        .table(TABLE)
+        .find((n) => n.id === id && n.workspace_id === workspaceId) || null
+    }
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('id', id)
+      .maybeSingle()
+    if (error) throw error
+    return data ?? null
+  },
+
   // `id` opcional: permite ao chamador PRE-GERAR o id da captura (ex.: o
   // captureService precisa do id antes do upload para compor o path do asset).
   // Aditivo e retrocompativel — sem id, o comportamento e o de sempre.
@@ -199,6 +227,16 @@ export const inboxService = {
     await recordEvent(note.workspace_id, note.id, 'restored', actorId)
     return saved
   },
+  // C3 — "manter como nota": a pessoa OLHOU o que estava por organizar e
+  // decidiu que aquilo e so uma nota. Sai da caixa sem virar ideia, sem virar
+  // tarefa e sem ser arquivada. O status 'processed' ja existia no modelo
+  // desde a A2.2, preparado e sem transicao de UI; esta e a transicao.
+  async markProcessed(note, actorId = null) {
+    const saved = await this.update(note, { status: 'processed' })
+    await recordEvent(note.workspace_id, note.id, 'organized', actorId)
+    return saved
+  },
+
   async setSeen(note, value, actorId = null) {
     const saved = await this.update(note, { seen: Boolean(value) })
     await recordEvent(note.workspace_id, note.id, value ? 'seen' : 'unseen', actorId)

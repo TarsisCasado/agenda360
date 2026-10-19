@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Bell, BellRing, BellOff, ShieldAlert, Smartphone } from 'lucide-react'
+import { Bell, BellRing, BellOff, ShieldAlert, Smartphone, Settings2 } from 'lucide-react'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
-import { pushService } from '../../services/pushService'
+import { pushService, isPushConfigured } from '../../services/pushService'
 import { describeDeviceNotifications } from '../../lib/device'
 import { cx } from '../../lib/utils'
 
@@ -44,6 +44,7 @@ export default function DeviceNotifications({ variant = 'card', onOpenInstall })
   }, [status])
 
   const enable = async () => {
+    if (!isPushConfigured()) return // botao nem e renderizado; guarda extra
     const result = await pushService.subscribe(user?.id)
     if (result.ok) {
       setStatus('granted')
@@ -64,6 +65,8 @@ export default function DeviceNotifications({ variant = 'card', onOpenInstall })
   }
 
   const compact = variant === 'compact'
+  // Avaliado no render (nao e estado): depende so do build/ambiente.
+  const configured = isPushConfigured()
 
   // ----- estados ------------------------------------------------------------
   if (status === 'granted') {
@@ -88,7 +91,7 @@ export default function DeviceNotifications({ variant = 'card', onOpenInstall })
         title="Adicione a Tela de Inicio"
         text="Para ativar notificacoes no iPhone, adicione o Agenda 360 a Tela de Inicio e abra pelo icone.">
         {onOpenInstall && (
-          <button onClick={onOpenInstall} className="btn-secondary press w-full text-sm sm:w-auto">
+          <button onClick={onOpenInstall} className="btn-secondary press w-full sm:w-auto">
             <Smartphone size={14} /> Como adicionar
           </button>
         )}
@@ -104,12 +107,23 @@ export default function DeviceNotifications({ variant = 'card', onOpenInstall })
     )
   }
 
+  // Ambiente sem Web Push configurado (sem Supabase ou sem chave VAPID no
+  // build): NAO oferece o botao. Tentar aqui so produziria o mesmo erro
+  // repetidamente — estado informativo e melhor que um toque inutil.
+  if (!configured) {
+    return (
+      <Shell compact={compact} tone="muted" icon={Settings2}
+        title="Push indisponivel neste ambiente"
+        text="Este ambiente ainda nao tem as notificacoes push configuradas. Os lembretes continuam aparecendo dentro do app." />
+    )
+  }
+
   // 'prompt'
   return (
     <Shell compact={compact} tone="info" icon={Bell}
       title="Ativar notificacoes deste dispositivo"
       text="Receba lembretes das suas atividades diretamente neste aparelho.">
-      <button onClick={enable} className="btn-primary press w-full text-sm sm:w-auto">
+      <button onClick={enable} className="btn-primary press w-full sm:w-auto">
         <Bell size={14} /> Ativar notificacoes
       </button>
     </Shell>
@@ -117,10 +131,10 @@ export default function DeviceNotifications({ variant = 'card', onOpenInstall })
 }
 
 const TONES = {
-  ok:    'text-emerald-600 dark:text-emerald-400',
-  warn:  'text-amber-600 dark:text-amber-400',
-  info:  'text-brand-600 dark:text-brand-300',
-  muted: 'text-slate-400',
+  ok: 'text-positive',
+  warn: 'text-warning',
+  info: 'text-accent',
+  muted: 'text-muted',
 }
 
 function Shell({ compact, tone, icon: Icon, title, text, children }) {
@@ -130,8 +144,8 @@ function Shell({ compact, tone, icon: Icon, title, text, children }) {
         <Icon size={compact ? 16 : 18} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-        {!compact && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{text}</p>}
+        <p className="text-[14px] font-semibold text-primary">{title}</p>
+        {!compact && <p className="text-caption mt-0.5 leading-relaxed">{text}</p>}
         {children && <div className="mt-2">{children}</div>}
       </div>
     </div>
