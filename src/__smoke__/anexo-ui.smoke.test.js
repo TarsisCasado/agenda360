@@ -171,11 +171,18 @@ describe('nenhuma escrita real', () => {
     // NADA para o Supabase — nem storage, nem banco, nem auth.
     expect(forasteiras.filter((u) => /supabase/i.test(u))).toEqual([])
 
-    // E, para o teste nao virar uma rede frouxa que aprova qualquer coisa: o
-    // UNICO destino externo que o app alcanca e a folha de fontes. Se um dia
-    // aparecer outro, este teste cai e alguem precisa explicar o porque.
+    // E, para o teste nao virar uma rede frouxa que aprova qualquer coisa:
+    // NENHUM outro destino externo alem da folha de fontes. Se um dia aparecer
+    // um, este teste cai e alguem precisa explicar o porque.
+    //
+    // Repare que e SUBCONJUNTO, nao igualdade. A primeira versao exigia
+    // `toEqual(['fonts.googleapis.com'])` e caiu na CI, onde a fonte nao
+    // chega a ser pedida: aquilo afirmava a PRESENCA de uma requisicao
+    // externa, isto e, dependia da rede da maquina. O mesmo erro do hotfix
+    // UX-M3.1, em outra roupa — o que se quer provar e uma AUSENCIA.
+    const PERMITIDOS = ['fonts.googleapis.com', 'fonts.gstatic.com']
     const hosts = [...new Set(forasteiras.map((u) => new URL(u).host))]
-    expect(hosts).toEqual(['fonts.googleapis.com'])
+    expect(hosts.filter((h) => !PERMITIDOS.includes(h))).toEqual([])
   }, 60000)
 })
 
