@@ -184,3 +184,53 @@ describe('inboxService — timeline / historico (A2.2)', () => {
     expect(n.id).toBeTruthy()
   })
 })
+
+// ===========================================================================
+// UX-M2.3 — `get` escopado por workspace.
+//
+// Existe para que anexar possa PROVAR que o item de destino e real e e deste
+// espaco. O teste que mais importa aqui e o do vazamento: um id de outro
+// workspace tem de responder a mesma coisa que um id inventado.
+// ===========================================================================
+describe('inboxService — get (uma nota, sempre do workspace certo)', () => {
+  it('devolve a nota do próprio workspace', async () => {
+    const nota = await inboxService.create(WS, USER, { title: 'Minha', content: 'conteúdo' })
+    const lida = await inboxService.get(WS, nota.id)
+    expect(lida).not.toBeNull()
+    expect(lida.id).toBe(nota.id)
+    expect(lida.title).toBe('Minha')
+    expect(lida.content).toBe('conteúdo')
+  })
+
+  it('devolve null para id inexistente', async () => {
+    await inboxService.create(WS, USER, { title: 'Existe' })
+    expect(await inboxService.get(WS, 'id-que-nao-existe')).toBeNull()
+  })
+
+  it('NÃO atravessa workspace — e responde igual ao inexistente', async () => {
+    const alheia = await inboxService.create(WS2, USER, { title: 'Segredo do outro espaço' })
+    const porId = await inboxService.get(WS, alheia.id)
+    const inventado = await inboxService.get(WS, 'id-que-nao-existe')
+    // Mesma resposta: quem nao pode ver nao descobre que existe.
+    expect(porId).toBeNull()
+    expect(porId).toEqual(inventado)
+    // E do lado de la continua acessivel.
+    expect((await inboxService.get(WS2, alheia.id)).title).toBe('Segredo do outro espaço')
+  })
+
+  it('null para argumentos faltando, sem consultar nada', async () => {
+    expect(await inboxService.get(null, 'x')).toBeNull()
+    expect(await inboxService.get(WS, null)).toBeNull()
+    expect(await inboxService.get()).toBeNull()
+  })
+
+  it('não altera a nota: ler é só ler', async () => {
+    const nota = await inboxService.create(WS, USER, { title: 'Intacta', content: 'texto' })
+    await inboxService.get(WS, nota.id)
+    await inboxService.get(WS, nota.id)
+    const depois = await inboxService.get(WS, nota.id)
+    expect(depois.updated_at).toBe(nota.updated_at)
+    expect(depois.seen).toBe(nota.seen)
+    expect(depois.status).toBe(nota.status)
+  })
+})

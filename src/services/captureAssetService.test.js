@@ -135,12 +135,53 @@ describe('captureAssetService — allowlist no upload', () => {
     expect(d2.storage_path.endsWith('.csv')).toBe(true)
   })
 
-  it('reconhece HEIC do iPhone e lhe dá a extensão certa', async () => {
+  // TRANSIÇÃO DE CONTRATO — UX-M2.2. Até aqui o HEIC original subia, e este
+  // teste guardava isso:
+  //
+  //   const d = await captureAssetService.upload(WS, { inboxItemId: ITEM, file: heic })
+  //   expect(d.kind).toBe('image')
+  //   expect(d.storage_path.endsWith('.heic')).toBe(true)
+  //
+  // O bucket `captures` foi configurado com 23 tipos, e HEIC/HEIF ficaram de
+  // fora de propósito: o original carrega EXIF com GPS que não conseguimos
+  // remover sem decodificar. O servidor recusaria de qualquer forma — o que
+  // muda é que agora a recusa acontece ANTES da rede, com uma frase.
+  it('o HEIC do iPhone continua sendo reconhecido — mas NÃO sobe sem converter', async () => {
     const heic = comoArquivo('image/heic',
       [0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63])
-    const d = await captureAssetService.upload(WS, { inboxItemId: ITEM, file: heic })
-    expect(d.kind).toBe('image')
-    expect(d.storage_path.endsWith('.heic')).toBe(true)
+    // A política ainda sabe o que ele é: quem decide é o destino, não o tipo.
+    expect(kindForMime('image/heic')).toBe('image')
+    await expect(
+      captureAssetService.upload(WS, { inboxItemId: ITEM, file: heic }),
+    ).rejects.toThrow(/precisa ser convertida/i)
+    expect(localStore.table('capture_asset_blobs')).toHaveLength(0)
+  })
+
+  it('convertido em JPEG, o mesmo conteúdo sobe sem problema', async () => {
+    const jpeg = comoArquivo('image/jpeg', [0xff, 0xd8, 0xff, 0xe0])
+    const d = await captureAssetService.upload(WS, { inboxItemId: ITEM, file: jpeg })
+    expect(d.mime).toBe('image/jpeg')
+    expect(d.storage_path.endsWith('.jpg')).toBe(true)
+  })
+
+  it('o mime vai ao Storage NORMALIZADO, sem charset colado', async () => {
+    // O storage-js manda o `type` do Blob, nao a opcao `contentType` — entao o
+    // charset viajaria junto e o `allowed_mime_types` poderia recusar.
+    const comCharset = comoArquivo('text/plain;charset=UTF-8', [97, 98, 99])
+    const d = await captureAssetService.upload(WS, { inboxItemId: ITEM, file: comCharset })
+    expect(d.mime).toBe('text/plain')
+    expect(d.storage_path.endsWith('.txt')).toBe(true)
+    const guardado = localStore.table('capture_asset_blobs').at(-1)
+    expect(guardado.mime).toBe('text/plain')
+    expect(guardado.dataUrl.startsWith('data:text/plain;base64,')).toBe(true)
+  })
+
+  it('os formatos de áudio do iPhone são aceitos', async () => {
+    for (const [mime, ext] of [['audio/x-m4a', '.m4a'], ['audio/mp3', '.mp3'], ['audio/wave', '.wav']]) {
+      const d = await captureAssetService.upload(WS, { inboxItemId: ITEM, file: comoArquivo(mime, [1, 2, 3]) })
+      expect(d.kind, mime).toBe('audio')
+      expect(d.storage_path.endsWith(ext), mime).toBe(true)
+    }
   })
 
   it('recusa HTML renomeado para .png: os bytes contradizem o mime', async () => {

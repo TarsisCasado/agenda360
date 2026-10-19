@@ -2,8 +2,8 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { localStore, ehErroDeCota, CotaExcedidaError } from './localStore'
 import { uid } from '../lib/utils'
 import {
-  MAX_BYTES, MIMES_ACEITOS, ACCEPT,
-  validarArquivo, kindDe, extensaoDe,
+  MAX_BYTES, MIMES_ACEITOS, MIMES_NO_BUCKET, ACCEPT,
+  validarArquivo, kindDe, extensaoDe, normalizarMime, podeSubir,
 } from '../lib/anexoPolitica'
 
 // ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ export const MAX_ASSET_BYTES = MAX_BYTES
 
 // Reexportados para quem monta o seletor de arquivo (UX-M2.4) nao precisar
 // conhecer a politica por dentro.
-export { MIMES_ACEITOS, ACCEPT }
+export { MIMES_ACEITOS, MIMES_NO_BUCKET, ACCEPT }
 
 // Tabela local (modo demo) que guarda o binario como data-URL, indexado por path.
 const DEMO_BLOB_TABLE = 'capture_asset_blobs'
@@ -118,23 +118,58 @@ export const captureAssetService = {
     assertValidFile(file)
     assertValidFile(file, { bytes: await primeirosBytes(file) })
 
-    const kind = kindForMime(file.type)
-    const path = `${workspaceId}/${inboxItemId}/${uid()}.${extForMime(file.type)}`
+    const mime = normalizarMime(file.type)
+
+    // ----------------------------------------------------------------------
+    // O QUE O BUCKET NAO ACEITA NAO SAI DAQUI.
+    //
+    // `captures` foi configurado no UX-M2.2 com 23 tipos, e HEIC/HEIF nao
+    // estao entre eles: a foto do iPhone so e guardada depois de convertida em
+    // JPEG, porque o original carrega EXIF com GPS. O servidor ja recusaria —
+    // recusar aqui troca um 400 cru por uma frase que diz o que fazer.
+    // ----------------------------------------------------------------------
+    if (!podeSubir(mime)) {
+      const err = new Error(
+        'Esta foto está no formato original do iPhone (HEIC) e precisa ser convertida antes de ser anexada.',
+      )
+      err.motivo = 'formato_nao_permitido_no_bucket'
+      throw err
+    }
+
+    // ----------------------------------------------------------------------
+    // O MIME QUE CHEGA AO STORAGE E O DO BLOB, NAO O DA OPCAO.
+    //
+    // Verificado no `@supabase/storage-js` 2.110.1: quando o corpo e um Blob,
+    // ele vai dentro de um FormData e a opcao `contentType` NAO e aplicada —
+    // o cabecalho da parte vem do `type` do proprio Blob. Entao um arquivo com
+    // `text/plain;charset=utf-8` chegaria com o charset colado, e o
+    // `allowed_mime_types` do bucket poderia recusa-lo.
+    //
+    // Reembrulhar com o mime ja normalizado faz o que o servidor ve ser
+    // exatamente a string da allowlist, sem depender de o Storage ser leniente
+    // ao comparar.
+    // ----------------------------------------------------------------------
+    const corpo = mime !== file.type && typeof Blob !== 'undefined' && file instanceof Blob
+      ? new Blob([file], { type: mime })
+      : file
+
+    const kind = kindForMime(mime)
+    const path = `${workspaceId}/${inboxItemId}/${uid()}.${extForMime(mime)}`
     const descriptor = {
       kind,
       storage_bucket: CAPTURE_BUCKET,
       storage_path: path,
-      mime: file.type,
+      mime,
       bytes: typeof file.size === 'number' ? file.size : null,
     }
 
     if (!isSupabaseConfigured) {
       // Demo: guarda como data-URL no localStore (paridade de leitura via URL).
-      const dataUrl = `data:${file.type};base64,${arrayBufferToBase64(await file.arrayBuffer())}`
+      const dataUrl = `data:${mime};base64,${arrayBufferToBase64(await corpo.arrayBuffer())}`
       try {
         localStore.setTable(DEMO_BLOB_TABLE, [
           ...localStore.table(DEMO_BLOB_TABLE),
-          { path, dataUrl, mime: file.type, bytes: descriptor.bytes },
+          { path, dataUrl, mime, bytes: descriptor.bytes },
         ])
       } catch (err) {
         // A cota do navegador estourou apesar do teto do modo demo — o balde e
@@ -153,7 +188,10 @@ export const captureAssetService = {
 
     const { error } = await supabase.storage
       .from(CAPTURE_BUCKET)
-      .upload(path, file, { contentType: file.type, upsert: false })
+      // `contentType` continua sendo passado por clareza e porque VALE para
+      // corpos que nao sao Blob (ArrayBuffer, stream). Para Blob, quem manda e
+      // o `type` de `corpo`, ja normalizado acima.
+      .upload(path, corpo, { contentType: mime, upsert: false })
     if (error) throw error
     return descriptor
   },

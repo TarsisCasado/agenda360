@@ -112,8 +112,9 @@ beforeAll(async () => {
     // interna dele que nao existe no navegador.
     if (url.startsWith('/entrada')) {
       res.writeHead(200, { 'Content-Type': 'text/javascript' })
-      res.end("import { prepararImagem } from './anexoImagem.js';"
-        + 'window.__prepararImagem = prepararImagem;')
+      res.end("import * as m from './anexoImagem.js';"
+        + 'window.__prepararImagem = m.prepararImagem;'
+        + 'window.__prepararAnexo = m.prepararAnexo;')
       return
     }
     res.writeHead(200, { 'Content-Type': 'text/html' })
@@ -128,8 +129,9 @@ beforeAll(async () => {
   page = await ctx.newPage()
   await page.goto(`http://127.0.0.1:${porta}/`, { waitUntil: 'domcontentloaded' })
   await page.addScriptTag({ url: '/entrada.js', type: 'module' })
-  await page.waitForFunction(() => typeof window.__prepararImagem === 'function', null,
-    { timeout: 15000 })
+  await page.waitForFunction(
+    () => typeof window.__prepararImagem === 'function' && typeof window.__prepararAnexo === 'function',
+    null, { timeout: 15000 })
 }, 180000)
 
 afterAll(async () => {
@@ -180,6 +182,142 @@ async function preparar(largura, altura, { ladoMaximo } = {}) {
     }
   }, { exif: [...segmentoExif()], largura, altura, ladoMaximo })
 }
+
+
+// ===========================================================================
+// UX-M2.3 — O PNG LIMPO AINDA E UM PNG.
+//
+// `anexoPng.test.js` prova que os blocos certos saem, comparando bytes. O que
+// bytes nao provam e se o resultado ainda ABRE: um limpador que produz um
+// arquivo estruturalmente plausivel e indecodificavel passaria naquele teste e
+// quebraria na mao da pessoa.
+//
+// Aqui o PNG e gerado pelo proprio navegador, recebe um bloco eXIf de verdade
+// (com CRC correto), passa pelo preparo e e DECODIFICADO de volta. Se a
+// cirurgia tivesse estragado alguma coisa, `createImageBitmap` recusaria.
+// ===========================================================================
+describe('UX-M2.3 — PNG perde o metadado e continua abrindo', () => {
+  async function prepararPng({ comAlfa = false, largura = 120, altura = 80 } = {}) {
+    return page.evaluate(async ({ comAlfa: alfa, largura: w, altura: h }) => {
+      // CRC32 do PNG, para o bloco injetado ser legitimo.
+      const tabela = (() => {
+        const t = new Uint32Array(256)
+        for (let n = 0; n < 256; n += 1) {
+          let c = n
+          for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+          t[n] = c >>> 0
+        }
+        return t
+      })()
+      const crc32 = (b) => {
+        let c = 0xffffffff
+        for (let i = 0; i < b.length; i += 1) c = tabela[(c ^ b[i]) & 0xff] ^ (c >>> 8)
+        return (c ^ 0xffffffff) >>> 0
+      }
+
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      const ctx = canvas.getContext('2d')
+      for (let x = 0; x < w; x += 6) {
+        ctx.fillStyle = `hsl(${(x * 9) % 360} 85% 50%)`
+        ctx.fillRect(x, 0, 6, h)
+      }
+      if (alfa) {
+        // Um quadrante totalmente transparente: se a limpeza virar JPEG, isto
+        // volta preto ou branco, e o teste denuncia.
+        ctx.clearRect(0, 0, Math.floor(w / 2), Math.floor(h / 2))
+      }
+      const base = await new Promise((r) => canvas.toBlob(r, 'image/png'))
+      const cru = new Uint8Array(await base.arrayBuffer())
+
+      // Monta um bloco eXIf com conteudo reconhecivel e CRC valido.
+      const dados = [...'II*\u0000GPS-SECRETO'].map((c) => c.charCodeAt(0))
+      const corpo = Uint8Array.from([...[...'eXIf'].map((c) => c.charCodeAt(0)), ...dados])
+      const crc = crc32(corpo)
+      const n = dados.length
+      const chunk = Uint8Array.from([
+        (n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff,
+        ...corpo,
+        (crc >>> 24) & 0xff, (crc >>> 16) & 0xff, (crc >>> 8) & 0xff, crc & 0xff,
+      ])
+
+      // O IHDR tem 25 bytes (4+4+13+4); o eXIf entra logo depois dele.
+      const corte = 8 + 25
+      const comExif = new Uint8Array(cru.length + chunk.length)
+      comExif.set(cru.subarray(0, corte), 0)
+      comExif.set(chunk, corte)
+      comExif.set(cru.subarray(corte), corte + chunk.length)
+
+      const entrada = new Blob([comExif], { type: 'image/png' })
+      const r = await window.__prepararAnexo(entrada)
+      if (!r.ok) return { ok: false, motivo: r.motivo, mensagem: r.mensagem }
+
+      const saidaBytes = new Uint8Array(await r.arquivo.arrayBuffer())
+
+      // DECODIFICA de volta: a prova de que a cirurgia nao estragou a imagem.
+      let decodificou = null
+      try {
+        const bmp = await createImageBitmap(r.arquivo)
+        // Le o pixel do canto para conferir a transparencia.
+        const c2 = document.createElement('canvas')
+        c2.width = bmp.width; c2.height = bmp.height
+        const x2 = c2.getContext('2d')
+        x2.drawImage(bmp, 0, 0)
+        const p = x2.getImageData(1, 1, 1, 1).data
+        decodificou = { largura: bmp.width, altura: bmp.height, alfaDoCanto: p[3] }
+      } catch (e) {
+        decodificou = { erro: String(e) }
+      }
+
+      return {
+        ok: true,
+        mime: r.mime,
+        removidos: r.removidos,
+        entradaTemExif: [...comExif].join(',').includes([...'eXIf'].map((c) => c.charCodeAt(0)).join(',')),
+        saida: [...saidaBytes],
+        decodificou,
+      }
+    }, { comAlfa, largura, altura })
+  }
+
+  it('o eXIf injetado entra e NAO sai do outro lado', async () => {
+    const r = await prepararPng()
+    expect(r.ok).toBe(true)
+    expect(r.entradaTemExif).toBe(true)
+    expect(r.removidos).toEqual(['eXIf'])
+    const saida = Uint8Array.from(r.saida)
+    expect(temTexto(saida, 'eXIf')).toBe(false)
+    expect(temTexto(saida, 'GPS-SECRETO')).toBe(false)
+  }, 60000)
+
+  it('o resultado continua PNG e continua decodificando', async () => {
+    const r = await prepararPng({ largura: 120, altura: 80 })
+    expect(r.mime).toBe('image/png')
+    expect(temTexto(Uint8Array.from(r.saida), 'IHDR')).toBe(true)
+    expect(r.decodificou.erro).toBeUndefined()
+    expect(r.decodificou.largura).toBe(120)
+    expect(r.decodificou.altura).toBe(80)
+  }, 60000)
+
+  it('a TRANSPARÊNCIA sobrevive — a razão de não reencodar PNG como JPEG', async () => {
+    const r = await prepararPng({ comAlfa: true })
+    expect(r.mime).toBe('image/png')
+    // Canto superior esquerdo foi apagado: alfa tem de continuar zero.
+    expect(r.decodificou.alfaDoCanto).toBe(0)
+  }, 60000)
+
+  it('PNG corrompido é recusado com frase, não enviado assim mesmo', async () => {
+    const r = await page.evaluate(async () => {
+      const ruim = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xff, 0xff, 0xff])],
+        { type: 'image/png' })
+      const out = await window.__prepararAnexo(ruim)
+      return { ok: out.ok, motivo: out.motivo, mensagem: out.mensagem }
+    })
+    expect(r.ok).toBe(false)
+    expect(r.motivo).toBe('png_invalido')
+    expect(r.mensagem).toMatch(/corrompido|incompleto/i)
+  }, 60000)
+})
 
 describe('UX-M2.1 — EXIF não sobrevive ao preparo', () => {
   it('a imagem de ENTRADA realmente carrega EXIF (senão o teste não prova nada)', async () => {

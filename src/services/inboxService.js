@@ -87,6 +87,34 @@ export const inboxService = {
     return data
   },
 
+  // ---------------------------------------------------------------------------
+  // UMA nota, SEMPRE escopada por workspace (UX-M2.3).
+  //
+  // Existe porque anexar exige provar que o item de destino e real E e deste
+  // workspace. Fazer isso com `list()` funcionaria e traria a caixa inteira
+  // pela rede para conferir um id; e, pior, convidaria quem chama a filtrar
+  // por id DEPOIS — o que esquece o workspace na primeira distracao.
+  //
+  // Devolve `null` para id inexistente E para id de outro workspace: quem nao
+  // pode ver nao descobre que existe.
+  // ---------------------------------------------------------------------------
+  async get(workspaceId, id) {
+    if (!workspaceId || !id) return null
+    if (!isSupabaseConfigured) {
+      return localStore
+        .table(TABLE)
+        .find((n) => n.id === id && n.workspace_id === workspaceId) || null
+    }
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('id', id)
+      .maybeSingle()
+    if (error) throw error
+    return data ?? null
+  },
+
   // `id` opcional: permite ao chamador PRE-GERAR o id da captura (ex.: o
   // captureService precisa do id antes do upload para compor o path do asset).
   // Aditivo e retrocompativel — sem id, o comportamento e o de sempre.

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   FORMATOS, MIMES_ACEITOS, ACCEPT, MOTIVO,
   MAX_BYTES, MAX_BYTES_DEMO, LADO_MAXIMO,
+  MIMES_NO_BUCKET, SO_CONVERTIDO, MAX_BYTES_BUCKET, podeSubir, urlExpirada,
+  EXPIRACAO_URL_SEGUNDOS, MARGEM_RENOVACAO_SEGUNDOS,
   validarArquivo, assinaturaConfere, planoDeImagem, dimensaoAlvo,
   ehAceito, ehHeic, ehImagem, kindDe, extensaoDe, podeTerExif,
   normalizarMime, tamanhoLegivel,
@@ -238,5 +240,87 @@ describe('anexoPolitica — atalhos', () => {
     expect(ehHeic('image/heic')).toBe(true)
     expect(ehHeic('IMAGE/HEIF')).toBe(true)
     expect(ehHeic('image/jpeg')).toBe(false)
+  })
+})
+
+// ===========================================================================
+// UX-M2.3 — AS DUAS LISTAS, E A DISTANCIA ENTRE ELAS
+// ===========================================================================
+describe('anexoPolitica — escolher não é o mesmo que guardar', () => {
+  it('são 25 formatos escolhíveis e 23 guardáveis', () => {
+    expect(MIMES_ACEITOS).toHaveLength(25)
+    expect(MIMES_NO_BUCKET).toHaveLength(23)
+  })
+
+  it('a diferença são exatamente HEIC e HEIF', () => {
+    const fora = MIMES_ACEITOS.filter((m) => !MIMES_NO_BUCKET.includes(m))
+    expect(fora.sort()).toEqual(['image/heic', 'image/heif'])
+    expect(SO_CONVERTIDO.sort()).toEqual(['image/heic', 'image/heif'])
+  })
+
+  it('HEIC pode ser ESCOLHIDO mas não pode ser GUARDADO', () => {
+    // A porta de entrada aceita — e preciso aceitar para poder converter.
+    expect(validarArquivo(arq('image/heic')).ok).toBe(true)
+    // O destino recusa: o original ainda tem o GPS dentro.
+    expect(podeSubir('image/heic')).toBe(false)
+    expect(podeSubir('image/heif')).toBe(false)
+    // Convertido, passa.
+    expect(podeSubir('image/jpeg')).toBe(true)
+  })
+
+  it('podeSubir normaliza antes de decidir', () => {
+    expect(podeSubir('  IMAGE/JPEG ')).toBe(true)
+    expect(podeSubir('text/plain; charset=utf-8')).toBe(true)
+    expect(podeSubir('image/svg+xml')).toBe(false)
+    expect(podeSubir('')).toBe(false)
+  })
+
+  it('os formatos de áudio do iPhone entraram', () => {
+    for (const m of ['audio/x-m4a', 'audio/mp3', 'audio/wave']) {
+      expect(validarArquivo(arq(m)).ok, m).toBe(true)
+      expect(podeSubir(m), m).toBe(true)
+      expect(kindDe(m), m).toBe('audio')
+    }
+  })
+
+  it('o teto do cliente e o do bucket são o MESMO número', () => {
+    // Se divergirem, um arquivo passa aqui e morre na rede — ou pior, passa na
+    // rede e e recusado aqui, e ninguem entende por que.
+    expect(MAX_BYTES).toBe(MAX_BYTES_BUCKET)
+    expect(MAX_BYTES_BUCKET).toBe(10485760)
+  })
+})
+
+describe('anexoPolitica — validade da URL assinada', () => {
+  const AGORA = 1_800_000_000_000
+
+  it('uma hora é o prazo, e 60s é a margem', () => {
+    expect(EXPIRACAO_URL_SEGUNDOS).toBe(3600)
+    expect(MARGEM_RENOVACAO_SEGUNDOS).toBe(60)
+  })
+
+  it('válida enquanto falta mais que a margem', () => {
+    expect(urlExpirada(AGORA + 10 * 60 * 1000, AGORA)).toBe(false)
+  })
+
+  it('vencida quando já passou', () => {
+    expect(urlExpirada(AGORA - 1, AGORA)).toBe(true)
+  })
+
+  it('tratada como vencida DENTRO da margem — renova antes de quebrar', () => {
+    expect(urlExpirada(AGORA + 59 * 1000, AGORA)).toBe(true)
+    expect(urlExpirada(AGORA + 61 * 1000, AGORA)).toBe(false)
+  })
+
+  it('sem prazo, ou com prazo ilegível, trata como vencida', () => {
+    // O erro seguro e renovar a toa, nunca exibir imagem quebrada.
+    expect(urlExpirada(null, AGORA)).toBe(true)
+    expect(urlExpirada(undefined, AGORA)).toBe(true)
+    expect(urlExpirada('amanhã', AGORA)).toBe(true)
+    expect(urlExpirada(0, AGORA)).toBe(true)
+  })
+
+  it('aceita ISO além de epoch', () => {
+    expect(urlExpirada(new Date(AGORA + 3600 * 1000).toISOString(), AGORA)).toBe(false)
   })
 })

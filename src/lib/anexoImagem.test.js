@@ -27,7 +27,15 @@ describe('prepararImagem — foto grande', () => {
     expect(r.altura).toBe(1500)
     expect(r.bytesFinais).toBeLessThan(r.bytesOriginais)
     // O canvas foi desenhado NO TAMANHO ALVO, nao no original.
-    expect(codificar).toHaveBeenCalledWith(expect.anything(), 2000, 1500, expect.any(Number))
+    //
+    // TRANSIÇÃO DE CONTRATO — UX-M2.3. `codificar` ganhou um quinto argumento,
+    // o mime de saída, porque reduzir um PNG grande gerando JPEG destruiria a
+    // transparência sem avisar. A asserção anterior era:
+    //
+    //   expect(codificar).toHaveBeenCalledWith(expect.anything(), 2000, 1500, expect.any(Number))
+    expect(codificar).toHaveBeenCalledWith(
+      expect.anything(), 2000, 1500, expect.any(Number), 'image/jpeg',
+    )
   })
 
   it('a redução é aceita mesmo que o resultado não encolha tanto', async () => {

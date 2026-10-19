@@ -103,9 +103,15 @@ export const FORMATOS = [
   { mime: 'application/pdf', kind: 'pdf', ext: 'pdf', rotulo: 'PDF' },
 
   { mime: 'audio/mpeg', kind: 'audio', ext: 'mp3', rotulo: 'Áudio MP3' },
+  // Mesma coisa que `audio/mpeg` para quem grava: algumas plataformas
+  // reportam assim, e recusar por grafia seria recusar o arquivo certo.
+  { mime: 'audio/mp3', kind: 'audio', ext: 'mp3', rotulo: 'Áudio MP3' },
   { mime: 'audio/wav', kind: 'audio', ext: 'wav', rotulo: 'Áudio WAV' },
   { mime: 'audio/x-wav', kind: 'audio', ext: 'wav', rotulo: 'Áudio WAV' },
+  { mime: 'audio/wave', kind: 'audio', ext: 'wav', rotulo: 'Áudio WAV' },
   { mime: 'audio/mp4', kind: 'audio', ext: 'm4a', rotulo: 'Áudio M4A' },
+  // O Gravador de Voz do iPhone entrega `.m4a` com ESTE mime, nao `audio/mp4`.
+  { mime: 'audio/x-m4a', kind: 'audio', ext: 'm4a', rotulo: 'Áudio M4A' },
   { mime: 'audio/aac', kind: 'audio', ext: 'aac', rotulo: 'Áudio AAC' },
   { mime: 'audio/webm', kind: 'audio', ext: 'weba', rotulo: 'Áudio WebM' },
   { mime: 'audio/ogg', kind: 'audio', ext: 'ogg', rotulo: 'Áudio OGG' },
@@ -136,6 +142,32 @@ const POR_MIME = new Map(FORMATOS.map((f) => [f.mime, f]))
 
 export const MIMES_ACEITOS = FORMATOS.map((f) => f.mime)
 
+// ---------------------------------------------------------------------------
+// DUAS LISTAS, E A DIFERENCA E O PONTO.
+//
+// `MIMES_ACEITOS` e o que a pessoa pode ESCOLHER. `MIMES_NO_BUCKET` e o que
+// pode ser GUARDADO. HEIC e HEIF estao na primeira e nao na segunda: a foto do
+// iPhone entra pela porta, mas so passa pela segunda depois de convertida em
+// JPEG, porque o original carrega EXIF com GPS que nao conseguimos remover sem
+// decodificar.
+//
+// Isso nao e zelo do cliente: o bucket `captures` foi configurado no UX-M2.2
+// com exatamente estes 23 tipos, e um HEIC original e recusado pelo SERVIDOR.
+// A lista daqui existe para que a recusa aconteca ANTES da rede, com uma frase
+// em vez de um 400 — e `anexoPolitica.test.js` falha se as duas divergirem.
+// ---------------------------------------------------------------------------
+export const SO_CONVERTIDO = ['image/heic', 'image/heif']
+
+export const MIMES_NO_BUCKET = MIMES_ACEITOS.filter((m) => !SO_CONVERTIDO.includes(m))
+
+// `true` quando o Storage aceitaria este mime como esta.
+export const podeSubir = (mime) => MIMES_NO_BUCKET.includes(normalizarMime(mime))
+
+// O teto do bucket, em bytes, declarado no UX-M2.2. Repetido aqui de proposito:
+// se um dia os dois divergirem, o cliente recusa antes e a pessoa le o motivo,
+// em vez de descobrir pelo erro da rede.
+export const MAX_BYTES_BUCKET = 10485760
+
 // O valor do atributo `accept` do seletor de arquivo. Nao e seguranca — e
 // cortesia: faz o iOS abrir a fototeca ja filtrada em vez de oferecer tudo e
 // recusar depois.
@@ -157,6 +189,26 @@ export const podeTerExif = (mime) => PODE_TER_EXIF.includes(normalizarMime(mime)
 
 export const kindDe = (mime) => formatoDe(mime)?.kind || 'file'
 export const extensaoDe = (mime) => formatoDe(mime)?.ext || 'bin'
+
+// ---------------------------------------------------------------------------
+// URLS TEMPORARIAS. A URL assinada do Storage vale uma hora. Quem deixa o
+// detalhe aberto mais que isso ve a imagem parar de carregar — entao o lugar
+// certo de decidir "ja venceu?" e aqui, puro e testavel, e nao espalhado pelos
+// componentes.
+//
+// A MARGEM existe porque o relogio do aparelho e o do servidor nao batem, e
+// porque entre decidir e usar passa tempo. Renovar 60 segundos antes custa uma
+// chamada a mais e evita a imagem quebrada.
+// ---------------------------------------------------------------------------
+export const EXPIRACAO_URL_SEGUNDOS = 3600
+export const MARGEM_RENOVACAO_SEGUNDOS = 60
+
+export function urlExpirada(expiraEm, agora = Date.now(), margemSegundos = MARGEM_RENOVACAO_SEGUNDOS) {
+  if (!expiraEm) return true
+  const limite = typeof expiraEm === 'number' ? expiraEm : Date.parse(expiraEm)
+  if (!Number.isFinite(limite)) return true
+  return limite - margemSegundos * 1000 <= agora
+}
 
 export function tamanhoLegivel(bytes) {
   const n = Number(bytes) || 0
