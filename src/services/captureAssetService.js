@@ -198,7 +198,13 @@ export const captureAssetService = {
 
   // URL para exibir o asset. Demo: data-URL. Supabase: URL assinada (bucket
   // privado) com validade `expiresIn` (segundos). Retorna null se nao existir.
-  async getViewUrl({ storage_bucket = CAPTURE_BUCKET, storage_path } = {}, { expiresIn = 3600 } = {}) {
+  // `baixar` acrescenta `?download` a URL assinada, que e como o Storage manda
+  // o navegador SALVAR em vez de abrir. No modo demo a URL e uma data-URL, e
+  // quem resolve isso e o atributo `download` do proprio link.
+  async getViewUrl(
+    { storage_bucket = CAPTURE_BUCKET, storage_path } = {},
+    { expiresIn = 3600, baixar = false } = {},
+  ) {
     if (!storage_path) return null
     if (!isSupabaseConfigured) {
       const row = localStore.table(DEMO_BLOB_TABLE).find((r) => r.path === storage_path)
@@ -206,7 +212,7 @@ export const captureAssetService = {
     }
     const { data, error } = await supabase.storage
       .from(storage_bucket)
-      .createSignedUrl(storage_path, expiresIn)
+      .createSignedUrl(storage_path, expiresIn, baixar ? { download: true } : undefined)
     if (error) throw error
     return data?.signedUrl ?? null
   },

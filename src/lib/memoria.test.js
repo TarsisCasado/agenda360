@@ -268,6 +268,19 @@ describe('memoria — acoes possiveis por item', () => {
     expect(a).not.toContain('arquivar')
   })
 
+  it('anexar existe para NOTA viva — e para mais nada (UX-M2.4)', () => {
+    const [viva] = agregarMemoria({ notas: [nota({ status: 'inbox' })] })
+    expect(acoesDoItem(viva)).toContain('anexar')
+
+    // Link nao tem onde pendurar: `inbox_attachments` referencia inbox_item_id.
+    const [l] = agregarMemoria({ links: [link()] })
+    expect(acoesDoItem(l)).not.toContain('anexar')
+
+    // Arquivado nao cresce mais.
+    const [arq] = agregarMemoria({ notas: [nota({ status: 'archived' })] })
+    expect(acoesDoItem(arq)).not.toContain('anexar')
+  })
+
   it('excluir sempre existe e e uma acao a parte de arquivar (K)', () => {
     const [i] = agregarMemoria({ notas: [nota()] })
     const a = acoesDoItem(i)

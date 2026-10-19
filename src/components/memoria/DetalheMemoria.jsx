@@ -1,16 +1,15 @@
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   X, Pencil, Lightbulb, StickyNote, Inbox, ListChecks, Archive, ArchiveRestore,
-  Trash2, ExternalLink, ArrowRight, Loader2, FileText, Music, Paperclip,
+  Trash2, ExternalLink, ArrowRight, Loader2,
 } from 'lucide-react'
 import { cx } from '../../lib/utils'
 import {
   FORMATO, SIGNIFICADO, ORGANIZACAO, acoesDoItem, dominio, quandoGuardado,
 } from '../../lib/memoria'
-import { captureService } from '../../services/captureService'
 import { SUPERFICIE } from '../../lib/copilotoContexto'
 import AcaoCopiloto from '../copiloto/AcaoCopiloto'
+import AnexosDaNota from './AnexosDaNota'
 
 // ---------------------------------------------------------------------------
 // DETALHE DE UM ITEM DA MEMORIA.
@@ -58,99 +57,6 @@ function Acao({ icon: Icon, children, onClick, tom = 'normal', ocupado }) {
 }
 
 
-// ---------------------------------------------------------------------------
-// ANEXOS.
-//
-// O que esta aqui e EXIBICAO do que ja existe no banco: a tabela
-// `inbox_attachments` e o bucket privado `captures` sao da migration 0009, e o
-// `captureService` ja sabia compor descritor + URL. O que nao existia era
-// alguma tela que os mostrasse.
-//
-// O QUE ESTA TELA NAO FAZ, e isso esta no relatorio do checkpoint: nao
-// CAPTURA. Escolher arquivo, enviar binario e gravar descritor sao escritas no
-// banco compartilhado, que este checkpoint nao autoriza — e um botao "Anexar"
-// que nao anexa seria pior que a ausencia dele. Por isso a secao so aparece
-// quando ha anexo, e nunca convida para um gesto que ainda nao existe.
-// ---------------------------------------------------------------------------
-
-function iconeDoAnexo(kind) {
-  if (kind === 'pdf') return FileText
-  if (kind === 'audio') return Music
-  return Paperclip
-}
-
-function Anexo({ anexo }) {
-  const [url, setUrl] = useState(null)
-  useEffect(() => {
-    let vivo = true
-    captureService.urlDeAnexo(anexo).then((u) => { if (vivo) setUrl(u) })
-    return () => { vivo = false }
-  }, [anexo])
-
-  const Icone = iconeDoAnexo(anexo.kind)
-
-  // Imagem com URL: a propria imagem. Qualquer outro caso (pdf, audio, ou uma
-  // imagem cuja URL nao veio) vira uma linha com o tipo. Degradar para o nome
-  // do tipo e honesto; degradar para um quadrado cinza nao diria nada.
-  if (anexo.kind === 'image' && url) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="press block overflow-hidden rounded-row bg-surface-2"
-        data-testid="memoria-anexo"
-        data-anexo-kind="image"
-      >
-        <img src={url} alt="" loading="lazy" className="block max-h-64 w-full object-cover" />
-      </a>
-    )
-  }
-
-  const corpo = (
-    <>
-      <Icone size={15} className="shrink-0 text-muted" aria-hidden />
-      <span className="min-w-0 flex-1 truncate text-[14px] text-secondary">
-        {anexo.kind === 'image' ? 'Imagem' : anexo.kind === 'pdf' ? 'PDF' : anexo.kind === 'audio' ? 'Áudio' : 'Arquivo'}
-      </span>
-    </>
-  )
-  const classe = 'flex w-full items-center gap-2.5 rounded-row bg-surface-2 px-3 py-2.5 text-left'
-
-  return url ? (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cx(classe, 'press')}
-      data-testid="memoria-anexo"
-      data-anexo-kind={anexo.kind}
-    >
-      {corpo}
-      <ExternalLink size={14} className="shrink-0 text-muted" aria-hidden />
-    </a>
-  ) : (
-    <div className={classe} data-testid="memoria-anexo" data-anexo-kind={anexo.kind}>
-      {corpo}
-    </div>
-  )
-}
-
-function Anexos({ item }) {
-  const anexos = item.anexos || []
-  if (!anexos.length) return null
-  return (
-    <div className="mt-5" data-testid="memoria-anexos">
-      <p className="text-section px-1 pb-1.5">
-        {anexos.length === 1 ? 'Anexo' : `Anexos · ${anexos.length}`}
-      </p>
-      <div className="space-y-2">
-        {anexos.map((a) => <Anexo key={a.id || a.storage_path} anexo={a} />)}
-      </div>
-    </div>
-  )
-}
-
 function Relacoes({ tarefas }) {
   const navigate = useNavigate()
   if (!tarefas.length) return null
@@ -180,7 +86,7 @@ function Relacoes({ tarefas }) {
 
 export default function DetalheMemoria({
   item, tarefas = [], ocupado, filtro, telefone, onFechar, onEditar, onDecidir,
-  onCriarTarefa, onArquivar, onRestaurar, onExcluir,
+  onCriarTarefa, onArquivar, onRestaurar, onExcluir, onAnexar, onRemoverAnexo,
 }) {
   if (!item) return null
   const acoes = acoesDoItem(item)
@@ -248,7 +154,12 @@ export default function DetalheMemoria({
               <p className="text-caption mt-3 italic">Sem conteúdo escrito.</p>
             )}
 
-            <Anexos item={item} />
+            <AnexosDaNota
+              item={item}
+              podeAnexar={pode('anexar') && !!onAnexar}
+              onAnexar={onAnexar}
+              onRemoverAnexo={onRemoverAnexo}
+            />
             <Relacoes tarefas={tarefas} />
           </div>
         </div>
@@ -348,7 +259,12 @@ export default function DetalheMemoria({
           <p className="text-caption italic">Sem conteúdo escrito.</p>
         )}
 
-        <Anexos item={item} />
+        <AnexosDaNota
+          item={item}
+          podeAnexar={pode('anexar') && !!onAnexar}
+          onAnexar={onAnexar}
+          onRemoverAnexo={onRemoverAnexo}
+        />
         <Relacoes tarefas={tarefas} />
       </div>
 

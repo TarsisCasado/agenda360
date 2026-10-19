@@ -13,6 +13,7 @@ import { inboxService } from '../services/inboxService'
 import { linkService } from '../services/linkService'
 import { taskService } from '../services/taskService'
 import { conversionService } from '../services/conversionService'
+import { captureService } from '../services/captureService'
 import { FILTROS, listarMemoria } from '../lib/memoria'
 import { SUPERFICIE } from '../lib/copilotoContexto'
 import { cx } from '../lib/utils'
@@ -197,6 +198,42 @@ export default function Memoria() {
       }
     }, 'Tarefa criada — o item continua aqui')
 
+  // -------------------------------------------------------------------------
+  // ANEXAR E REMOVER (UX-M2.4).
+  //
+  // Estas duas NAO passam por `comOcupado`, e a razao e a experiencia: aquele
+  // helper trava a folha inteira e mostra um toast no fim. Anexar tem etapas
+  // que levam tempos diferentes — preparar uma foto de 12 MP e uma coisa,
+  // envia-la no 4G e outra — e quem esta olhando merece ver em qual delas
+  // esta. O progresso e o erro moram DENTRO da secao de anexos, ao lado do que
+  // eles descrevem.
+  //
+  // A regra de seguranca inteira ja esta no servico: `anexarAItem` valida o
+  // destino, prepara, envia e compensa. Aqui so se passa o contexto e se
+  // recarrega a lista no fim.
+  // -------------------------------------------------------------------------
+  const anexar = async (file, onEtapa, foiCancelado) => {
+    const r = await captureService.anexarAItem(workspaceId, user.id, {
+      inboxItemId: aberto.origemId,
+      file,
+      onEtapa,
+      cancelado: foiCancelado,
+    })
+    if (r?.cancelado) return r
+    await recarregarTudo()
+    toast('Anexado — a nota continua a mesma')
+    return r
+  }
+
+  const removerAnexo = async (anexo) => {
+    const r = await captureService.removerAnexo(workspaceId, anexo)
+    await recarregarTudo()
+    toast(r.orfaoPossivel
+      ? 'Anexo removido da nota; o arquivo pode levar um instante para sair'
+      : 'Anexo removido — a nota continua aqui')
+    return r
+  }
+
   const arquivar = () =>
     comOcupado(() => inboxService.archive(aberto.origem, user.id), 'Arquivado — nada foi excluído')
 
@@ -209,7 +246,11 @@ export default function Memoria() {
     const nota = aberto.fonte === 'inbox_items'
     if (!window.confirm(`Excluir “${aberto.titulo}”? Isso não pode ser desfeito.`)) return
     return comOcupado(async () => {
-      if (nota) await inboxService.remove(aberto.origem)
+      // Para NOTA passa pelo captureService, e nao direto pelo inboxService: a
+      // FK `on delete cascade` apaga o descritor do anexo, mas o BINARIO fica
+      // no bucket para sempre. Enquanto nada subia isso era teoria; agora que
+      // anexar existe, toda nota apagada com foto deixaria lixo permanente.
+      if (nota) await captureService.excluirItemComAnexos(workspaceId, aberto.origem)
       else await linkService.remove(aberto.origemId)
       setAbertoId(null)
     }, 'Excluído')
@@ -225,6 +266,8 @@ export default function Memoria() {
     onArquivar: arquivar,
     onRestaurar: restaurar,
     onExcluir: excluir,
+    onAnexar: anexar,
+    onRemoverAnexo: removerAnexo,
   }
 
   const buscando = consulta.trim().length > 0

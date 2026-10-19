@@ -559,3 +559,77 @@ describe('captureService — compatibilidade com o bucket do UX-M2.2', () => {
     }
   })
 })
+
+// ===========================================================================
+// UX-M2.4 — O QUE A TELA PRECISA DO SERVICO
+// ===========================================================================
+describe('captureService — etapas e cancelamento', () => {
+  it('anuncia as etapas na ordem, para a tela dizer a verdade', async () => {
+    const nota = await criarNota()
+    const etapas = []
+    await captureService.anexarAItem(WS, USER, {
+      inboxItemId: nota.id, file: png(PNG_LIMPO), onEtapa: (e) => etapas.push(e),
+    })
+    expect(etapas).toEqual(['validando', 'preparando', 'enviando', 'gravando', 'pronto'])
+  })
+
+  it('cancelar ANTES do envio não deixa rastro nenhum', async () => {
+    const nota = await criarNota()
+    const r = await captureService.anexarAItem(WS, USER, {
+      inboxItemId: nota.id, file: png(PNG_LIMPO), cancelado: () => true,
+    })
+    expect(r.cancelado).toBe(true)
+    expect(r.attachment).toBeNull()
+    expect(counts()).toMatchObject({ atts: 0, blobs: 0 })
+    // E a nota segue intacta.
+    expect((await inboxService.get(WS, nota.id)).title).toBe('Proposta do cliente')
+  })
+
+  it('cancelar DEPOIS do envio não tem efeito — e não deve ter', async () => {
+    // Uma vez que o binario subiu, "cancelar" significaria apagar o que acabou
+    // de ser gravado: e assim que se FABRICA orfao, nao como se evita.
+    const nota = await criarNota()
+    let etapas = 0
+    const r = await captureService.anexarAItem(WS, USER, {
+      inboxItemId: nota.id,
+      file: png(PNG_LIMPO),
+      onEtapa: () => { etapas += 1 },
+      cancelado: () => etapas > 3,   // so vira true depois de 'enviando'
+    })
+    expect(r.cancelado).toBeUndefined()
+    expect(r.attachment).toBeTruthy()
+  })
+
+  it('uma tela que lança em onEtapa não derruba o envio', async () => {
+    const nota = await criarNota()
+    const r = await captureService.anexarAItem(WS, USER, {
+      inboxItemId: nota.id,
+      file: png(PNG_LIMPO),
+      onEtapa: () => { throw new Error('componente desmontou') },
+    })
+    expect(r.attachment).toBeTruthy()
+  })
+})
+
+describe('captureService — URL de download', () => {
+  it('pede ao Storage a versão que BAIXA, não a que abre', async () => {
+    const nota = await criarNota()
+    const { attachment } = await captureService.anexarAItem(WS, USER, {
+      inboxItemId: nota.id, file: png(PNG_LIMPO),
+    })
+    const espia = vi.spyOn(captureAssetService, 'getViewUrl')
+    await captureService.urlDeAnexoComValidade(attachment, { baixar: true })
+    expect(espia).toHaveBeenCalledWith(attachment, expect.objectContaining({ baixar: true }))
+  })
+
+  it('a URL de download nunca substitui a de exibição em cache', async () => {
+    const nota = await criarNota()
+    const { attachment } = await captureService.anexarAItem(WS, USER, {
+      inboxItemId: nota.id, file: png(PNG_LIMPO),
+    })
+    const exibicao = await captureService.urlDeAnexoComValidade(attachment)
+    const download = await captureService.urlDeAnexoComValidade(attachment, { baixar: true })
+    expect(exibicao.valida).toBe(true)
+    expect(download.valida).toBe(true)
+  })
+})

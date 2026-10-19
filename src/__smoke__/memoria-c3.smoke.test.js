@@ -703,12 +703,26 @@ describe('UX-M1 — anexos no telefone', () => {
     expect(caixa.width).toBeGreaterThan(200)
   }, 60000)
 
-  it('sem anexo, nao sobra secao nem espaco reservado', async () => {
+  // TRANSIÇÃO DE CONTRATO — UX-M2.4. No UX-M1 a Memória só EXIBIA anexos, e
+  // sem nenhum a seção não existia:
+  //
+  //   expect(await anx.locator('[data-testid="memoria-anexos"]').count()).toBe(0)
+  //
+  // Agora a seção também é a porta de entrada: é nela que mora o convite
+  // "Anexar". Então, numa nota viva, ela existe mesmo vazia — e o que continua
+  // valendo, que era o ponto do teste original, é que não sobra ESPAÇO
+  // RESERVADO: nenhuma miniatura, nenhum quadrado cinza esperando imagem.
+  it('sem anexo, nao sobra espaco reservado — so o convite', async () => {
     await recarregar(false)
     await anx.locator('[data-testid="memoria-item"]').first().click()
     await anx.waitForTimeout(600)
-    expect(await anx.locator('[data-testid="memoria-anexos"]').count()).toBe(0)
+    // Nenhum ANEXO e nenhuma miniatura: o vazio continua sendo vazio.
+    expect(await anx.locator('[data-testid="memoria-anexo"]').count()).toBe(0)
     expect(await anx.locator('[data-testid="memoria-miniatura"]').count()).toBe(0)
+    // A seção existe, e existe para oferecer a ação.
+    const secao = anx.locator('[data-testid="memoria-anexos"]:visible')
+    expect(await secao.count()).toBe(1)
+    expect(await secao.innerText()).toMatch(/Anexar/i)
     // O que foi escrito continua la: a ausencia de anexo nao e um erro.
     expect(await anx.locator('[data-testid="memoria-detalhe"]:visible').innerText())
       .toMatch(/balcao/i)

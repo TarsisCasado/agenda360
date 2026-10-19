@@ -187,11 +187,11 @@ export const captureService = {
   //
   // `urlDeAnexo` continua devolvendo string: e contrato publico desde o UX-M1
   // e duas telas dependem dele.
-  async urlDeAnexoComValidade(descriptor, { expiresIn = EXPIRACAO_URL_SEGUNDOS } = {}) {
+  async urlDeAnexoComValidade(descriptor, { expiresIn = EXPIRACAO_URL_SEGUNDOS, baixar = false } = {}) {
     const pedidaEm = Date.now()
     let url = null
     try {
-      url = await captureAssetService.getViewUrl(descriptor, { expiresIn })
+      url = await captureAssetService.getViewUrl(descriptor, { expiresIn, baixar })
     } catch (err) {
       console.warn('[captureService] falha ao obter URL do anexo:', err?.message || err)
     }
@@ -226,7 +226,16 @@ export const captureService = {
   //
   // O item NAO e modificado em nenhum dos quatro. Nem `updated_at`.
   // =========================================================================
-  async anexarAItem(workspaceId, userId, { inboxItemId, file, preparo = {} } = {}) {
+  async anexarAItem(
+    workspaceId, userId,
+    { inboxItemId, file, preparo = {}, onEtapa, cancelado } = {},
+  ) {
+    // As ETAPAS sao anunciadas porque a tela precisa dizer a verdade sobre o
+    // que esta acontecendo. "Preparando" e "Enviando" demoram coisas
+    // diferentes — numa foto de 12 MP o preparo e o que leva tempo, no 4G e o
+    // envio — e um spinner generico esconde justamente isso.
+    const etapa = (nome) => { try { onEtapa?.(nome) } catch { /* a tela nao derruba o envio */ } }
+    etapa('validando')
     if (!workspaceId) throw new Error('workspaceId obrigatorio.')
     if (!userId) throw new Error('userId obrigatorio.')
     if (!inboxItemId) throw new Error('inboxItemId obrigatorio.')
@@ -246,6 +255,7 @@ export const captureService = {
 
     // 2) PREPARO. Tira metadado, encolhe foto, recusa HEIC nao convertido e
     // PNG corrompido. Puro o suficiente para falhar antes de qualquer rede.
+    etapa('preparando')
     const pronto = await prepararAnexo(file, preparo)
     if (!pronto.ok) {
       const err = new Error(pronto.mensagem)
@@ -256,12 +266,20 @@ export const captureService = {
     // 3) BINARIO. `upload` revalida tipo, tamanho e assinatura sobre o arquivo
     // JA PREPARADO — que e outro arquivo, com outro tamanho e as vezes outro
     // tipo. Validar so a entrada deixaria passar o que o preparo produziu.
+    // DESISTIR AINDA E POSSIVEL AQUI, e so aqui. Ate este ponto nada saiu da
+    // maquina: validar e preparar sao puros. Um passo adiante o binario ja
+    // viajou, e "cancelar" passaria a significar apagar o que acabou de subir
+    // — que e como se FABRICA orfao, nao como se evita.
+    if (cancelado?.()) return { cancelado: true, attachment: null, item }
+
+    etapa('enviando')
     const descriptor = await captureAssetService.upload(workspaceId, {
       inboxItemId,
       file: pronto.arquivo,
     })
 
     // 4) DESCRITOR. Se falhar, o binario sai — senao fica um orfao invisivel.
+    etapa('gravando')
     let attachment
     try {
       attachment = await inboxAttachmentService.create(workspaceId, userId, {
@@ -275,6 +293,7 @@ export const captureService = {
       throw err
     }
 
+    etapa('pronto')
     return {
       attachment,
       item,

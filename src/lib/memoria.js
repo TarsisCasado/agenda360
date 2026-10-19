@@ -286,6 +286,12 @@ export function acoesDoItem(item) {
   const nota = item.fonte === 'inbox_items'
   const acoes = []
   if (nota && !item.arquivado) acoes.push('editar')
+  // ANEXAR so existe para NOTA, e pelo mesmo motivo de sempre: a tabela
+  // `inbox_attachments` referencia `inbox_item_id`. Um link nao tem onde
+  // pendurar um arquivo, entao oferecer o botao seria prometer o que a
+  // estrutura nao cumpre. Arquivado tambem nao: o que esta guardado nao e para
+  // continuar crescendo.
+  if (nota && !item.arquivado) acoes.push('anexar')
   if (nota && item.organizacao === ORGANIZACAO.POR_ORGANIZAR) {
     acoes.push('marcar_ideia', 'manter_nota')
   }
