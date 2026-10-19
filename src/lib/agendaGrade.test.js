@@ -55,6 +55,139 @@ describe('andar com o recorte', () => {
   })
 })
 
+// ===========================================================================
+// A TABELA DE VERDADE DA NAVEGACAO — sete dias, duas direcoes, sem depender
+// da data de hoje.
+//
+// POR QUE ESTE BLOCO EXISTE. O contrato da navegacao estava protegido por uma
+// assercao de navegador que usava a DATA REAL da execucao, e afirmava "um
+// passo, um dia" para qualquer dia. Dentro da semana isso vale; nas pontas,
+// nao — e o teste so descobria isso quando a CI calhava de rodar num desses
+// dias. Em 18/10/2026, um domingo, ele descobriu.
+//
+// O COMPORTAMENTO NAO E DEFEITO, E A FORMA DO MODELO. A janela de tres dias
+// vive DENTRO de uma semana de segunda a domingo (`recorteDaSemana` fatia um
+// array de sete). Uma janela [sab, dom, seg-da-proxima] e inexprimivel: nao e
+// que ninguem a programou, e que ela nao cabe no modelo — e isso e deliberado,
+// como diz o teste `encosta na ponta em vez de vazar para outra semana`.
+//
+// Logo, na ponta a janela vira PAGINA em vez de deslizar. E simetrico:
+//
+//   +1  anda 1 dia de seg a sex;  vira pagina (+3) no sab e no dom
+//   -1  anda 1 dia de qua a dom;  vira pagina (-3) na seg e na ter
+//
+// Nada e pulado em nenhum dos casos: a janela nova sempre comeca no dia
+// seguinte ao ultimo da antiga, ou antes dele. E o que o teste de
+// CONTINUIDADE abaixo garante, e e a propriedade que de fato importa para
+// quem navega.
+// ===========================================================================
+describe('a navegacao temporal, nos sete dias e nas duas direcoes', () => {
+  const janelaDe = (dia) => recorteDaSemana(semanaDe(dia), dia)
+  const andar = (dia, delta) => andarNoRecorte(semanaDe(dia), dia, delta)
+  const dias = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5)
+  const passo = (antes, depois) => dias(antes[0], depois[0])
+
+  // dia -> passo esperado em +1 e em -1, para a semana de 12 a 18/10/2026.
+  const ESPERADO = [
+    { dia: '2026-10-12', nome: 'segunda', mais: 1, menos: -3 },
+    { dia: '2026-10-13', nome: 'terca', mais: 1, menos: -3 },
+    { dia: '2026-10-14', nome: 'quarta', mais: 1, menos: -1 },
+    { dia: '2026-10-15', nome: 'quinta', mais: 1, menos: -1 },
+    { dia: '2026-10-16', nome: 'sexta', mais: 1, menos: -1 },
+    { dia: '2026-10-17', nome: 'sabado', mais: 3, menos: -1 },
+    { dia: '2026-10-18', nome: 'domingo', mais: 3, menos: -1 },
+  ]
+
+  for (const { dia, nome, mais, menos } of ESPERADO) {
+    it(`${nome}: avanca ${mais} e recua ${menos}`, () => {
+      const antes = janelaDe(dia)
+      expect(passo(antes, janelaDe(andar(dia, 1)))).toBe(mais)
+      expect(passo(antes, janelaDe(andar(dia, -1)))).toBe(menos)
+    })
+  }
+
+  it('a pagina so e virada nas pontas — no meio da semana o passo e de UM dia', () => {
+    const viraPagina = ESPERADO.filter((e) => Math.abs(e.mais) === 3).map((e) => e.nome)
+    const recuaPagina = ESPERADO.filter((e) => Math.abs(e.menos) === 3).map((e) => e.nome)
+    expect(viraPagina).toEqual(['sabado', 'domingo'])
+    expect(recuaPagina).toEqual(['segunda', 'terca'])
+  })
+
+  // A PROPRIEDADE QUE IMPORTA. Pagina ou passo, o que nao pode acontecer e
+  // sumir com um dia entre uma janela e a outra.
+  it('nenhum dia e pulado entre a janela antiga e a nova, em nenhum dos sete dias', () => {
+    for (const { dia, nome } of ESPERADO) {
+      const antes = janelaDe(dia)
+      const frente = janelaDe(andar(dia, 1))
+      // A janela nova comeca, no maximo, no dia seguinte ao ultimo da antiga.
+      expect(dias(antes[2], frente[0]), `${nome} para frente`).toBeLessThanOrEqual(1)
+      expect(dias(antes[0], frente[0]), `${nome} para frente`).toBeGreaterThan(0)
+
+      const tras = janelaDe(andar(dia, -1))
+      expect(dias(tras[2], antes[0]), `${nome} para tras`).toBeLessThanOrEqual(1)
+      expect(dias(antes[0], tras[0]), `${nome} para tras`).toBeLessThan(0)
+    }
+  })
+
+  it('a janela continua com tres dias e com o dia escolhido dentro, sempre', () => {
+    for (const { dia } of ESPERADO) {
+      for (const delta of [1, -1]) {
+        const novo = andar(dia, delta)
+        const janela = janelaDe(novo)
+        expect(janela).toHaveLength(DIAS_VISIVEIS)
+        expect(janela).toContain(novo)
+      }
+    }
+  })
+
+  it('ir e voltar devolve a janela de origem — no meio da semana', () => {
+    for (const dia of ['2026-10-14', '2026-10-15', '2026-10-16']) {
+      const antes = janelaDe(dia)
+      const ida = andar(dia, 1)
+      expect(janelaDe(andar(ida, -1))).toEqual(antes)
+    }
+  })
+})
+
+// ===========================================================================
+// LIMITES DE CALENDARIO. A aritmetica de data e o lugar classico de erro por
+// off-by-one, e nenhum destes casos acontece com frequencia suficiente para
+// alguem notar em producao antes de um usuario notar.
+// ===========================================================================
+describe('a navegacao atravessa mes, ano e 29 de fevereiro', () => {
+  const janelaDe = (dia) => recorteDaSemana(semanaDe(dia), dia)
+  const andar = (dia, delta) => andarNoRecorte(semanaDe(dia), dia, delta)
+
+  it('uma janela pode conter dois meses', () => {
+    // Sexta 30/10/2026: a janela cobre a virada sem sair da semana.
+    expect(janelaDe('2026-10-30')).toEqual(['2026-10-29', '2026-10-30', '2026-10-31'])
+    expect(janelaDe(andar('2026-10-30', 1))).toEqual(['2026-10-30', '2026-10-31', '2026-11-01'])
+  })
+
+  it('na ponta da semana a pagina vira para o mes seguinte', () => {
+    // Sabado 31/10/2026 -> a semana seguinte comeca em 02/11.
+    expect(janelaDe(andar('2026-10-31', 1))).toEqual(['2026-11-02', '2026-11-03', '2026-11-04'])
+  })
+
+  it('a virada de ANO e so mais uma virada de dia', () => {
+    expect(janelaDe('2026-12-31')).toEqual(['2026-12-30', '2026-12-31', '2027-01-01'])
+    expect(janelaDe(andar('2026-12-31', 1))).toEqual(['2026-12-31', '2027-01-01', '2027-01-02'])
+    expect(janelaDe(andar('2027-01-01', -1))).toEqual(['2026-12-30', '2026-12-31', '2027-01-01'])
+  })
+
+  it('29 de fevereiro existe e nao desloca nada', () => {
+    // 2028 e bissexto; 28/02 cai numa segunda.
+    expect(janelaDe('2028-02-28')).toEqual(['2028-02-28', '2028-02-29', '2028-03-01'])
+    expect(janelaDe(andar('2028-02-28', 1))).toEqual(['2028-02-29', '2028-03-01', '2028-03-02'])
+  })
+
+  it('num ano NAO bissexto, marco vem logo depois de 28 de fevereiro', () => {
+    // 2027 nao e bissexto: 26/02 e uma sexta.
+    expect(janelaDe('2027-02-26')).toEqual(['2027-02-25', '2027-02-26', '2027-02-27'])
+    expect(janelaDe(andar('2027-02-26', 1))).toEqual(['2027-02-26', '2027-02-27', '2027-02-28'])
+  })
+})
+
 describe('o conteudo de um bloco cede antes da fonte', () => {
   it('um bloco alto mostra tudo', () => {
     expect(detalheDoBloco(120, 1)).toEqual({ linhas: 2, horario: true, apoio: true, intervalo: true })

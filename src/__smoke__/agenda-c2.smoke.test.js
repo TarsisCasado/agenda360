@@ -341,6 +341,24 @@ describe('Agenda no telefone — a interface aprovada com dado real', () => {
     expect(m.cLarg).toBeGreaterThan(60)
   }, 90000)
 
+  // --- Aritmetica da janela, para o teste nao depender da data de hoje -----
+  //
+  // A janela anda UM dia dentro da semana e vira PAGINA (tres dias) na ponta.
+  // Qual dos dois vai acontecer se le na propria janela, sem saber que dia e
+  // hoje: para frente, so vira pagina quando o ultimo dia visivel e um domingo
+  // (isto e, a janela ja e [sex, sab, dom]); para tras, so quando o primeiro e
+  // uma segunda.
+  const diaISO = (testid) => testid.replace('am-coluna-', '')
+  const distancia = (a, b) =>
+    Math.round((Date.parse(diaISO(b)) - Date.parse(diaISO(a))) / 864e5)
+  const diaDaSemana = (testid) => new Date(`${diaISO(testid)}T12:00:00Z`).getUTCDay()
+  const passoEsperado = (janela, delta) => {
+    const naPonta = delta > 0
+      ? diaDaSemana(janela[2]) === 0  // domingo fecha a semana
+      : diaDaSemana(janela[0]) === 1  // segunda abre a semana
+    return (naPonta ? 3 : 1) * delta
+  }
+
   it('Semana: os controles explicitos do recorte andam, e o deslize esta instalado', async () => {
     await irPara(page, '/dia?visao=semana')
     const visiveis = () => page.evaluate(() =>
@@ -350,8 +368,39 @@ describe('Agenda no telefone — a interface aprovada com dado real', () => {
     await page.waitForTimeout(700)
     const depois = await visiveis()
     expect(depois).not.toEqual(antes)
-    // A janela andou UM dia: o primeiro de agora era o segundo de antes.
-    expect(depois[0]).toBe(antes[1])
+
+    // TRANSICAO DE CONTRATO — hotfix UX-M3.1. A assercao anterior era:
+    //
+    //   // A janela andou UM dia: o primeiro de agora era o segundo de antes.
+    //   expect(depois[0]).toBe(antes[1])
+    //
+    // Ela afirmava "um passo, um dia" para QUALQUER dia, usando a data real da
+    // execucao — e so era exercitada no dia em que a CI calhasse de rodar. Em
+    // 18/10/2026, um domingo, caiu.
+    //
+    // O comportamento nao e defeito: a janela de tres dias vive DENTRO de uma
+    // semana de segunda a domingo, entao [sab, dom, seg-da-proxima] nao cabe no
+    // modelo, e na ponta a janela vira PAGINA em vez de deslizar. A tabela de
+    // verdade dos sete dias esta em `lib/agendaGrade.test.js`, onde ela roda em
+    // milissegundos e nao depende de calendario.
+    //
+    // O que este teste de NAVEGADOR deve provar e outra coisa: que o controle
+    // existe, que ele move a grade e que nada se perde no caminho. E faz isso
+    // sem depender do dia, porque deriva o passo esperado da propria janela.
+    expect(depois).toHaveLength(3)
+    expect(passoEsperado(antes, 1)).toBe(distancia(antes[0], depois[0]))
+    // Nada foi pulado: a janela nova comeca, no maximo, no dia seguinte ao
+    // ultimo da antiga. E a propriedade que de fato importa para quem navega.
+    expect(distancia(antes[2], depois[0])).toBeLessThanOrEqual(1)
+
+    // E volta. O defeito era simetrico — recuar tambem vira pagina nas pontas —
+    // e a direcao de tras nao era exercitada aqui.
+    await page.locator('[data-testid="am-recorte-antes"]').click()
+    await page.waitForTimeout(700)
+    const devolta = await visiveis()
+    expect(devolta).toHaveLength(3)
+    expect(distancia(depois[0], devolta[0])).toBe(passoEsperado(depois, -1))
+
     // "Hoje" devolve o recorte, e o dia de hoje volta a estar visivel.
     await page.locator('[data-testid="am-recorte-hoje"]').click()
     await page.waitForTimeout(700)
