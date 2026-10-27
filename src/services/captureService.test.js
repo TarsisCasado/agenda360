@@ -633,3 +633,85 @@ describe('captureService — URL de download', () => {
     expect(download.valida).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// O DOWNLOAD SEM IDA A REDE (UX-M2.5a).
+//
+// Estes testes guardam a propriedade que conserta o iOS Safari: a URL que
+// baixa sai da URL que já está em mão, SEM `await`. Se algum dia
+// `urlDeDownload` voltar a ser assíncrona, o botão Baixar volta a ser
+// bloqueado no iPhone — e é este arquivo que tem de acusar.
+// ---------------------------------------------------------------------------
+describe('captureService — download derivado, sem rede', () => {
+  const EXPIRA_LONGE = () => Date.now() + 3600 * 1000
+  const refValida = (url = 'https://p.supabase.co/o/sign/c/a.jpg?token=tk') => ({
+    url, expiraEm: EXPIRA_LONGE(), valida: true,
+  })
+
+  it('é SINCRONA — não devolve promessa, não pode esperar rede', () => {
+    const r = captureService.urlDeDownload(refValida(), { titulo: 'Nota', mime: 'image/jpeg' })
+    expect(typeof r).toBe('string')
+    expect(r).not.toBeInstanceOf(Promise)
+  })
+
+  it('não toca no Storage: nenhuma chamada sai daqui', () => {
+    const espia = vi.spyOn(captureAssetService, 'getViewUrl')
+    captureService.urlDeDownload(refValida(), { titulo: 'Nota', mime: 'image/jpeg' })
+    expect(espia).not.toHaveBeenCalled()
+  })
+
+  it('preserva o token assinado e acrescenta o nome legível', () => {
+    const r = captureService.urlDeDownload(
+      refValida(), { titulo: 'Reunião com o contador', mime: 'image/jpeg' },
+    )
+    expect(r).toContain('token=tk')
+    expect(r).toContain('download=Reuniao-com-o-contador.jpg')
+  })
+
+  it('URL VENCIDA devolve null — para a tela renovar em vez de abrir link morto', () => {
+    const vencida = { url: 'https://x/a.jpg?token=tk', expiraEm: Date.now() - 1 }
+    expect(captureService.urlDeDownload(vencida, { titulo: 'n', mime: 'image/jpeg' })).toBe(null)
+    // E dentro da margem também conta como vencida: renova ANTES de quebrar.
+    const quaseVencida = { url: 'https://x/a.jpg?token=tk', expiraEm: Date.now() + 30 * 1000 }
+    expect(captureService.urlDeDownload(quaseVencida, { titulo: 'n', mime: 'image/jpeg' })).toBe(null)
+  })
+
+  it('sem URL nenhuma devolve null, não uma string quebrada', () => {
+    expect(captureService.urlDeDownload(null, { titulo: 'n', mime: 'image/jpeg' })).toBe(null)
+    expect(captureService.urlDeDownload({ url: null, expiraEm: EXPIRA_LONGE() })).toBe(null)
+  })
+
+  it('NUNCA produz URL sem token — a correção não pode virar vazamento', () => {
+    const r = captureService.urlDeDownload(refValida(), { titulo: 'x', mime: 'image/jpeg' })
+    expect(r).toMatch(/token=/)
+  })
+
+  it('o nome do download é o mesmo nos dois caminhos', () => {
+    // A tela usa `nomeDeDownload` no caminho de exceção. Dois nomes diferentes
+    // para o mesmo arquivo seria confuso no lugar mais inconveniente.
+    const nome = captureService.nomeDeDownload('Contrato final', 'application/pdf')
+    const url = captureService.urlDeDownload(
+      refValida(), { titulo: 'Contrato final', mime: 'application/pdf' },
+    )
+    expect(nome).toBe('Contrato-final.pdf')
+    expect(url).toContain(`download=${nome}`)
+  })
+
+  it('no modo demo a data-URL sai INTACTA — e isso é o correto', async () => {
+    // O conteúdo do arquivo ESTÁ na string da data-URL. Colar `?download=` nela
+    // não cria parâmetro nenhum: cria lixo no fim do base64, e a imagem passa a
+    // abrir corrompida. Aqui quem faz o arquivo ser salvo é o atributo
+    // `download` do `<a>`, que funciona porque a origem é a mesma.
+    const nota = await criarNota()
+    const { attachment } = await captureService.anexarAItem(WS, USER, {
+      inboxItemId: nota.id, file: png(PNG_LIMPO),
+    })
+    const ref = await captureService.urlDeAnexoComValidade(attachment)
+    const url = captureService.urlDeDownload(ref, { titulo: 'Minha nota', mime: attachment.mime })
+    expect(url).toBe(ref.url)
+    expect(url.startsWith('data:image/png;base64,')).toBe(true)
+    expect(url).not.toContain('download=')
+    // E o nome continua disponível para a tela pôr no atributo.
+    expect(captureService.nomeDeDownload('Minha nota', attachment.mime)).toBe('Minha-nota.png')
+  })
+})

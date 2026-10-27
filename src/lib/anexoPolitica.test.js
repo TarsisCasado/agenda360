@@ -7,6 +7,7 @@ import {
   validarArquivo, assinaturaConfere, planoDeImagem, dimensaoAlvo,
   ehAceito, ehHeic, ehImagem, kindDe, extensaoDe, podeTerExif,
   normalizarMime, tamanhoLegivel,
+  MAX_BYTES_ENTRADA_IMAGEM, MAX_PIXELS_ENTRADA, validarEntradaDeImagem,
 } from './anexoPolitica'
 
 const arq = (type, size = 1024) => ({ type, size })
@@ -322,5 +323,73 @@ describe('anexoPolitica — validade da URL assinada', () => {
 
   it('aceita ISO além de epoch', () => {
     expect(urlExpirada(new Date(AGORA + 3600 * 1000).toISOString(), AGORA)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// OS TETOS DA ENTRADA DE IMAGEM (UX-M2.5a).
+//
+// A armadilha que estes testes guardam e a confusao entre os dois limites. Se
+// algum dia `validarEntradaDeImagem` passar a recusar 10 MiB, ou
+// `validarArquivo` passar a aceitar 40 MiB, o produto quebra em silencio nas
+// duas pontas: a foto do iPhone deixa de poder ser anexada, ou o bucket passa
+// a receber arquivo que ele proprio recusa.
+// ---------------------------------------------------------------------------
+describe('validarEntradaDeImagem', () => {
+  const dim = (largura, altura) => ({ dimensoes: { largura, altura } })
+
+  it('os dois limites são coisas diferentes, e o de entrada é o maior', () => {
+    expect(MAX_BYTES_ENTRADA_IMAGEM).toBeGreaterThan(MAX_BYTES)
+    expect(MAX_BYTES).toBe(10 * 1024 * 1024)        // intocado por este checkpoint
+    expect(MAX_BYTES).toBe(MAX_BYTES_BUCKET)        // e ainda igual ao do bucket
+  })
+
+  it('aceita a foto de 48 MP do iPhone — que é o caso real que precisa passar', () => {
+    const foto = arq('image/jpeg', 22 * 1024 * 1024)
+    expect(validarEntradaDeImagem(foto, dim(8064, 6048)).ok).toBe(true)
+  })
+
+  it('recusa arquivo de imagem absurdo, antes de abri-lo', () => {
+    const r = validarEntradaDeImagem(arq('image/jpeg', MAX_BYTES_ENTRADA_IMAGEM + 1), dim(100, 100))
+    expect(r.ok).toBe(false)
+    expect(r.motivo).toBe(MOTIVO.ENTRADA_GRANDE_DEMAIS)
+    expect(r.mensagem).toMatch(/grande demais/i)
+  })
+
+  it('recusa por PIXELS mesmo quando o arquivo é pequeno — a bomba de descompressão', () => {
+    // 2 MB de PNG de área chapada podem virar 1 GB de bitmap. É exatamente o
+    // caso em que olhar só o tamanho do arquivo não protege nada.
+    const r = validarEntradaDeImagem(arq('image/png', 2 * 1024 * 1024), dim(30000, 30000))
+    expect(r.ok).toBe(false)
+    expect(r.motivo).toBe(MOTIVO.PIXELS_DEMAIS)
+    expect(r.mensagem).toMatch(/megapixels/i)
+    expect(r.mensagem).toContain('30000')
+  })
+
+  it('o corte de pixels fica exatamente onde foi declarado', () => {
+    const lado = Math.floor(Math.sqrt(MAX_PIXELS_ENTRADA))
+    expect(validarEntradaDeImagem(arq('image/jpeg'), dim(lado, lado)).ok).toBe(true)
+    expect(validarEntradaDeImagem(arq('image/jpeg'), dim(lado + 1, lado + 2)).ok).toBe(false)
+  })
+
+  it('sem dimensões conhecidas NÃO recusa — silêncio quando não há prova', () => {
+    // Mesma postura de `assinaturaConfere`: não medir não é motivo para negar.
+    expect(validarEntradaDeImagem(arq('image/webp', 1024), { dimensoes: null }).ok).toBe(true)
+    expect(validarEntradaDeImagem(arq('image/heic', 1024)).ok).toBe(true)
+    expect(validarEntradaDeImagem(arq('image/jpeg'), dim(0, 0)).ok).toBe(true)
+  })
+
+  it('não-imagem passa reto: PDF e áudio não são decodificados por ninguém aqui', () => {
+    const pdfGigante = arq('application/pdf', MAX_BYTES_ENTRADA_IMAGEM + 1)
+    expect(validarEntradaDeImagem(pdfGigante).ok).toBe(true)
+    // E continua sendo recusado por quem de fato manda nele.
+    expect(validarArquivo(pdfGigante).ok).toBe(false)
+  })
+
+  it('o teto do Storage continua valendo para o arquivo final', () => {
+    // O que sai do preparo passa por `validarArquivo` no upload, e lá 10 MiB
+    // ainda é 10 MiB — a entrada mais folgada não afrouxa a saída.
+    expect(validarArquivo(arq('image/jpeg', MAX_BYTES + 1)).ok).toBe(false)
+    expect(validarArquivo(arq('image/jpeg', MAX_BYTES)).ok).toBe(true)
   })
 })

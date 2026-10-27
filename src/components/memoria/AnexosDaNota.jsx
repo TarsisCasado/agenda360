@@ -5,7 +5,9 @@ import {
 } from 'lucide-react'
 import { cx } from '../../lib/utils'
 import { captureService } from '../../services/captureService'
-import { ACCEPT, tamanhoLegivel } from '../../lib/anexoPolitica'
+import {
+  ACCEPT, MARGEM_RENOVACAO_SEGUNDOS, tamanhoLegivel, urlExpirada,
+} from '../../lib/anexoPolitica'
 
 // ---------------------------------------------------------------------------
 // OS ANEXOS DE UMA NOTA — ver, abrir, baixar, acrescentar e remover.
@@ -44,9 +46,11 @@ function iconeDoAnexo(kind) {
 // quando a propria <img> falha (depois de quebrar, que e quando o navegador
 // avisa).
 // ---------------------------------------------------------------------------
-function Anexo({ anexo, podeRemover, onRemover, removendo }) {
+function Anexo({ anexo, titulo, podeRemover, onRemover, removendo }) {
   const [ref, setRef] = useState(null)
   const [falhou, setFalhou] = useState(false)
+  const [renovando, setRenovando] = useState(false)
+  const [recado, setRecado] = useState('')
 
   useEffect(() => {
     let vivo = true
@@ -54,25 +58,110 @@ function Anexo({ anexo, podeRemover, onRemover, removendo }) {
     return () => { vivo = false }
   }, [anexo])
 
-  // Renova ANTES de usar. Sem isto, abrir uma hora depois levaria a um link
-  // morto — e o navegador mostraria um erro do Supabase, nao o nosso.
-  const urlFresca = async ({ baixar = false } = {}) => {
-    const novo = await captureService.renovarUrlSePreciso(anexo, baixar ? null : ref, { baixar })
-    if (!baixar) setRef(novo)
-    return novo?.url || null
-  }
+  // -------------------------------------------------------------------------
+  // RENOVACAO ANTECIPADA (UX-M2.5a).
+  //
+  // Isto existe para que o caminho normal de abrir e baixar NUNCA precise
+  // esperar a rede. A URL vale uma hora; o temporizador acorda um pouco antes
+  // disso e troca a URL em segundo plano, enquanto ninguem esta tocando em
+  // nada. Quando a pessoa toca, a URL ja esta fresca e o link abre no mesmo
+  // instante — que e exatamente o que o iOS Safari exige para nao tratar a
+  // abertura como pop-up.
+  //
+  // `MARGEM_RENOVACAO_SEGUNDOS` nao e repetido aqui: `urlExpirada` ja decide
+  // com margem, e esta conta so escolhe QUANDO acordar.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (!ref?.expiraEm) return undefined
+    const faltam = ref.expiraEm - Date.now() - MARGEM_RENOVACAO_SEGUNDOS * 1000
+    // Ja venceu (aba dormiu, aparelho ficou guardado): renova agora.
+    const quando = Math.max(0, faltam)
+    const t = setTimeout(async () => {
+      const novo = await captureService.urlDeAnexoComValidade(anexo)
+      if (novo?.url) setRef(novo)
+    }, quando)
+    return () => clearTimeout(t)
+  }, [anexo, ref?.expiraEm])
 
-  const abrirEm = async (baixar) => {
-    const url = await urlFresca({ baixar })
-    if (!url) { setFalhou(true); return }
+  const nome = captureService.nomeDeDownload(titulo, anexo.mime)
+
+  // O clique no link, sem nenhum `await` antes dele. Separado em funcao
+  // propria porque e usado nos dois caminhos — o sincrono e o de excecao.
+  const abrirUrl = (url, { baixar = false } = {}) => {
     const a = document.createElement('a')
     a.href = url
-    a.target = '_blank'
     a.rel = 'noopener noreferrer'
-    if (baixar) a.download = ''
+    if (baixar) {
+      // `download` no `<a>` e IGNORADO em link de outra origem, e a URL do
+      // Storage e sempre de outra origem. Quem faz o arquivo ser SALVO e o
+      // `Content-Disposition: attachment` que o parametro `download=` da URL
+      // provoca no servidor. O atributo fica como cortesia para o dia em que a
+      // origem for a mesma, e o nome serve de dica ao navegador.
+      a.download = nome
+    } else {
+      a.target = '_blank'
+    }
     document.body.appendChild(a)
     a.click()
     a.remove()
+  }
+
+  // -------------------------------------------------------------------------
+  // BAIXAR — sincrono quando pode, e so entao assincrono.
+  //
+  // O caminho normal nao vai a rede: `urlDeDownload` DERIVA a URL de download
+  // da URL de exibicao que ja esta em mao (o parametro `download` nao entra na
+  // assinatura — ver `captureService.urlDeDownload`). Toque e abertura
+  // acontecem no mesmo tique, e o Safari nao tem o que bloquear.
+  //
+  // So se a URL tiver vencido — aba aberta ha mais de uma hora e o
+  // temporizador nao acordou, porque o aparelho esteve dormindo — e que se vai
+  // a rede. Nesse caso NAO se tenta abrir janela depois do `await`, porque e
+  // isso que o Safari recusa: renova-se a URL e pede-se o segundo toque, com
+  // uma frase que explica. Um toque extra e um preco honesto; um botao que nao
+  // faz nada, nao.
+  // -------------------------------------------------------------------------
+  const baixar = () => {
+    const direto = captureService.urlDeDownload(ref, { titulo, mime: anexo.mime })
+    if (direto) { setRecado(''); abrirUrl(direto, { baixar: true }); return }
+    if (renovando) return
+    setRenovando(true)
+    setRecado('')
+    captureService.urlDeAnexoComValidade(anexo)
+      .then((novo) => {
+        if (novo?.url) {
+          setRef(novo)
+          setRecado('O link expirou e foi renovado. Toque em Baixar outra vez.')
+        } else {
+          // NAO marca `falhou`: isso esconderia a imagem. Um download que nao
+          // deu nao e motivo para a foto sair da tela.
+          setRecado('Não consegui preparar o download deste anexo agora.')
+        }
+      })
+      .catch(() => {
+        setRecado('Não consegui preparar o download deste anexo agora.')
+      })
+      .finally(() => setRenovando(false))
+  }
+
+  // ABRIR — mesma logica, sem a parte do download. Imagem e PDF continuam
+  // abrindo em aba nova como antes.
+  const abrir = () => {
+    if (ref?.url && !urlExpirada(ref.expiraEm)) { setRecado(''); abrirUrl(ref.url); return }
+    if (renovando) return
+    setRenovando(true)
+    setRecado('')
+    captureService.urlDeAnexoComValidade(anexo)
+      .then((novo) => {
+        if (novo?.url) {
+          setRef(novo)
+          setRecado('O link expirou e foi renovado. Toque outra vez para abrir.')
+        } else {
+          setFalhou(true)
+        }
+      })
+      .catch(() => { setFalhou(true) })
+      .finally(() => setRenovando(false))
   }
 
   const Icone = iconeDoAnexo(anexo.kind)
@@ -90,7 +179,7 @@ function Anexo({ anexo, podeRemover, onRemover, removendo }) {
       {ehImagem ? (
         <button
           type="button"
-          onClick={() => abrirEm(false)}
+          onClick={abrir}
           className="press block w-full"
           aria-label={`Abrir ${rotulo}`}
           data-testid="memoria-anexo-abrir"
@@ -112,7 +201,7 @@ function Anexo({ anexo, podeRemover, onRemover, removendo }) {
       ) : (
         <button
           type="button"
-          onClick={() => abrirEm(false)}
+          onClick={abrir}
           className="press flex w-full items-center gap-2.5 px-3 py-2.5 text-left"
           data-testid="memoria-anexo-abrir"
         >
@@ -131,11 +220,11 @@ function Anexo({ anexo, podeRemover, onRemover, removendo }) {
       <div className="flex items-center gap-1 border-t hair px-2 py-1.5">
         <button
           type="button"
-          onClick={() => abrirEm(true)}
+          onClick={baixar}
           className="press inline-flex min-h-[36px] items-center gap-1.5 rounded-control px-2.5 text-[13px] font-medium text-secondary active:bg-surface-3"
           data-testid="memoria-anexo-baixar"
         >
-          <Download size={14} />
+          {renovando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
           Baixar
         </button>
         <span className="flex-1" />
@@ -152,6 +241,19 @@ function Anexo({ anexo, podeRemover, onRemover, removendo }) {
           </button>
         )}
       </div>
+
+      {/* O recado so existe no caminho de excecao (link vencido depois de uma
+          hora de folha aberta). Nenhum pixel novo no estado normal — e o que
+          mantem a tela aprovada do UX-M2.4 intacta. */}
+      {recado && (
+        <p
+          className="border-t hair px-3 py-2 text-[12px] leading-snug text-secondary"
+          data-testid="memoria-anexo-recado"
+          role="status"
+        >
+          {recado}
+        </p>
+      )}
     </div>
   )
 }
@@ -307,6 +409,7 @@ export default function AnexosDaNota({ item, podeAnexar, onAnexar, onRemoverAnex
             <Anexo
               key={a.id || a.storage_path}
               anexo={a}
+              titulo={item?.titulo || ''}
               podeRemover={podeAnexar}
               removendo={removendo === a.id}
               onRemover={remover}

@@ -338,6 +338,15 @@ describe('UX-M2.4 — usar o que foi anexado', () => {
       null, { timeout: 15000 })
   }
 
+  // A URL do anexo chega DEPOIS do elemento: `urlDeAnexoComValidade` resolve
+  // numa promessa. Medir o caminho sincrono do download antes disso mediria a
+  // ausencia da URL, nao a sincronia — e falharia so sob carga, que e o pior
+  // tipo de teste. `naturalWidth > 0` prova que a URL chegou E carregou.
+  const esperarUrlPronta = () => page.waitForFunction(() => {
+    const img = document.querySelector('[data-testid="memoria-folha"] [data-testid="memoria-anexo"] img')
+    return !!img && img.complete && img.naturalWidth > 0
+  }, null, { timeout: 20000 })
+
   it('a imagem é EXIBIDA, não só listada', async () => {
     await comUmAnexo()
     // Esperar o DECODE, e nao so a presenca do <img>: `naturalWidth` e 0 ate a
@@ -363,6 +372,70 @@ describe('UX-M2.4 — usar o que foi anexado', () => {
       page.locator(NA_FOLHA('[data-testid="memoria-anexo-baixar"]')).first().click(),
     ])
     expect(download).toBeTruthy()
+  }, 60000)
+
+  // -------------------------------------------------------------------------
+  // UX-M2.5a — o arquivo chega com NOME, e o toque abre o link no mesmo tique.
+  // -------------------------------------------------------------------------
+  it('o arquivo baixado tem nome legível, vindo do título da nota', async () => {
+    // Prova a corrente inteira num navegador real: título da nota -> nome
+    // seguro -> atributo do <a> -> nome que o navegador sugere ao salvar.
+    // Antes disto o arquivo chegava como `<uuid>.png`.
+    await comUmAnexo()
+    await esperarUrlPronta()
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 15000 }),
+      page.locator(NA_FOLHA('[data-testid="memoria-anexo-baixar"]')).first().click(),
+    ])
+    expect(download.suggestedFilename()).toBe('Proposta-do-consorcio.png')
+  }, 60000)
+
+  it('entre o toque e a abertura do link NÃO existe espera assíncrona', async () => {
+    // O defeito do iOS Safari era este: o `await` de uma URL nova esfriava o
+    // gesto e o navegador bloqueava a abertura. O que se mede aqui é a
+    // propriedade exata que resolve isso — o clique no <a> acontece DENTRO da
+    // chamada de `botao.click()`, e não depois dela. Qualquer `await` no
+    // caminho faria o clique cair fora dessa janela.
+    await comUmAnexo()
+    await esperarUrlPronta()
+    const resultado = await page.evaluate(() => {
+      const botao = document.querySelector(
+        '[data-testid="memoria-folha"] [data-testid="memoria-anexo-baixar"]',
+      )
+      const original = HTMLAnchorElement.prototype.click
+      let dentroDoGesto = false
+      let cliqueFoiSincrono = null
+      let link = null
+      HTMLAnchorElement.prototype.click = function espiao() {
+        cliqueFoiSincrono = dentroDoGesto
+        link = { href: this.href, download: this.download, target: this.target }
+        // NAO chama o original: nao se quer baixar nada neste teste.
+      }
+      try {
+        dentroDoGesto = true
+        botao.click()
+      } finally {
+        dentroDoGesto = false
+        HTMLAnchorElement.prototype.click = original
+      }
+      return { cliqueFoiSincrono, link }
+    })
+
+    // Em duas asserções de propósito: `null` aqui significaria que o link nem
+    // foi clicado (URL ainda não em mão), que é um defeito do teste; `false`
+    // significaria que foi clicado depois de um await, que é o defeito real.
+    expect(resultado.link).not.toBeNull()
+    expect(resultado.cliqueFoiSincrono).toBe(true)
+    // E o link é o do anexo, com o nome legível no atributo.
+    expect(resultado.link.download).toBe('Proposta-do-consorcio.png')
+    expect(resultado.link.href.startsWith('data:image/png')).toBe(true)
+    // Download não abre aba nova: nada de janela órfã na cara de quem baixou.
+    expect(resultado.link.target).toBe('')
+  }, 60000)
+
+  it('no caminho normal NÃO aparece recado nenhum — a tela aprovada fica igual', async () => {
+    await comUmAnexo()
+    expect(await page.locator(NA_FOLHA('[data-testid="memoria-anexo-recado"]')).count()).toBe(0)
   }, 60000)
 
   it('remover PEDE confirmação — e cancelar não remove nada', async () => {

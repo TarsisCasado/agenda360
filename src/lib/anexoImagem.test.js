@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { prepararImagem, avisoDoPreparo, MOTIVO_PREPARO } from './anexoImagem'
-import { LADO_MAXIMO, MAX_BYTES } from './anexoPolitica'
+import { prepararImagem, prepararAnexo, avisoDoPreparo, MOTIVO_PREPARO, MOTIVO_ANEXO } from './anexoImagem'
+import {
+  LADO_MAXIMO, MAX_BYTES, MAX_BYTES_ENTRADA_IMAGEM, MAX_PIXELS_ENTRADA, MOTIVO,
+} from './anexoPolitica'
 
 // ---------------------------------------------------------------------------
 // `decodificar` e `codificar` sao injetados: e isto que permite exercitar o
@@ -164,5 +166,155 @@ describe('prepararImagem — falhas de conversão', () => {
     })
     expect(avisoDoPreparo(r)).toBe('')
     expect(avisoDoPreparo(null)).toBe('')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// O PORTAO DE ENTRADA DO PREPARO (UX-M2.5a).
+//
+// A asserção que importa em todos estes testes é a mesma, e é sobre o que NÃO
+// aconteceu: `decodificar` não foi chamado. É a diferença entre uma recusa que
+// protege o aparelho e uma recusa que chega depois de a aba já ter travado.
+// ---------------------------------------------------------------------------
+describe('prepararAnexo — recusa antes de decodificar', () => {
+  // Blob de verdade (node 22 tem), porque ler o cabeçalho exige `slice`.
+  //
+  // PNG ESTRUTURALMENTE VALIDO, e não só com o cabeçalho certo: o caminho do
+  // PNG passa por `limparBlobPng`, que recusa arquivo cujos chunks não fecham.
+  // Um fixture com assinatura boa e corpo de zeros seria recusado por
+  // corrupção, e o teste provaria a coisa errada.
+  function chunk(tipo, dados) {
+    const n = dados.length
+    const b = new Uint8Array(12 + n)
+    b.set([n >>> 24 & 255, n >>> 16 & 255, n >>> 8 & 255, n & 255], 0)
+    b.set([...tipo].map((c) => c.charCodeAt(0)), 4)
+    b.set(dados, 8)
+    // CRC fica em zero: `lerChunks` confere a moldura, não a soma — e é a
+    // moldura que este fixture precisa ter certa.
+    return b
+  }
+
+  function blobPng(largura, altura, bytesTotais = 1024) {
+    const ihdr = new Uint8Array(13)
+    ihdr.set([largura >>> 24 & 255, largura >>> 16 & 255, largura >>> 8 & 255, largura & 255], 0)
+    ihdr.set([altura >>> 24 & 255, altura >>> 16 & 255, altura >>> 8 & 255, altura & 255], 4)
+    ihdr.set([8, 6, 0, 0, 0], 8)                     // 8 bits, RGBA
+    const partes = [
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk('IHDR', ihdr),
+    ]
+    const jaUsados = 8 + 25 + 12
+    const recheio = Math.max(0, bytesTotais - jaUsados)
+    if (recheio) partes.push(chunk('IDAT', new Uint8Array(recheio)))
+    partes.push(chunk('IEND', new Uint8Array(0)))
+    return new Blob(partes, { type: 'image/png' })
+  }
+
+  function blobJpeg(largura, altura, bytesTotais = 1024) {
+    const cab = new Uint8Array([
+      0xff, 0xd8, 0xff, 0xc0, 0, 11, 8,
+      altura >> 8 & 255, altura & 255,
+      largura >> 8 & 255, largura & 255,
+      1, 1, 0x11, 0,
+    ])
+    const resto = new Uint8Array(Math.max(0, bytesTotais - cab.length))
+    return new Blob([cab, resto], { type: 'image/jpeg' })
+  }
+
+  it('imagem com pixels demais é recusada SEM ser decodificada', async () => {
+    const decodificar = vi.fn()
+    const lado = Math.ceil(Math.sqrt(MAX_PIXELS_ENTRADA)) + 100
+    const r = await prepararAnexo(blobJpeg(lado, lado), { decodificar })
+
+    expect(r.ok).toBe(false)
+    expect(r.motivo).toBe(MOTIVO_ANEXO.ENTRADA_EXCESSIVA)
+    expect(r.motivoPolitica).toBe(MOTIVO.PIXELS_DEMAIS)
+    expect(r.mensagem).toMatch(/megapixels/i)
+    // O ponto inteiro deste checkpoint:
+    expect(decodificar).not.toHaveBeenCalled()
+  })
+
+  it('PNG com pixels demais também não chega a ser aberto — nem para limpar chunk', async () => {
+    // O caminho do PNG limpa metadado antes de reduzir, e limpar não
+    // decodifica. Mas o passo seguinte decodifica, então o portão vale aqui
+    // também — e vale ANTES da limpeza, que leria o arquivo inteiro.
+    const decodificar = vi.fn()
+    const r = await prepararAnexo(blobPng(40000, 40000), { decodificar })
+    expect(r.ok).toBe(false)
+    expect(r.motivoPolitica).toBe(MOTIVO.PIXELS_DEMAIS)
+    expect(decodificar).not.toHaveBeenCalled()
+  })
+
+  it('arquivo de imagem absurdo é recusado pelo tamanho, sem cabeçalho legível', async () => {
+    const decodificar = vi.fn()
+    const gigante = {
+      type: 'image/jpeg',
+      size: MAX_BYTES_ENTRADA_IMAGEM + 1,
+      arrayBuffer: vi.fn(),
+    }
+    const r = await prepararAnexo(gigante, { decodificar })
+    expect(r.ok).toBe(false)
+    expect(r.motivoPolitica).toBe(MOTIVO.ENTRADA_GRANDE_DEMAIS)
+    expect(decodificar).not.toHaveBeenCalled()
+    expect(gigante.arrayBuffer).not.toHaveBeenCalled()  // nem foi aberto
+  })
+
+  it('a foto de 48 MP do iPhone PASSA pelo portão e é preparada normalmente', async () => {
+    // Se este teste algum dia ficar vermelho, o limite ficou apertado demais e
+    // o produto deixou de aceitar a foto que ele existe para guardar.
+    const codificar = vi.fn(async () => ({ size: 600 * 1024, type: 'image/jpeg' }))
+    const r = await prepararAnexo(blobJpeg(8064, 6048, 22 * 1024 * 1024), {
+      decodificar: vi.fn(async () => ({ width: 8064, height: 6048 })),
+      codificar,
+    })
+    expect(r.ok).toBe(true)
+    expect(r.convertida).toBe(true)
+    expect(r.largura).toBe(LADO_MAXIMO)
+    expect(codificar).toHaveBeenCalled()
+  })
+
+  it('JPEG normal continua sendo re-codificado — o EXIF ainda morre', async () => {
+    const codificar = vi.fn(async () => ({ size: 50 * 1024, type: 'image/jpeg' }))
+    const r = await prepararAnexo(blobJpeg(1200, 900, 300 * 1024), {
+      decodificar: vi.fn(async () => ({ width: 1200, height: 900 })),
+      codificar,
+    })
+    expect(r.ok).toBe(true)
+    expect(r.mime).toBe('image/jpeg')
+    expect(r.convertida).toBe(true)      // re-codificou, e é assim que o EXIF sai
+    expect(codificar).toHaveBeenCalled()
+  })
+
+  it('PNG válido e pequeno é preservado — transparência intacta', async () => {
+    const codificar = vi.fn()
+    const r = await prepararAnexo(blobPng(800, 600, 40 * 1024), {
+      decodificar: vi.fn(async () => ({ width: 800, height: 600 })),
+      codificar,
+    })
+    expect(r.ok).toBe(true)
+    expect(r.mime).toBe('image/png')     // nunca virou JPEG
+    expect(r.convertida).toBe(false)     // não houve re-codificação
+    expect(codificar).not.toHaveBeenCalled()
+  })
+
+  it('não-imagem nem passa pelo portão: PDF gigante segue para quem manda nele', async () => {
+    const decodificar = vi.fn()
+    const pdf = { type: 'application/pdf', size: MAX_BYTES_ENTRADA_IMAGEM + 1 }
+    const r = await prepararAnexo(pdf, { decodificar })
+    expect(r.ok).toBe(true)
+    expect(r.motivo).toBe(MOTIVO_ANEXO.NAO_E_IMAGEM)
+    expect(r.arquivo).toBe(pdf)          // intocado, byte por byte
+    expect(decodificar).not.toHaveBeenCalled()
+  })
+
+  it('imagem que não dá para medir não é recusada por isso', async () => {
+    // Sem `slice` não há cabeçalho; sem cabeçalho não há dimensão. O preparo
+    // segue normalmente, porque "não sei medir" não é "você não pode anexar".
+    const codificar = vi.fn(async () => ({ size: 10 * 1024, type: 'image/jpeg' }))
+    const r = await prepararAnexo({ type: 'image/jpeg', size: 100 * 1024 }, {
+      decodificar: vi.fn(async () => ({ width: 100, height: 100 })),
+      codificar,
+    })
+    expect(r.ok).toBe(true)
   })
 })

@@ -1,8 +1,10 @@
 import {
   LADO_MAXIMO, QUALIDADE_JPEG, MAX_BYTES,
   planoDeImagem, ehHeic, ehImagem, normalizarMime, podeSubir,
+  validarEntradaDeImagem,
 } from './anexoPolitica'
 import { limparBlobPng } from './anexoPng'
+import { cabecalhoDe, dimensoesDoCabecalho } from './anexoDimensoes'
 
 // ---------------------------------------------------------------------------
 // PREPARO DE IMAGEM — a unica parte deste checkpoint que toca APIs do
@@ -230,6 +232,8 @@ export const MOTIVO_ANEXO = {
   NAO_E_IMAGEM: 'nao_e_imagem',
   HEIC_NAO_CONVERTIDO: 'heic_nao_convertido',
   PNG_INVALIDO: 'png_invalido',
+  // UX-M2.5a — recusada ANTES de abrir, para nao derrubar a aba do iPhone.
+  ENTRADA_EXCESSIVA: 'entrada_excessiva',
 }
 
 export async function prepararAnexo(arquivo, opcoes = {}) {
@@ -237,6 +241,30 @@ export async function prepararAnexo(arquivo, opcoes = {}) {
 
   if (!ehImagem(mime)) {
     return { ok: true, arquivo, mime, convertida: false, motivo: MOTIVO_ANEXO.NAO_E_IMAGEM }
+  }
+
+  // -------------------------------------------------------------------------
+  // O PRIMEIRO PASSO DE TODOS: MEDIR SEM ABRIR (UX-M2.5a).
+  //
+  // Antes daqui, o preparo comecava decodificando — e decodificar e justamente
+  // o passo que pode derrubar a aba, porque aloca 4 bytes por pixel. Ler
+  // largura e altura do cabecalho custa um `slice` e nenhuma alocacao de
+  // imagem, entao a recusa de uma imagem absurda acontece ANTES do risco, e
+  // nao durante.
+  //
+  // Vale para TODO caminho de imagem, PNG incluido: a limpeza de chunks do PNG
+  // nao decodifica, mas o passo de reducao que vem depois dela decodifica.
+  // -------------------------------------------------------------------------
+  const cabecalho = await cabecalhoDe(arquivo)
+  const dimensoes = dimensoesDoCabecalho(cabecalho, mime)
+  const entrada = validarEntradaDeImagem(arquivo, { dimensoes })
+  if (!entrada.ok) {
+    return {
+      ok: false,
+      motivo: MOTIVO_ANEXO.ENTRADA_EXCESSIVA,
+      motivoPolitica: entrada.motivo,
+      mensagem: entrada.mensagem,
+    }
   }
 
   if (mime === 'image/png') {

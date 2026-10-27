@@ -4,6 +4,7 @@ import { inboxService } from './inboxService'
 import { inboxAttachmentService } from './inboxAttachmentService'
 import { prepararAnexo } from '../lib/anexoImagem'
 import { EXPIRACAO_URL_SEGUNDOS, urlExpirada } from '../lib/anexoPolitica'
+import { nomeDeArquivoSeguro, urlComDownload } from '../lib/anexoNome'
 
 // ---------------------------------------------------------------------------
 // captureService — ORQUESTRADOR OFICIAL do dominio Capture (composition root).
@@ -85,9 +86,11 @@ async function safeRemoveAsset(descriptor) {
     return false
   }
 }
-async function safeRemoveItem(note) {
+async function safeRemoveItem(workspaceId, note) {
   try {
-    await inboxService.remove(note)
+    // Workspace explicito: a compensacao e uma exclusao, e exclusao se confere
+    // duas vezes (ver o cabecalho de `inboxService.remove`).
+    await inboxService.remove(note, workspaceId)
   } catch (err) {
     console.warn('[captureService] falha ao remover InboxItem na compensacao:', err?.message || err)
   }
@@ -134,7 +137,7 @@ export const captureService = {
         ...descriptor,
       })
     } catch (err) {
-      await safeRemoveItem(item)
+      await safeRemoveItem(workspaceId, item)
       await safeRemoveAsset(descriptor)
       throw err
     }
@@ -207,6 +210,36 @@ export const captureService = {
   async renovarUrlSePreciso(descriptor, atual, opcoes = {}) {
     if (atual?.url && !urlExpirada(atual.expiraEm)) return atual
     return this.urlDeAnexoComValidade(descriptor, opcoes)
+  },
+
+  // =========================================================================
+  // A URL QUE BAIXA, DERIVADA DA QUE EXIBE — SEM IDA A REDE (UX-M2.5a).
+  //
+  // O DEFEITO QUE ISTO CONSERTA. Antes, baixar pedia uma URL nova ao Storage e
+  // só então abria o link. No iOS Safari o `await` dessa ida a rede esfria o
+  // toque da pessoa, e o navegador passa a tratar a abertura como pop-up de
+  // origem desconhecida — e bloqueia. O botao simplesmente nao fazia nada.
+  //
+  // POR QUE DERIVAR E LEGITIMO, e nao um atalho. Verificado no
+  // `@supabase/storage-js` 2.110.1: o POST de assinatura envia apenas
+  // `{ expiresIn }`; `download` e colado na URL DEPOIS, do lado do cliente, e
+  // nao entra na assinatura. Entao a URL que baixa e a MESMA URL assinada,
+  // com um parametro a mais — mesmo token, mesma validade de uma hora, mesmo
+  // bucket privado. Nada aqui cria URL publica nem permanente.
+  //
+  // Sincrono de proposito: e justamente a ausencia de `await` que devolve o
+  // download ao Safari.
+  // =========================================================================
+  urlDeDownload(atual, { titulo = '', mime = '' } = {}) {
+    if (!atual?.url || urlExpirada(atual.expiraEm)) return null
+    return urlComDownload(atual.url, nomeDeArquivoSeguro(titulo, mime))
+  },
+
+  // O nome que o arquivo tera na pasta Downloads. Exposto porque a tela precisa
+  // dele tambem no caminho de excecao (URL vencida), e duplicar a composicao
+  // do nome em dois lugares e como se criam dois nomes diferentes.
+  nomeDeDownload(titulo, mime) {
+    return nomeDeArquivoSeguro(titulo, mime)
   },
 
   // =========================================================================
@@ -361,7 +394,7 @@ export const captureService = {
 
     // A nota sai de qualquer jeito: foi isso que a pessoa pediu. Um binario
     // teimoso vira orfao conhecido, nao uma exclusao que nao aconteceu.
-    await inboxService.remove(note)
+    await inboxService.remove(note, workspaceId)
     return { anexos: anexos.length, binariosRemovidos, binariosResistentes }
   },
 }

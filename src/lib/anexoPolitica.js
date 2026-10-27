@@ -62,6 +62,29 @@ export const LADO_MAXIMO = 2000
 // perceptivel em foto de documento, que e o caso de uso real aqui.
 export const QUALIDADE_JPEG = 0.85
 
+// ---------------------------------------------------------------------------
+// OS DOIS TETOS DA ENTRADA DE IMAGEM (UX-M2.5a).
+//
+// NAO CONFUNDIR COM `MAX_BYTES`. `MAX_BYTES` e sobre o que CHEGA AO STORAGE, e
+// continua sendo 10 MiB — este arquivo nao mexe nisso. Os dois valores abaixo
+// sao sobre o que o APARELHO aceita ABRIR, e existem por um motivo diferente:
+// decodificar aloca 4 bytes por pixel, e o tamanho do arquivo nao diz quantos
+// pixels existem la dentro.
+//
+// POR QUE UM TETO DE BYTES MAIOR QUE 10 MiB, E NAO MENOR.
+//
+// Uma foto de 48 MP do iPhone pesa 15-25 MB em JPEG e so DEPOIS de reduzida a
+// 2000px cabe nos 10 MiB. Aplicar 10 MiB na entrada recusaria a foto que o
+// produto existe para guardar. 40 MiB aceita qualquer coisa que uma camera de
+// telefone produza e ainda assim para um arquivo absurdo antes de abri-lo.
+export const MAX_BYTES_ENTRADA_IMAGEM = 40 * 1024 * 1024
+
+// E o teto que de fato protege a memoria. 80 MP = ~320 MB de bitmap, que um
+// iPhone moderno aguenta; 200 MP = 800 MB, que nao aguenta. O corte fica
+// acima de toda camera de telefone que existe (a de 48 MP do iPhone produz
+// 8064x6048 = 48,8 MP) e abaixo de panorama gigante e bomba de descompressao.
+export const MAX_PIXELS_ENTRADA = 80 * 1000 * 1000
+
 export const MOTIVO = {
   SEM_ARQUIVO: 'sem_arquivo',
   SEM_MIME: 'sem_mime',
@@ -70,6 +93,9 @@ export const MOTIVO = {
   ACIMA_DO_LIMITE_DEMO: 'acima_do_limite_demo',
   VAZIO: 'vazio',
   ASSINATURA_DIVERGENTE: 'assinatura_divergente',
+  // UX-M2.5a — recusas da ENTRADA de imagem, antes de decodificar.
+  ENTRADA_GRANDE_DEMAIS: 'entrada_grande_demais',
+  PIXELS_DEMAIS: 'pixels_demais',
 }
 
 // Assinaturas (magic numbers) dos formatos onde ela e estavel.
@@ -343,4 +369,48 @@ export function dimensaoAlvo(largura, altura, ladoMaximo = LADO_MAXIMO) {
     largura: Math.max(1, Math.round(l * escala)),
     altura: Math.max(1, Math.round(a * escala)),
   }
+}
+
+// ---------------------------------------------------------------------------
+// A PORTA DE ENTRADA DA IMAGEM (UX-M2.5a).
+//
+// Roda ANTES de decodificar, e por isso e separada de `validarArquivo`: aquela
+// julga o arquivo que VAI AO STORAGE (e e aplicada duas vezes no `upload`,
+// inclusive sobre o resultado do preparo); esta julga o que o aparelho vai
+// tentar ABRIR. Juntar as duas faria o teto de entrada recair sobre o arquivo
+// de saida, recusando 10 MiB de resultado por uma regra feita para 40 MiB de
+// origem — ou, pior, afrouxando o teto do Storage.
+//
+// `dimensoes` vem de `dimensoesDoCabecalho` e pode ser null: formato que nao
+// sabemos medir nao e recusado, so fica sem essa camada. Ver o cabecalho de
+// `anexoDimensoes.js`.
+//
+// Nao-imagem passa reto: PDF, audio e texto nao sao decodificados por ninguem
+// aqui, e para eles quem manda e `validarArquivo`.
+// ---------------------------------------------------------------------------
+export function validarEntradaDeImagem(arquivo, { dimensoes = null } = {}) {
+  const mime = normalizarMime(arquivo?.type)
+  if (!ehImagem(mime)) return { ok: true, motivo: null }
+
+  const tamanho = Number(arquivo?.size) || 0
+  if (tamanho > MAX_BYTES_ENTRADA_IMAGEM) {
+    return RECUSA(
+      MOTIVO.ENTRADA_GRANDE_DEMAIS,
+      `Esta imagem tem ${tamanhoLegivel(tamanho)} e é grande demais para ser aberta neste aparelho. `
+      + `O limite para abrir é ${tamanhoLegivel(MAX_BYTES_ENTRADA_IMAGEM)}.`,
+    )
+  }
+
+  const largura = Number(dimensoes?.largura) || 0
+  const altura = Number(dimensoes?.altura) || 0
+  if (largura > 0 && altura > 0 && largura * altura > MAX_PIXELS_ENTRADA) {
+    const mp = Math.round((largura * altura) / 1e6)
+    return RECUSA(
+      MOTIVO.PIXELS_DEMAIS,
+      `Esta imagem tem ${largura}×${altura} (${mp} megapixels) e abri-la travaria o aparelho. `
+      + `Reduza-a antes de anexar.`,
+    )
+  }
+
+  return { ok: true, motivo: null }
 }
