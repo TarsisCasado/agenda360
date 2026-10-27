@@ -1,0 +1,523 @@
+/* ===========================================================================
+   A LINGUAGEM VISUAL APROVADA (UX-M2 / UX-M3 / UX-M3.1), NO PRODUTO REAL.
+
+   O que esta aqui e a mesma composicao que foi aprovada no prototipo, com
+   duas diferencas de engenharia:
+
+   1. PREFIXO `am-` (agenda movel) em vez de `m2-`/`m3-`.
+      `src/prototype/prototype.css` continua existindo, intocado, e carrega so
+      em /prototipo. Repetir os nomes faria duas folhas definirem as mesmas
+      classes — identicas hoje e divergentes no primeiro ajuste. Prefixo
+      proprio custa um `s/m2-/am-/` e remove a classe inteira de problema.
+
+   2. OS TOKENS MORAM EM `:root` / `.dark`, que e onde o produto real poe tema
+      (`ThemeContext` troca a classe `dark` no <html>). No prototipo eles
+      moravam em `.px-claro` / `.px-escuro`, aplicadas pelo Shell da maquete.
+
+   O QUE NAO VEIO: a paleta fechada de sete cores por nome de categoria
+   (violeta/azul/ciano…). Ela era vocabulario de mock. No produto a cor de uma
+   atividade vem de `categories.color` — um hex que a pessoa escolheu — e
+   entra por `--am-cor`, inline, no proprio elemento.
+   =========================================================================== */
+
+:root {
+  --am-canvas: 246 246 253;
+  --am-lavanda: 237 238 253;
+  --am-utilidade: 236 237 248;
+}
+
+/* O escuro NAO e o claro invertido: o fundo e profundo sem ser preto e as
+   superficies sobem um nivel em vez de clarear por transparencia. */
+.dark {
+  --am-canvas: 12 13 20;
+  --am-lavanda: 29 31 48;
+  --am-utilidade: 31 34 45;
+}
+
+.am {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+    'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* A ATMOSFERA. Um plano fixo atras de tudo. Nao e ilustracao — se voce reparar
+   nela, ela esta forte demais. */
+.am-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(130% 55% at 50% 104%, rgb(var(--c-accent) / 0.13), transparent 72%),
+    radial-gradient(90% 40% at 100% 0%, rgb(var(--c-accent) / 0.05), transparent 70%),
+    rgb(var(--am-canvas));
+}
+
+.am-superficie { border-radius: 22px; padding: 1rem; }
+.am-branca {
+  background: rgb(var(--c-surface));
+  box-shadow: 0 1px 2px rgb(var(--c-accent) / 0.04), 0 10px 26px -18px rgb(23 20 70 / 0.35);
+}
+.dark .am-branca {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 12px 28px -20px rgb(0 0 0 / 0.8);
+}
+.am-lavanda { background: rgb(var(--am-lavanda)); }
+
+/* O rotulo de uma superficie: pequeno, espacado, nunca um titulo. */
+.am-rotulo {
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgb(var(--c-accent-text));
+}
+
+.am-secao {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(var(--c-text-3));
+}
+
+/* Numeros que nao dancam quando o digito muda. */
+.am-num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+/* O selo do compromisso — o unico violeta solido da tela, e do tamanho de uma
+   unha. Identidade nao precisa de area, precisa de posicao. */
+.am-selo {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: rgb(var(--c-accent));
+  color: #fff;
+}
+
+/* O marcador que liga a hora ao compromisso. Substitui a borda esquerda de um
+   "card dentro do card". */
+.am-marcador {
+  flex: none;
+  width: 3px;
+  align-self: stretch;
+  min-height: 38px;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+}
+
+/* Circulo neutro de uma linha que NAO se conclui (a de "sem data"). A forma
+   diz a diferenca antes de o texto explicar. */
+.am-icone-linha {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-2));
+  color: rgb(var(--c-text-3));
+}
+
+/* Utilidades do topo: alvo de 40px, sem contorno. */
+.am-redondo {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgb(var(--am-utilidade));
+  color: rgb(var(--c-text-2));
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.am-redondo:active { background: rgb(var(--c-surface-3)); }
+@media (hover: hover) {
+  .am-redondo:hover { background: rgb(var(--c-surface-3)); }
+}
+
+/* Divisor alinhado ao CONTEUDO, nao a superficie: ele separa linhas irmas. */
+.am-divisor { height: 1px; margin-left: 38px; background: rgb(var(--c-hairline) / 0.8); }
+
+/* Tamanhos que acompanham a largura do aparelho. Entre 375 e 430 a composicao
+   e a MESMA — o que muda e a medida. `clamp` em vez de encolher tudo abaixo de
+   390 mantem a hierarquia. */
+.am-hora { font-size: clamp(26px, 7.2vw, 30px); }
+.am-titulo { font-size: clamp(14px, 3.9vw, 16px); }
+.am-linha { font-size: clamp(15px, 4vw, 16px); }
+
+/* --- o seletor de visao ---------------------------------------------------
+   Uma peca so, sempre visivel: e o eixo da tela, nao um filtro num menu. */
+.am-segmentos {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgb(var(--am-lavanda));
+}
+.am-segmento {
+  flex: 1;
+  border-radius: 11px;
+  padding: 9px 4px;
+  font-size: 15px;
+  font-weight: 550;
+  color: rgb(var(--c-text-2));
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.am-segmento-ativo { background: rgb(var(--c-accent)); color: #fff; font-weight: 650; }
+
+/* ---------------------------------------------------------------------------
+   A COR DE UMA ATIVIDADE.
+
+   `--am-cor` chega inline, do hex da categoria. Duas decisoes aqui, e as duas
+   sao por LEGIBILIDADE GARANTIDA com qualquer hex que a pessoa escolher:
+
+   . a superficie e a cor misturada ao `surface` do tema. `color-mix` tem
+     fallback declarado antes dele, entao quem nao o suporta fica com a
+     superficie neutra em vez de ficar sem bloco;
+
+   . o TEXTO nao e pintado com a cor da categoria. No prototipo ele era, porque
+     lá a paleta era fechada e cada tom tinha um par escuro conferido. Com um
+     hex livre, um amarelo claro deixaria o titulo ilegivel. A categoria se diz
+     pela BARRA e pela superficie; o texto continua no tom do produto.
+   --------------------------------------------------------------------------- */
+.am-cor { --am-cor: rgb(var(--c-accent)); }
+
+/* --- a linha do tempo do Dia ---------------------------------------------- */
+.am-fio {
+  position: absolute;
+  left: 48px;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+  background: rgb(var(--c-hairline));
+}
+.am-ponto {
+  position: absolute;
+  left: 45px;
+  top: 17px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--am-cor);
+  box-shadow: 0 0 0 3px rgb(var(--am-canvas));
+}
+.am-ponto-chapado { background: var(--am-cor); }
+
+.am-evento {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 10px 12px 10px 13px;
+  background: rgb(var(--c-surface-2));
+  background: color-mix(in srgb, var(--am-cor) 13%, rgb(var(--c-surface)));
+  border-left: 3px solid var(--am-cor);
+  color: rgb(var(--c-text));
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.am-evento:active { transform: scale(0.99); }
+
+.am-icone {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-2));
+  background: color-mix(in srgb, var(--am-cor) 20%, transparent);
+  color: rgb(var(--c-text-2));
+}
+
+/* A etiqueta do canto: "em 20 min" antes, "Agora" durante. Nunca as duas. */
+.am-etiqueta {
+  flex: none;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--c-accent-text));
+  background: rgb(var(--c-accent) / 0.12);
+}
+.am-etiqueta-agora { color: #fff; background: rgb(var(--c-accent)); }
+
+/* O cadeado do horario reservado — a tarefa que ocupa hora sem ser encontro. */
+.am-reservado {
+  border-left-style: dashed;
+  border-left-width: 3px;
+}
+
+/* --- numeros de dia (faixa da semana e grade do mes) ---------------------- */
+.am-numero {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 15px;
+  color: rgb(var(--c-text));
+  line-height: 1;
+}
+.am-numero-fora { color: rgb(var(--c-text-4)); }
+.am-numero-hoje { font-weight: 700; color: rgb(var(--c-accent-text)); }
+.am-numero-sel { background: rgb(var(--c-accent)); color: #fff; font-weight: 650; }
+
+/* --- a grade da semana (UX-M3.1: TRES dias) -------------------------------
+   O dia escolhido ganha um veu, nao uma borda: a coluna precisa se destacar
+   sem virar uma caixa dentro da grade. */
+.am-coluna-sel { background: rgb(var(--c-accent) / 0.07); }
+
+/* A grade de sete colunas obrigava o bloco a caber em ~43px, e o texto pagou a
+   conta: 9,5px. Com tres colunas a largura triplica e o bloco volta a ser lido
+   — 14.5px no titulo, 13px no apoio. O que encolhe num bloco curto e a
+   QUANTIDADE de informacao (`detalheDoBloco`); a fonte nao encolhe mais. */
+.am-bloco {
+  /* `left` e `width` vem do componente: dois compromissos que se encavalam
+     escalonam em vez de um cobrir o outro. */
+  position: absolute;
+  overflow: hidden;
+  text-align: left;
+  border-radius: 8px;
+  padding: 4px 4px 4px 6px;
+  font-size: 14.5px;
+  font-weight: 650;
+  line-height: 1.16;
+  letter-spacing: -0.01em;
+  color: rgb(var(--c-text));
+  background: rgb(var(--c-surface-2));
+  background: color-mix(in srgb, var(--am-cor) 15%, rgb(var(--c-surface)));
+  border-left: 3px solid var(--am-cor);
+}
+.am-bloco .am-apoio {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  /* Aperta o espacamento em vez do corpo: 13px continuam 13px, e o intervalo
+     inteiro ("09:00–10:00") cabe na coluna sem reticencias. */
+  letter-spacing: -0.022em;
+  opacity: 0.78;
+}
+
+/* O cabecalho das tres colunas visiveis. O veu da coluna escolhida sobe ate
+   aqui para que cabeca e grade sejam a mesma coluna, e nao duas pecas. */
+.am-cabeca {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgb(var(--c-text-3));
+}
+.am-cabeca-sel { color: rgb(var(--c-accent-text)); }
+
+/* O bloco escalonado por cima de outro ganha uma sombra curta: sem ela os dois
+   viram uma mancha so, e a sobreposicao — que e o que a grade existe para
+   revelar — deixa de ser legivel como duas coisas. */
+.am-bloco-sobre { box-shadow: -2px 0 6px rgb(2 6 23 / 0.16); }
+
+/* ===========================================================================
+   UX-T1 — TAREFAS E O QUADRO NO TELEFONE.
+
+   Mesma linguagem do Hoje (UX-M2) e da Agenda (UX-M3.1): mesmos tokens, mesmo
+   violeta, mesmas superficies, mesmo raio. Nada aqui inventa uma terceira
+   identidade — sao as mesmas pecas aplicadas a outra tela.
+
+   Tudo abaixo vale SO no telefone. A densidade do desktop e deliberada (quatro
+   colunas lado a lado pedem cartao compacto) e continua intocada: os seletores
+   que mudam medida moram dentro do componente, atras de `lg:`.
+   ======================================================================== */
+
+/* O recorte: `lg` do Tailwind e 1024px. Acima disso nenhuma destas regras
+   existe, e o desktop continua exatamente com as utilidades que ja tinha. */
+@media (max-width: 1023.98px) {
+  /* O chip de filtro. E LEITURA, nao acao destrutiva: escolhido fica violeta
+     solido, como o segmento ativo; o resto descansa na lavanda. Antes o ativo
+     era preto, que nao pertence a paleta de lugar nenhum do produto. */
+  .am-chip {
+    flex: none;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 13.5px;
+    font-weight: 550;
+    color: rgb(var(--c-text-2));
+    background: rgb(var(--am-lavanda));
+    transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .am-chip-on {
+    background: rgb(var(--c-accent));
+    color: #fff;
+    font-weight: 650;
+  }
+
+  /* A BANDEJA de uma etapa. Continua sendo superficie rebaixada e nao caixa — a
+     decisao do CP5.3 —, so que agora com o raio da familia (18px) em vez do raio
+     de linha, para a coluna pertencer a mesma tela que o Hoje e a Agenda. */
+  .am-bandeja {
+    border-radius: 18px;
+    background: rgb(var(--c-board));
+  }
+
+  /* A coluna candidata durante o arraste. O anel sozinho era discreto demais num
+     fundo claro; aqui ele ganha o veu violeta que a Semana ja usa para o dia
+     escolhido. NAO muda o gesto nem quem decide o alvo — so como ele aparece. */
+  .am-bandeja-alvo {
+    background: rgb(var(--c-accent) / 0.08);
+    box-shadow: inset 0 0 0 2px rgb(var(--c-accent) / 0.55);
+  }
+
+  /* O CARTAO DE TRABALHO, confortavel ao toque.
+     O cartao do desktop e compacto de proposito (13px, 11px de apoio): quatro
+     colunas lado a lado nao comportam mais. No telefone ha UMA coluna em foco, e
+     a largura recuperada volta para a tipografia — 15px no titulo, 13px no
+     apoio. Mesma regra do UX-M3.1: a representacao se adapta ao conteudo. */
+  .am-cartao {
+    border-radius: 14px;
+    background: rgb(var(--c-board-card));
+    box-shadow: 0 1px 2px rgb(var(--c-accent) / 0.05), 0 6px 16px -12px rgb(23 20 70 / 0.3);
+  }
+  .dark .am-cartao {
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 18px -14px rgb(0 0 0 / 0.7);
+  }
+  .am-cartao-titulo {
+    font-size: 15px;
+    font-weight: 550;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+  .am-cartao-apoio {
+    font-size: 13px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+
+  /* O trilho de cor na borda esquerda do cartao. `--am-cor` chega inline, da
+     categoria; o atraso continua tendo precedencia e pinta de `danger`, porque e
+     a unica informacao do cartao que pede acao hoje. */
+  .am-trilho {
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: 0;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--am-cor, rgb(var(--c-accent)));
+  }
+}
+
+/* ==========================================================================
+   UX-M1 — MEMÓRIA NO TELEFONE.
+
+   Memoria era a unica das quatro telas de primeiro nivel que ainda falava a
+   lingua antiga: linhas coladas umas nas outras separadas por fio, detalhe
+   chapado sem moldura. Ao vir de Hoje ou da Agenda a pessoa trocava de
+   aplicativo no meio do caminho.
+
+   Nada aqui inventa peca nova. A busca usa a mesma pilula de `.am-redondo`; a
+   lista usa o cartao de `.am-cartao`; os filtros usam o chip ja aprovado em
+   UX-T1. O que muda e que agora Memoria tambem os usa.
+
+   De novo: SO no telefone. A composicao de duas colunas do desktop e
+   deliberada (lista a esquerda, leitura a direita) e nao e tocada por nenhuma
+   regra deste bloco.
+   ========================================================================== */
+@media (max-width: 1023.98px) {
+  /* A BUSCA. Alta o bastante para o dedo (44px) e redonda como as demais
+     utilidades da familia. Fundo lavanda, nao branco: campo de texto sobre
+     superficie branca precisaria de borda para existir, e borda e exatamente
+     o que esta linguagem nao usa. */
+  .am-busca {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgb(var(--am-lavanda));
+  }
+  .am-busca input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    font-size: 15px;
+    color: rgb(var(--c-text-1));
+    outline: none;
+  }
+  .am-busca input::placeholder { color: rgb(var(--c-text-4)); }
+
+  /* O ITEM GUARDADO. Cartao, e nao linha de tabela: o que a pessoa guardou e
+     uma coisa, nao um registro. Mesmo raio e mesma sombra do cartao de
+     trabalho do quadro — e o mesmo objeto visual em outra tela. */
+  .am-item {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 13px 14px;
+    text-align: left;
+    border-radius: 16px;
+    background: rgb(var(--c-surface));
+    box-shadow: 0 1px 2px rgb(var(--c-accent) / 0.05), 0 6px 16px -12px rgb(23 20 70 / 0.3);
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .dark .am-item {
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 18px -14px rgb(0 0 0 / 0.7);
+  }
+  .am-item:active { transform: scale(0.99); }
+  /* Aberto = superficie, como o destino ativo da barra lateral. A mesma
+     gramatica de "selecionado" do resto do produto, nao uma borda colorida. */
+  .am-item-aberto { background: rgb(var(--am-lavanda)); }
+
+  .am-item-titulo {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: rgb(var(--c-text-1));
+  }
+  .am-item-previa {
+    font-size: 13px;
+    line-height: 1.35;
+    color: rgb(var(--c-text-3));
+  }
+
+  /* A MINIATURA de um anexo de imagem, quando ele existe de verdade. Quadrada
+     e pequena: ela identifica o item, nao o apresenta — ver a foto inteira e
+     trabalho do detalhe. */
+  .am-miniatura {
+    width: 46px;
+    height: 46px;
+    flex: none;
+    overflow: hidden;
+    border-radius: 12px;
+    background: rgb(var(--am-utilidade));
+  }
+  .am-miniatura img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* A FOLHA de leitura. Ocupa a tela inteira porque em 390px ler e a tarefa
+     inteira; a lista continua montada atras dela, entao fechar devolve filtro,
+     busca e rolagem sem ninguem guardar nada. */
+  .am-folha { background: rgb(var(--am-canvas)); }
+  .am-folha-topo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px 10px;
+  }
+  /* O corpo do detalhe num cartao branco, como as secoes do Hoje: o conteudo
+     guardado ganha moldura em vez de flutuar sobre o fundo. */
+  .am-folha-corpo {
+    border-radius: 22px;
+    background: rgb(var(--c-surface));
+    padding: 16px;
+  }
+  /* As acoes moram numa barra ancorada embaixo, ao alcance do polegar — antes
+     ficavam no fim do conteudo, isto e, a uma rolagem de distancia em nota
+     longa e grudadas no texto em nota curta. */
+  .am-folha-acoes {
+    border-radius: 22px 22px 0 0;
+    background: rgb(var(--c-surface));
+    box-shadow: 0 -8px 24px -18px rgb(23 20 70 / 0.5);
+  }
+  .dark .am-folha-acoes { box-shadow: 0 -8px 24px -18px rgb(0 0 0 / 0.9); }
+}

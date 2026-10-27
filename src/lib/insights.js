@@ -71,7 +71,7 @@ export function buildInsights(tasks = [], { today = toISODate(new Date()), max =
   const byTitle = new Map()
   for (const t of past) {
     const d = fromISODate(t.date)
-    if (d.getDay() !== todayDow) continue
+    if (!d || d.getDay() !== todayDow) continue
     const k = norm(t.title)
     if (!k) continue
     const cur = byTitle.get(k) || { count: 0, sample: t }

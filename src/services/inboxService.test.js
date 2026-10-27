@@ -184,3 +184,128 @@ describe('inboxService — timeline / historico (A2.2)', () => {
     expect(n.id).toBeTruthy()
   })
 })
+
+// ===========================================================================
+// UX-M2.3 — `get` escopado por workspace.
+//
+// Existe para que anexar possa PROVAR que o item de destino e real e e deste
+// espaco. O teste que mais importa aqui e o do vazamento: um id de outro
+// workspace tem de responder a mesma coisa que um id inventado.
+// ===========================================================================
+describe('inboxService — get (uma nota, sempre do workspace certo)', () => {
+  it('devolve a nota do próprio workspace', async () => {
+    const nota = await inboxService.create(WS, USER, { title: 'Minha', content: 'conteúdo' })
+    const lida = await inboxService.get(WS, nota.id)
+    expect(lida).not.toBeNull()
+    expect(lida.id).toBe(nota.id)
+    expect(lida.title).toBe('Minha')
+    expect(lida.content).toBe('conteúdo')
+  })
+
+  it('devolve null para id inexistente', async () => {
+    await inboxService.create(WS, USER, { title: 'Existe' })
+    expect(await inboxService.get(WS, 'id-que-nao-existe')).toBeNull()
+  })
+
+  it('NÃO atravessa workspace — e responde igual ao inexistente', async () => {
+    const alheia = await inboxService.create(WS2, USER, { title: 'Segredo do outro espaço' })
+    const porId = await inboxService.get(WS, alheia.id)
+    const inventado = await inboxService.get(WS, 'id-que-nao-existe')
+    // Mesma resposta: quem nao pode ver nao descobre que existe.
+    expect(porId).toBeNull()
+    expect(porId).toEqual(inventado)
+    // E do lado de la continua acessivel.
+    expect((await inboxService.get(WS2, alheia.id)).title).toBe('Segredo do outro espaço')
+  })
+
+  it('null para argumentos faltando, sem consultar nada', async () => {
+    expect(await inboxService.get(null, 'x')).toBeNull()
+    expect(await inboxService.get(WS, null)).toBeNull()
+    expect(await inboxService.get()).toBeNull()
+  })
+
+  it('não altera a nota: ler é só ler', async () => {
+    const nota = await inboxService.create(WS, USER, { title: 'Intacta', content: 'texto' })
+    await inboxService.get(WS, nota.id)
+    await inboxService.get(WS, nota.id)
+    const depois = await inboxService.get(WS, nota.id)
+    expect(depois.updated_at).toBe(nota.updated_at)
+    expect(depois.seen).toBe(nota.seen)
+    expect(depois.status).toBe(nota.status)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// EXCLUSAO ESCOPADA POR WORKSPACE (UX-M2.5a).
+//
+// Era a unica operacao irreversivel do servico sem escopo: `get`, `list` e
+// `update` todos filtravam, `remove` apagava por id. A RLS do Supabase ja
+// barrava o caso hostil; o que faltava era a camada que protege contra o
+// NOSSO codigo passar o item errado.
+//
+// A regressao a temer aqui nao e de seguranca, e de funcionamento: se o escopo
+// ficar apertado demais, excluir nota, ideia ou captura para de funcionar. Por
+// isso os tres tipos estao cobertos.
+// ---------------------------------------------------------------------------
+describe('inboxService — exclusão escopada por workspace', () => {
+  it('exclui normalmente nota, ideia e captura do PRÓPRIO workspace', async () => {
+    for (const tipo of ['note', 'idea', 'checklist']) {
+      const item = await inboxService.create(WS, USER, { type: tipo, title: tipo })
+      await inboxService.remove(item)
+      const restantes = await inboxService.list(WS)
+      expect(restantes.find((n) => n.id === item.id)).toBeUndefined()
+    }
+  })
+
+  it('o workspace vem do próprio item: a assinatura antiga continua valendo', async () => {
+    // Nenhum chamador existente passa workspace — todos passam a linha lida do
+    // banco, que carrega `workspace_id`. Isto é o que mantém o contrato.
+    const nota = await inboxService.create(WS, USER, { title: 'x' })
+    await expect(inboxService.remove(nota)).resolves.toBeUndefined()
+  })
+
+  it('workspace explícito que CONCORDA com o item funciona igual', async () => {
+    const nota = await inboxService.create(WS, USER, { title: 'x' })
+    await inboxService.remove(nota, WS)
+    expect((await inboxService.list(WS)).find((n) => n.id === nota.id)).toBeUndefined()
+  })
+
+  it('workspace explícito que DISCORDA do item é recusado, e a nota fica', async () => {
+    const nota = await inboxService.create(WS, USER, { title: 'não me apague' })
+    await expect(inboxService.remove(nota, WS2)).rejects.toThrow(/espaço de trabalho/i)
+    const viva = (await inboxService.list(WS)).find((n) => n.id === nota.id)
+    expect(viva).toBeDefined()
+    expect(viva.title).toBe('não me apague')
+  })
+
+  it('item de OUTRO workspace não é apagado — e nem o que pende dele', async () => {
+    // O acidente concreto que isto evita: antes, os filtros de checklist e
+    // anexo rodavam por `inbox_item_id` SEM conferir o espaço, então uma
+    // exclusão com o workspace errado levava embora o checklist de uma nota
+    // que continuava existindo.
+    const alheia = await inboxService.create(WS2, USER, { type: 'checklist', title: 'alheia' })
+    await inboxService.addChecklistItem(WS2, alheia.id, { text: 'item que fica' })
+
+    await inboxService.remove({ ...alheia, workspace_id: WS })
+
+    expect((await inboxService.list(WS2)).find((n) => n.id === alheia.id)).toBeDefined()
+    expect(await inboxService.listChecklistItems(WS2, alheia.id)).toHaveLength(1)
+  })
+
+  it('sem workspace resolvível, LANÇA em vez de apagar', async () => {
+    // TRANSIÇÃO DE CONTRATO — UX-M2.5a. Antes isto apagava por id. A asserção
+    // anterior era, em efeito:
+    //
+    //   await inboxService.remove({ id }) // apagava
+    //
+    // Hoje recusa: "não sei de que espaço esta nota é" não é razão para apagar.
+    const nota = await inboxService.create(WS, USER, { title: 'x' })
+    await expect(inboxService.remove({ id: nota.id })).rejects.toThrow(/workspaceId/i)
+    expect((await inboxService.list(WS)).find((n) => n.id === nota.id)).toBeDefined()
+  })
+
+  it('nota inválida é recusada antes de qualquer coisa', async () => {
+    await expect(inboxService.remove(null)).rejects.toThrow(/nota inválida|nota invalida/i)
+    await expect(inboxService.remove({})).rejects.toThrow(/nota inválida|nota invalida/i)
+  })
+})

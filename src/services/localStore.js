@@ -131,8 +131,43 @@ function read() {
   }
 }
 
+// A COTA DO NAVEGADOR E FINITA, e desde que o modo demo guarda binario de
+// anexo (data-URL em `capture_asset_blobs`) ela deixou de ser teorica: o teto
+// tipico e ~5 MB para o site INTEIRO, e base64 ainda infla o arquivo em ~33%.
+//
+// O erro continua sendo LANCADO — engoli-lo faria o produto dizer "salvo"
+// sobre algo que nao foi salvo, que e a pior falha possivel num lugar chamado
+// Memoria. O que muda e que ele passa a ser reconhecivel (`.quota === true`) e
+// a vir com uma frase que explica o que fazer.
+export class CotaExcedidaError extends Error {
+  constructor(causa) {
+    super('O armazenamento local do navegador está cheio. Remova algum anexo ou conteúdo antigo para liberar espaço.')
+    this.name = 'CotaExcedidaError'
+    this.quota = true
+    this.causa = causa
+  }
+}
+
+// `QuotaExceededError` nao tem um codigo unico entre navegadores: Chrome usa
+// o nome, Safari usa 22, Firefox usa 1014. Reconhecer os tres evita que o
+// mesmo problema apareca como mensagem crua num aparelho e tratada no outro.
+export function ehErroDeCota(err) {
+  if (!err) return false
+  return (
+    err.name === 'QuotaExceededError' ||
+    err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    err.code === 22 ||
+    err.code === 1014
+  )
+}
+
 function write(db) {
-  localStorage.setItem(KEY, JSON.stringify(db))
+  try {
+    localStorage.setItem(KEY, JSON.stringify(db))
+  } catch (err) {
+    if (ehErroDeCota(err)) throw new CotaExcedidaError(err)
+    throw err
+  }
   return db
 }
 

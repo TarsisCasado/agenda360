@@ -55,8 +55,18 @@ async function upsertSubscription(userId, sub) {
   if (error) throw error
 }
 
+// O ambiente tem Web Push realmente configurado?
+// Exige Supabase (onde a subscription e persistida) + chave publica VAPID
+// injetada NO BUILD (VITE_*). Sem isso, ativar push e impossivel — a UI deve
+// mostrar o estado correto em vez de deixar o usuario tentar e falhar.
+export function isPushConfigured() {
+  if (!isSupabaseConfigured) return false
+  return Boolean((import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '').trim())
+}
+
 export const pushService = {
   isSupported: isPushSupported,
+  isConfigured: isPushConfigured,
   getPermission,
 
   // Fluxo completo, disparado por uma acao explicita do usuario:

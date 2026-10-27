@@ -87,6 +87,34 @@ export const inboxService = {
     return data
   },
 
+  // ---------------------------------------------------------------------------
+  // UMA nota, SEMPRE escopada por workspace (UX-M2.3).
+  //
+  // Existe porque anexar exige provar que o item de destino e real E e deste
+  // workspace. Fazer isso com `list()` funcionaria e traria a caixa inteira
+  // pela rede para conferir um id; e, pior, convidaria quem chama a filtrar
+  // por id DEPOIS — o que esquece o workspace na primeira distracao.
+  //
+  // Devolve `null` para id inexistente E para id de outro workspace: quem nao
+  // pode ver nao descobre que existe.
+  // ---------------------------------------------------------------------------
+  async get(workspaceId, id) {
+    if (!workspaceId || !id) return null
+    if (!isSupabaseConfigured) {
+      return localStore
+        .table(TABLE)
+        .find((n) => n.id === id && n.workspace_id === workspaceId) || null
+    }
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('id', id)
+      .maybeSingle()
+    if (error) throw error
+    return data ?? null
+  },
+
   // `id` opcional: permite ao chamador PRE-GERAR o id da captura (ex.: o
   // captureService precisa do id antes do upload para compor o path do asset).
   // Aditivo e retrocompativel — sem id, o comportamento e o de sempre.
@@ -199,15 +227,67 @@ export const inboxService = {
     await recordEvent(note.workspace_id, note.id, 'restored', actorId)
     return saved
   },
+  // C3 — "manter como nota": a pessoa OLHOU o que estava por organizar e
+  // decidiu que aquilo e so uma nota. Sai da caixa sem virar ideia, sem virar
+  // tarefa e sem ser arquivada. O status 'processed' ja existia no modelo
+  // desde a A2.2, preparado e sem transicao de UI; esta e a transicao.
+  async markProcessed(note, actorId = null) {
+    const saved = await this.update(note, { status: 'processed' })
+    await recordEvent(note.workspace_id, note.id, 'organized', actorId)
+    return saved
+  },
+
   async setSeen(note, value, actorId = null) {
     const saved = await this.update(note, { seen: Boolean(value) })
     await recordEvent(note.workspace_id, note.id, value ? 'seen' : 'unseen', actorId)
     return saved
   },
 
-  async remove(note) {
+  // ---------------------------------------------------------------------------
+  // EXCLUSAO, SEMPRE ESCOPADA POR WORKSPACE (UX-M2.5a).
+  //
+  // CONTRATO ANTERIOR, preservado aqui porque a mudanca e deliberada:
+  //   `delete().eq('id', note.id)` — apagava por id, sem escopo nenhum.
+  //
+  // Nao era um furo explorável: a RLS do Supabase (`is_workspace_member`) ja
+  // barrava a exclusao de item de outro espaco, e o modo demo nao tem tenant
+  // de verdade. Mas era UMA CAMADA A MENOS do que todo vizinho tem — `get`,
+  // `list`, `update` e os servicos de anexo todos filtram por workspace — e a
+  // diferenca aparecia justamente na operacao irreversivel.
+  //
+  // A assinatura NAO muda: o segundo parametro e opcional e o padrao vem do
+  // proprio `note`, que em todos os chamadores reais e uma linha lida do banco
+  // e portanto carrega `workspace_id`. Quem passa o workspace explicitamente
+  // ganha a conferencia de que os dois concordam — que e a defesa contra o
+  // parametro trocado, nao contra o invasor.
+  //
+  // Sem escopo resolvivel, LANCA. Antes apagaria; e "nao sei de que espaco
+  // esta nota e" nao e uma boa razao para apagar nada.
+  // ---------------------------------------------------------------------------
+  async remove(note, workspaceId = undefined) {
+    if (!note?.id) throw new Error('nota invalida.')
+    const escopo = workspaceId ?? note.workspace_id
+    if (!escopo) {
+      throw new Error('workspaceId obrigatorio para excluir (nota sem workspace_id).')
+    }
+    if (workspaceId && note.workspace_id && workspaceId !== note.workspace_id) {
+      const err = new Error('Esta nota não pertence a este espaço de trabalho.')
+      err.motivo = 'fora_do_workspace'
+      throw err
+    }
+
     if (!isSupabaseConfigured) {
-      localStore.setTable(TABLE, localStore.table(TABLE).filter((n) => n.id !== note.id))
+      const alvo = localStore
+        .table(TABLE)
+        .find((n) => n.id === note.id && n.workspace_id === escopo)
+      // Nao achou NESTE workspace: nao apaga nada, nem a nota, nem o que pende
+      // dela. Sem alvo, os filtros abaixo removeriam checklist e anexos de uma
+      // nota de outro espaco — exatamente o acidente que esta guarda evita.
+      if (!alvo) return
+      localStore.setTable(
+        TABLE,
+        localStore.table(TABLE).filter((n) => !(n.id === note.id && n.workspace_id === escopo)),
+      )
       // itens de checklist somem junto (equivale ao on delete cascade)
       localStore.setTable(
         CHECKLIST,
@@ -222,7 +302,11 @@ export const inboxService = {
       return
     }
     // No Supabase, o on delete cascade remove checklist e anexos (0005/0009).
-    const { error } = await supabase.from(TABLE).delete().eq('id', note.id)
+    const { error } = await supabase
+      .from(TABLE)
+      .delete()
+      .eq('id', note.id)
+      .eq('workspace_id', escopo)
     if (error) throw error
   },
 

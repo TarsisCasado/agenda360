@@ -1,0 +1,70 @@
+# ---------------------------------------------------------------------------
+# CI — a rede de seguranca, num runner limpo.
+#
+# Por que ela existe (C2.4): ate aqui as 17 suites de `src/__smoke__/` so
+# rodavam onde o Playwright estivesse instalado por acaso. Onde nao estivesse,
+# a suite encolhia de 1761 para 1455 testes SEM AVISO. Agora o Playwright e
+# dependencia declarada, o navegador e instalado explicitamente, e o passo
+# final confere que toda suite do disco realmente rodou.
+#
+# A ORDEM IMPORTA: `build` vem antes dos testes porque as suites de smoke leem
+# `dist/index.html`. Inverter faz as smokes falharem com ENOENT.
+# ---------------------------------------------------------------------------
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: lint · build · testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` e nao `npm install`: instala exatamente o lockfile, e falha se
+      # package.json e package-lock.json discordarem. E a parte "reproduzivel".
+      - name: Instalacao limpa
+        run: npm ci
+
+      # O navegador NAO vem no pacote. Sem este passo as smokes nao rodam — que
+      # era precisamente o defeito que este checkpoint veio fechar.
+      - name: Navegador do Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Lint completo
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Testes (unidade + smoke)
+        run: npm run test:ci
+
+      # Mesmo com tudo verde acima, uma suite pode simplesmente nao ter sido
+      # coletada. Este passo compara o relatorio com os arquivos do disco.
+      - name: Toda suite rodou?
+        run: node scripts/verifica-suites.mjs
+
+      - name: Relatorio
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-report
+          path: .vitest-report.json
+          if-no-files-found: ignore
+          retention-days: 14
